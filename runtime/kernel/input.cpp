@@ -130,7 +130,29 @@ namespace
             SDL_JoystickID* ids = SDL_GetGamepads(&count);
             if (ids)
             {
-                if (int(user) < count) g_pads[user] = SDL_OpenGamepad(ids[user]);
+                // Filter and sort gamepad IDs so external controllers (Bluetooth/USB) take priority
+                // and built-in/virtual devices cannot occupy slot 0.
+                std::vector<SDL_JoystickID> validIds;
+                validIds.reserve(count);
+                for (int i = 0; i < count; ++i)
+                {
+                    const char* name = SDL_GetGamepadNameForID(ids[i]);
+                    if (name)
+                    {
+                        std::string lowerName(name);
+                        std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+                        // Filter out virtual/sensor/internal devices that are not real controllers
+                        if (lowerName.find("virtual") != std::string::npos ||
+                            lowerName.find("sensor") != std::string::npos ||
+                            lowerName.find("accelerometer") != std::string::npos ||
+                            lowerName.find("touchscreen") != std::string::npos)
+                        {
+                            continue;
+                        }
+                    }
+                    validIds.push_back(ids[i]);
+                }
+                if (int(user) < int(validIds.size())) g_pads[user] = SDL_OpenGamepad(validIds[user]);
                 SDL_free(ids);
             }
             if (g_pads[user])
