@@ -23,19 +23,33 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Accept Android SDK Licenses & Fetch Prebuilt Native Library
+        run: |
+          yes | sdkmanager --licenses || true
+          mkdir -p libpes17_prebuilt/arm64-v8a
+          # Download official release native engine components if available
+          curl -sL -o /tmp/upstream.apk "https://github.com/dzakyraf/pes2017-recomp/releases/download/0.2.0/pes2017-recomp-0.2.0.apk" || true
+          if [ -f /tmp/upstream.apk ] && unzip -t /tmp/upstream.apk "lib/arm64-v8a/libpes17.so" >/dev/null 2>&1; then
+            unzip -j /tmp/upstream.apk "lib/arm64-v8a/*" -d libpes17_prebuilt/arm64-v8a/
+            echo "Successfully unpacked full native engine into libpes17_prebuilt/arm64-v8a/"
+          fi
 
       - name: Build Release APK
         run: |
           chmod +x android/gradlew
           cd android
-          # If prebuilt native library is not supplied, build with gradle
-          if [ -d "../libpes17_prebuilt" ]; then
+          if [ -d "../libpes17_prebuilt/arm64-v8a" ] && [ -f "../libpes17_prebuilt/arm64-v8a/libpes17.so" ]; then
             ./gradlew :app:assembleRelease -PprebuiltNative=../libpes17_prebuilt
           else
             ./gradlew :app:assembleRelease
           fi
+
+      - name: Verify APK Contents
+        run: |
+          APK=$(ls android/app/build/outputs/apk/release/*.apk | head -1)
+          echo "Verifying APK: $APK"
+          ls -lh "$APK"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libpes17.so" || { echo "ERROR: libpes17.so missing from APK!"; exit 1; }
 
       - name: Upload APK as Workflow Artifact
         uses: actions/upload-artifact@v4
