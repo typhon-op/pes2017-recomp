@@ -67,16 +67,30 @@ class GamepadInput {
     /** Called at start-up and whenever a device is added or removed. */
     fun refreshDevices() {
         val seen = HashSet<Int>()
+        val candidateDevices = ArrayList<InputDevice>()
         for (id in InputDevice.getDeviceIds()) {
             val device = InputDevice.getDevice(id) ?: continue
             if (!isPad(device)) continue
             seen.add(id)
+            candidateDevices.add(device)
+        }
+
+        // Sort candidates so external controllers (Bluetooth and USB) are prioritized
+        // and assigned to slot 0 (Player 1).
+        candidateDevices.sortBy { device ->
+            // External controllers are given priority (false < true; negated so external comes first)
+            !device.isExternal
+        }
+
+        for (device in candidateDevices) {
+            val id = device.id
             if (!slots.containsKey(id)) {
                 val slot = (firstSlot until 4).firstOrNull { free -> !slots.containsValue(free) } ?: continue
                 slots[id] = slot
                 if (enabled) NativeBridge.nativePadConnected(slot, true)
             }
         }
+
         val gone = slots.keys.filter { it !in seen }
         for (id in gone) {
             val slot = slots.remove(id) ?: continue
@@ -90,8 +104,12 @@ class GamepadInput {
 
     fun hasAnyPad(): Boolean = slots.isNotEmpty()
 
-    private fun isPad(device: InputDevice): Boolean {
+    fun isPad(device: InputDevice): Boolean {
+        // Virtual devices and internal/built-in devices (sensors, accelerometers, built-in
+        // hardware controls) must never occupy controller slots.
         if (device.isVirtual) return false
+        if (!device.isExternal) return false
+
         val sources = device.sources
         val joystick = sources and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
         val gamepad = sources and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD
@@ -100,6 +118,10 @@ class GamepadInput {
 
     private fun slotFor(deviceId: Int): Int {
         slots[deviceId]?.let { return it }
+        val dev = InputDevice.getDevice(deviceId)
+        if (dev == null || !isPad(dev)) {
+            return -1
+        }
         // A device that sent an event before the enumeration saw it.
         val slot = (firstSlot until 4).firstOrNull { free -> !slots.containsValue(free) } ?: firstSlot
         slots[deviceId] = slot
@@ -119,6 +141,7 @@ class GamepadInput {
         val bit = bitFor(event.keyCode)
         if (bit == 0) return false
         val slot = slotFor(event.deviceId)
+        if (slot < 0 || slot >= 4) return false
         when (event.action) {
             KeyEvent.ACTION_DOWN -> buttons[slot] = buttons[slot] or bit
             KeyEvent.ACTION_UP -> buttons[slot] = buttons[slot] and bit.inv()
@@ -134,6 +157,7 @@ class GamepadInput {
         if (event.source and InputDevice.SOURCE_JOYSTICK != InputDevice.SOURCE_JOYSTICK) return false
         if (event.action != MotionEvent.ACTION_MOVE) return false
         val slot = slotFor(event.deviceId)
+        if (slot < 0 || slot >= 4) return false
 
         val lx = axis(event, MotionEvent.AXIS_X)
         val ly = axis(event, MotionEvent.AXIS_Y)

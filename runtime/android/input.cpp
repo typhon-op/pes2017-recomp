@@ -211,8 +211,17 @@ bool android::input::HardwarePadEnabled() { return g_hardwareEnabled.load(std::m
 
 bool android::input::Connected(uint32_t user)
 {
-    if (user == 0) return true;   // the touch controls are always there
-    if (user >= 4 || !HardwarePadEnabled()) return false;
+    if (user >= 4) return false;
+    if (user == 0)
+    {
+        if (HardwarePadEnabled())
+        {
+            std::lock_guard lock(g_hardware[0].lock);
+            if (g_hardware[0].connected) return true;
+        }
+        return true;   // touch controls stand in if no hardware pad
+    }
+    if (!HardwarePadEnabled()) return false;
     std::lock_guard lock(g_hardware[user].lock);
     return g_hardware[user].connected;
 }
