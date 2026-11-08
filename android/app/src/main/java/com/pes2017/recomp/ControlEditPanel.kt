@@ -118,8 +118,10 @@ class ControlEditPanel(
         actions.findViewById<Button>(R.id.edit_reset_one).setOnClickListener {
             val element = current ?: return@setOnClickListener
             overlay.layout.reset(element.id)
-            overlay.layout.find(element.id)?.let { overlay.keepApart(it) }
-            overlay.select(overlay.layout.find(element.id))
+            val fresh = overlay.layout.find(element.id)
+            if (fresh != null) overlay.keepApart(fresh)
+            overlay.select(fresh)
+            show(fresh)
             overlay.refresh()
             save()
         }
