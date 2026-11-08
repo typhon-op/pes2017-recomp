@@ -52,7 +52,7 @@ jobs:
             echo "ERROR: Mandatory secret PES17_KEYSTORE_BASE64 is missing! Production signing is required."
             exit 1
           fi
-          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/production.keystore"
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > "$RUNNER_TEMP/production.keystore"
           echo "keystore_path=$RUNNER_TEMP/production.keystore" >> "$GITHUB_OUTPUT"
           echo "Production keystore loaded into secure runner storage."
 
