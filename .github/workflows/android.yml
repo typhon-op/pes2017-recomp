@@ -30,6 +30,11 @@ jobs:
           echo "Downloading official release native engine components..."
           curl -sL --retry 3 -o /tmp/upstream.apk "https://github.com/dzakyraf/pes2017-recomp/releases/download/0.2.0/pes2017-recomp-0.2.0.apk"
           if [ -f /tmp/upstream.apk ]; then
+            echo "Verifying upstream APK SHA-256 checksum..."
+            echo "843e276c2f86adc6057c0ed5288ab64110195342ac6bbeec1e6ce663b83ce1d6  /tmp/upstream.apk" | sha256sum -c - || {
+              echo "ERROR: Upstream APK SHA-256 checksum verification failed!"
+              exit 1
+            }
             unzip -j /tmp/upstream.apk "lib/arm64-v8a/*" -d "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/"
             echo "Successfully unpacked full native engine into $GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/:"
             ls -lh "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/"
@@ -38,20 +43,58 @@ jobs:
             exit 1
           fi
 
-      - name: Build Release APK
+      - name: Prepare Production Signing Keystore
+        id: prepare-keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.PES17_KEYSTORE_BASE64 }}
         run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "ERROR: Mandatory secret PES17_KEYSTORE_BASE64 is missing! Production signing is required."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/production.keystore"
+          echo "keystore_path=$RUNNER_TEMP/production.keystore" >> "$GITHUB_OUTPUT"
+          echo "Production keystore loaded into secure runner storage."
+
+      - name: Build Release APK
+        env:
+          PES17_KEYSTORE: ${{ steps.prepare-keystore.outputs.keystore_path }}
+          PES17_KEYSTORE_PASSWORD: ${{ secrets.PES17_KEYSTORE_PASSWORD }}
+          PES17_KEY_ALIAS: ${{ secrets.PES17_KEY_ALIAS }}
+          PES17_KEY_PASSWORD: ${{ secrets.PES17_KEY_PASSWORD }}
+        run: |
+          if [ -z "$PES17_KEYSTORE" ] || [ -z "$PES17_KEYSTORE_PASSWORD" ] || [ -z "$PES17_KEY_ALIAS" ] || [ -z "$PES17_KEY_PASSWORD" ]; then
+            echo "ERROR: All four mandatory signing secrets must be set! (PES17_KEYSTORE_BASE64, PES17_KEYSTORE_PASSWORD, PES17_KEY_ALIAS, PES17_KEY_PASSWORD)"
+            exit 1
+          fi
           chmod +x android/gradlew
           cd android
           PREBUILT="$GITHUB_WORKSPACE/libpes17_prebuilt"
-          echo "Building with prebuiltNative=$PREBUILT..."
+          echo "Building release APK with prebuiltNative=$PREBUILT..."
           ./gradlew :app:assembleRelease -PprebuiltNative="$PREBUILT" --stacktrace
 
-      - name: Verify APK Contents
+      - name: Verify APK Contents & Mandatory Production Signature
         run: |
           APK=$(ls "$GITHUB_WORKSPACE"/android/app/build/outputs/apk/release/*.apk | head -1)
           echo "Verifying APK: $APK"
           ls -lh "$APK"
           unzip -l "$APK" | grep "lib/arm64-v8a/libpes17.so" || { echo "ERROR: libpes17.so missing from APK!"; exit 1; }
+
+          echo "Inspecting signing certificate:"
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs "$APK" > /tmp/apk_certs.txt
+          cat /tmp/apk_certs.txt
+
+          CERT_FINGERPRINT=$(grep "certificate SHA-256 digest:" /tmp/apk_certs.txt | head -1 | awk '{print $NF}' | tr '[:upper:]' '[:lower:]')
+          EXPECTED_PERMANENT="be8743f2f3382f798e8a6be892e65890e1e81e2fc1f0756abebd3f7abdf4bdc8"
+
+          echo "Actual Certificate SHA-256:    $CERT_FINGERPRINT"
+          echo "Required Permanent Certificate: $EXPECTED_PERMANENT"
+
+          if [ "$CERT_FINGERPRINT" != "$EXPECTED_PERMANENT" ]; then
+            echo "ERROR: Certificate mismatch! Expected permanent signature ($EXPECTED_PERMANENT) but found ($CERT_FINGERPRINT)."
+            exit 1
+          fi
+          echo "SUCCESS: Permanent project signature verified."
 
       - name: Upload APK as Workflow Artifact
         uses: actions/upload-artifact@v4

@@ -586,74 +586,86 @@ class TouchOverlayView @JvmOverloads constructor(
             else -> 0xFF94A3B8.toInt()
         }
 
-        // Pressed radiant aura glow
+        // Refined pressed-state aura feedback
         if (pressed) {
             fill.color = Color.argb(
-                (alpha * fadeFactor * 130).toInt().coerceIn(0, 255),
+                (alpha * fadeFactor * 90).toInt().coerceIn(0, 255),
                 Color.red(glowColor), Color.green(glowColor), Color.blue(glowColor),
             )
-            canvas.drawCircle(cx, cy, r * 1.15f, fill)
+            canvas.drawCircle(cx, cy, r * 1.08f, fill)
         }
 
         if (isFaceButton) {
-            // Xbox 360 Jewel Face Button
-            // 1. Dark bezel collar
+            // Modernized eFootball-style Frosted Action Button
+            // 1. Dark high-contrast outer backdrop for readability on bright turf
             fill.color = Color.argb(
-                (alpha * fadeFactor * 140).toInt().coerceIn(0, 255),
-                18, 22, 28,
+                (alpha * fadeFactor * 180).toInt().coerceIn(0, 255),
+                12, 16, 24,
             )
             canvas.drawCircle(cx, cy, r, fill)
 
-            // Bezel rim stroke
+            // 2. Subtle, clean accent-colored outer border
             stroke.color = Color.argb(
-                (alpha * fadeFactor * 180).toInt().coerceIn(0, 255),
-                48, 56, 70,
-            )
-            stroke.strokeWidth = max(1.5f, r * 0.05f)
-            canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
-
-            // 2. Translucent jewel dome
-            val jewelR = r * 0.84f
-            val domeAlpha = if (pressed) 230 else 125
-            fill.color = Color.argb(
-                (alpha * fadeFactor * domeAlpha).toInt().coerceIn(0, 255),
-                Color.red(coreColor), Color.green(coreColor), Color.blue(coreColor),
-            )
-            canvas.drawCircle(cx, cy, jewelR, fill)
-
-            // Jewel perimeter rim
-            stroke.color = Color.argb(
-                (alpha * fadeFactor * (if (pressed) 255 else 180)).toInt().coerceIn(0, 255),
+                (alpha * fadeFactor * (if (pressed) 255 else 175)).toInt().coerceIn(0, 255),
                 Color.red(glowColor), Color.green(glowColor), Color.blue(glowColor),
             )
-            stroke.strokeWidth = max(1.5f, jewelR * 0.08f)
-            canvas.drawCircle(cx, cy, jewelR - stroke.strokeWidth * 0.5f, stroke)
+            stroke.strokeWidth = max(1.5f, r * 0.045f)
+            canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
 
-            // 3. Specular gloss arc highlight (top curve of the acrylic dome)
+            // 3. Modern dark translucent core tinted with accent color
+            val coreR = r * 0.90f
+            val tintAlpha = if (pressed) 140 else 55
+            fill.color = Color.argb(
+                (alpha * fadeFactor * tintAlpha).toInt().coerceIn(0, 255),
+                Color.red(coreColor), Color.green(coreColor), Color.blue(coreColor),
+            )
+            canvas.drawCircle(cx, cy, coreR, fill)
+
+            // 4. Restrained modern specular top rim highlight (subtle crest, replacing heavy gloss arc)
             highlightPaint.color = Color.argb(
-                (alpha * fadeFactor * 150).toInt().coerceIn(0, 255),
+                (alpha * fadeFactor * (if (pressed) 90 else 50)).toInt().coerceIn(0, 255),
                 255, 255, 255,
             )
-            highlightPaint.strokeWidth = max(1.5f, jewelR * 0.07f)
-            val arcInset = jewelR * 0.22f
-            tempRect.set(cx - jewelR + arcInset, cy - jewelR + arcInset * 0.6f, cx + jewelR - arcInset, cy + jewelR - arcInset * 1.4f)
-            canvas.drawArc(tempRect, -145f, 110f, false, highlightPaint)
+            highlightPaint.strokeWidth = max(1.0f, coreR * 0.04f)
+            val arcInset = coreR * 0.10f
+            tempRect.set(cx - coreR + arcInset, cy - coreR + arcInset * 0.4f, cx + coreR - arcInset, cy + coreR - arcInset * 1.6f)
+            canvas.drawArc(tempRect, -150f, 120f, false, highlightPaint)
 
             // 4. Just the pad's own name, as on a real controller: the
             //    PlayStation symbol, or the Xbox letter.
             val ink = Color.argb((alpha * fadeFactor * 255).toInt().coerceIn(0, 255), 255, 255, 255)
             val shadow = Color.argb((alpha * fadeFactor * 140).toInt().coerceIn(0, 255), 0, 0, 0)
+            val actionSubtitle = when (id) {
+                "a" -> "PASS"
+                "x" -> "SHOOT"
+                "b" -> "CROSS"
+                "y" -> "THROUGH"
+                else -> ""
+            }
+
+            val glyphR = coreR * 0.90f
             if (playStation) {
-                val size = jewelR * 0.40f
-                drawPsSymbol(canvas, id, cx, cy + 1.2f * density, size, shadow)
-                drawPsSymbol(canvas, id, cx, cy, size, ink)
+                val size = glyphR * (if (actionSubtitle.isNotEmpty()) 0.35f else 0.40f)
+                val symY = if (actionSubtitle.isNotEmpty()) cy - glyphR * 0.12f else cy
+                drawPsSymbol(canvas, id, cx, symY + 1.2f * density, size, shadow)
+                drawPsSymbol(canvas, id, cx, symY, size, ink)
             } else {
-                text.textSize = jewelR * 0.95f
-                val letterY = cy - (text.descent() + text.ascent()) * 0.5f
+                text.textSize = glyphR * (if (actionSubtitle.isNotEmpty()) 0.78f else 0.95f)
+                val baseLetterY = if (actionSubtitle.isNotEmpty()) cy - glyphR * 0.10f else cy
+                val letterY = baseLetterY - (text.descent() + text.ascent()) * 0.5f
                 text.color = shadow
                 canvas.drawText(label, cx, letterY + 1.2f * density, text)
                 text.color = ink
                 canvas.drawText(label, cx, letterY, text)
+            }
+
+            if (actionSubtitle.isNotEmpty()) {
+                subText.textSize = max(8f, glyphR * 0.28f)
+                val subY = cy + glyphR * 0.58f
+                subText.color = Color.argb((alpha * fadeFactor * 140).toInt().coerceIn(0, 255), 0, 0, 0)
+                canvas.drawText(actionSubtitle, cx, subY + 1f * density, subText)
+                subText.color = Color.argb((alpha * fadeFactor * 220).toInt().coerceIn(0, 255), 241, 245, 249)
+                canvas.drawText(actionSubtitle, cx, subY, subText)
             }
         } else if (isRT || isLT) {
             // Xbox Ergonomic Trigger (RT / LT)
@@ -812,8 +824,14 @@ class TouchOverlayView @JvmOverloads constructor(
             val stickDy = knobY - cy
             val dist = hypot(stickDx, stickDy)
             if (dist > 4f * density) {
-                notchPaint.color = Color.argb((alpha * fadeFactor * 100).toInt().coerceIn(0, 255), 16, 124, 16)
-                notchPaint.strokeWidth = max(2f, 3f * density)
+                // Outer subtle radiant trail
+                notchPaint.color = Color.argb((alpha * fadeFactor * 90).toInt().coerceIn(0, 255), 34, 197, 94)
+                notchPaint.strokeWidth = max(3f, 4.5f * density)
+                canvas.drawLine(cx, cy, knobX, knobY, notchPaint)
+
+                // High-contrast inner direction line
+                notchPaint.color = Color.argb((alpha * fadeFactor * 210).toInt().coerceIn(0, 255), 255, 255, 255)
+                notchPaint.strokeWidth = max(1.5f, 1.8f * density)
                 canvas.drawLine(cx, cy, knobX, knobY, notchPaint)
             }
         }
