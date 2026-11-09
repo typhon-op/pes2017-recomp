@@ -888,6 +888,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
         val labels = mutableListOf(
             getString(R.string.resume) to { _: android.content.DialogInterface -> },
             getString(R.string.edit_controls) to { _: android.content.DialogInterface -> beginEditing() },
+            "Control Guide & Gestures" to { _: android.content.DialogInterface -> showControlGuideDialog() },
         )
         // Macros are a test tool: only with developer tools on (Settings > Advanced).
         // Recording has its own button beside Menu; playing is picked here.
@@ -931,6 +932,45 @@ class GameActivity : AppCompatActivity(), NativeListener {
             if (prefs.touchControls) overlay.visibility = View.VISIBLE
         }
         return super.dispatchTouchEvent(event)
+    }
+
+    private fun showControlGuideDialog() {
+        val message = """
+            🎮 eFOOTBALL TOUCH CONTROLS & GESTURES
+
+            1. Left Analogue Stick & Movement:
+            • Floating Joystick: Touch anywhere on left side to anchor.
+            • Auto-Sprint: Push stick past outer threshold to sprint automatically (RB).
+            • Quick Stop: Double-tap left zone to stop immediately and face goal.
+
+            2. Attacking Action Cluster:
+            • PASS (A): Tap for ground pass. Double-tap for Give-and-Go.
+            • SHOOT (X): Tap for normal shot.
+            • CROSS (B): Tap for cross or lofted pass.
+            • THROUGH (Y): Tap for through pass.
+
+            3. Advanced Micro-Flicks:
+            • PASS (A) Flick Up: Lofted Pass / Flick Left/Right: Driven Pass.
+            • SHOOT (X) Flick Up: Chip Shot / Flick Down: Controlled Finesse Shot.
+            • THROUGH (Y) Flick: Chipped Through Ball.
+            • Drag-to-Pass Shot Fake: Slide thumb from SHOOT directly into PASS.
+
+            4. Contextual Defensive Controls:
+            • PRESSURE (A): Press ball carrier. Double-tap for Teammate Press.
+            • TACKLE (X): Standing tackle.
+            • CLEAR (B): Emergency clearance.
+            • GK RUSH (Y): Keeper charge.
+            • MATCH-UP (RT) & SWITCH (LB): Hold to engage active defensive jockeying.
+
+            5. Customization:
+            • Pause > "Edit controls" to adjust size, opacity, auto-sprint threshold, and profiles!
+        """.trimIndent()
+
+        AlertDialog.Builder(this)
+            .setTitle("Control Guide & Gestures")
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun setTouchControls(on: Boolean) {

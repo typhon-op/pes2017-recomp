@@ -63,12 +63,25 @@ class ControlLayout private constructor(
     var flickGesturesEnabled: Boolean = true,
     var deadzoneThreshold: Float = 0.15f,
     var pressedAlpha: Float = 0.85f,
+    var currentProfile: String = PROFILE_DEFAULT,
 ) {
 
     fun find(id: String): ControlElement? = elements.firstOrNull { it.id == id }
 
     fun resetAll() {
-        val fresh = defaults(widthDp, heightDp)
+        val fresh = defaults(widthDp, heightDp, currentProfile)
+        elements.clear()
+        elements.addAll(fresh.elements)
+        sprintThreshold = fresh.sprintThreshold
+        autoSprintEnabled = fresh.autoSprintEnabled
+        flickGesturesEnabled = fresh.flickGesturesEnabled
+        deadzoneThreshold = fresh.deadzoneThreshold
+        pressedAlpha = fresh.pressedAlpha
+    }
+
+    fun applyProfile(profileName: String) {
+        currentProfile = profileName
+        val fresh = defaults(widthDp, heightDp, profileName)
         elements.clear()
         elements.addAll(fresh.elements)
         sprintThreshold = fresh.sprintThreshold
@@ -101,6 +114,7 @@ class ControlLayout private constructor(
         }
         val root = JSONObject()
         root.put("version", FORMAT_VERSION)
+        root.put("currentProfile", currentProfile)
         root.put("sprintThreshold", sprintThreshold.toDouble())
         root.put("autoSprintEnabled", autoSprintEnabled)
         root.put("flickGesturesEnabled", flickGesturesEnabled)
@@ -131,6 +145,9 @@ class ControlLayout private constructor(
     companion object {
         private const val FILE_NAME = "controls.json"
         private const val FORMAT_VERSION = 9
+        const val PROFILE_DEFAULT = "Default"
+        const val PROFILE_TIKI_TAKA = "Tiki-Taka"
+        const val PROFILE_DEFENSIVE = "Defensive"
 
         fun load(context: Context): ControlLayout {
             val metrics = context.resources.displayMetrics
@@ -160,6 +177,7 @@ class ControlLayout private constructor(
                 layout.sprintThreshold = root.optDouble("sprintThreshold", 0.85).toFloat().coerceIn(0.70f, 0.95f)
                 layout.autoSprintEnabled = root.optBoolean("autoSprintEnabled", true)
                 layout.flickGesturesEnabled = root.optBoolean("flickGesturesEnabled", true)
+                layout.currentProfile = root.optString("currentProfile", PROFILE_DEFAULT)
                 layout.deadzoneThreshold = root.optDouble("deadzoneThreshold", 0.15).toFloat().coerceIn(0.05f, 0.35f)
                 layout.pressedAlpha = root.optDouble("pressedAlpha", 0.85).toFloat().coerceIn(0.10f, 1.0f)
 
@@ -188,7 +206,7 @@ class ControlLayout private constructor(
             return layout
         }
 
-        fun defaults(widthDp: Float = 800f, heightDp: Float = 360f): ControlLayout {
+        fun defaults(widthDp: Float = 800f, heightDp: Float = 360f, profile: String = PROFILE_DEFAULT): ControlLayout {
             val w = max(widthDp, 320f)
             val h = max(heightDp, 240f)
 
@@ -204,49 +222,55 @@ class ControlLayout private constructor(
             )
 
             val centre = w / 2f
+            val baseList = mutableListOf(
+                // Left thumb: eFootball floating/fixed analogue joystick with auto-sprint
+                place("stick", ControlKind.STICK, 0, "LS", 100f, -100f, 150f, 0.40f),
+
+                // Right thumb: eFootball Classic 4-button action cluster
+                place("y", ControlKind.BUTTON, NativeBridge.Y, "Y", -105f, -170f, 74f, sub = "THROUGH", sub2 = "GK RUSH"),
+                place("x", ControlKind.BUTTON, NativeBridge.X, "X", -170f, -105f, 74f, sub = "SHOOT", sub2 = "TACKLE"),
+                place("b", ControlKind.BUTTON, NativeBridge.B, "B", -40f, -105f, 74f, sub = "CROSS", sub2 = "CLEAR"),
+                place("a", ControlKind.BUTTON, NativeBridge.A, "A", -105f, -40f, 74f, sub = "PASS", sub2 = "PRESSURE"),
+
+                // Multi-Action Merged Button: Super-Cancel (RB + RT)
+                place("super_cancel", ControlKind.BUTTON, NativeBridge.RB or 0x00010000, "CANCEL", -175f, -175f, 54f, alpha = 0.40f, visible = false, sub = "CANCEL", sub2 = "CANCEL"),
+
+                // Tactical / Shoulder controls along top
+                place("lb", ControlKind.BUTTON, NativeBridge.LB, "LB", -110f, 70f, 56f, sub = "SWITCH", sub2 = "SWITCH"),
+                place("rt", ControlKind.TRIGGER, 1, "RT", -44f, 70f, 56f, sub = "MATCH UP", sub2 = "MATCH UP"),
+                place("lt", ControlKind.TRIGGER, 0, "LT", 44f, 70f, 56f),
+
+                // Standalone DASH (RB) fallback
+                place("rb", ControlKind.BUTTON, NativeBridge.RB, "RB", -240f, -40f, 60f, visible = false, sub = "DASH", sub2 = "DASH"),
+
+                // Skill stick, hidden by default
+                place("right_stick", ControlKind.STICK, 1, "RS", -255f, -170f, 100f, 0.40f, visible = false),
+
+                // Stick clicks
+                place("l3", ControlKind.BUTTON, NativeBridge.L3, "L3", 200f, -40f, 52f, visible = false),
+                place("r3", ControlKind.BUTTON, NativeBridge.R3, "R3", -320f, -45f, 52f, visible = false),
+
+                // Menus
+                place("start", ControlKind.BUTTON, NativeBridge.START, "START", centre + 60f, 37f, 54f, 0.75f),
+                place("back", ControlKind.BUTTON, NativeBridge.BACK, "SELECT", centre - 40f, 37f, 54f, 0.75f),
+            )
+
+            var sprintThresh = 0.85f
+            if (profile == PROFILE_TIKI_TAKA) {
+                sprintThresh = 0.90f
+            } else if (profile == PROFILE_DEFENSIVE) {
+                sprintThresh = 0.80f
+            }
+
             return ControlLayout(
-                mutableListOf(
-                    // Left thumb: eFootball floating/fixed analogue joystick with auto-sprint
-                    place("stick", ControlKind.STICK, 0, "LS", 100f, -100f, 150f, 0.40f),
-
-                    // Right thumb: eFootball Classic 4-button action cluster
-                    // Upper: THROUGH (Y) / GK RUSH
-                    place("y", ControlKind.BUTTON, NativeBridge.Y, "Y", -105f, -170f, 74f, sub = "THROUGH", sub2 = "GK RUSH"),
-                    // Left: SHOOT (X) / TACKLE
-                    place("x", ControlKind.BUTTON, NativeBridge.X, "X", -170f, -105f, 74f, sub = "SHOOT", sub2 = "TACKLE"),
-                    // Right: CROSS (B) / CLEAR
-                    place("b", ControlKind.BUTTON, NativeBridge.B, "B", -40f, -105f, 74f, sub = "CROSS", sub2 = "CLEAR"),
-                    // Lower: PASS (A) / PRESSURE
-                    place("a", ControlKind.BUTTON, NativeBridge.A, "A", -105f, -40f, 74f, sub = "PASS", sub2 = "PRESSURE"),
-
-                    // Tactical / Shoulder controls along top
-                    // LB: PLAYER SWITCH
-                    place("lb", ControlKind.BUTTON, NativeBridge.LB, "LB", -110f, 70f, 56f, sub = "SWITCH", sub2 = "SWITCH"),
-                    // RT: MATCH-UP / Jockey
-                    place("rt", ControlKind.TRIGGER, 1, "RT", -44f, 70f, 56f, sub = "MATCH UP", sub2 = "MATCH UP"),
-                    // LT: Manual control / Secondary Trigger
-                    place("lt", ControlKind.TRIGGER, 0, "LT", 44f, 70f, 56f),
-
-                    // Standalone DASH (RB) removed from active cluster; hidden fallback only
-                    place("rb", ControlKind.BUTTON, NativeBridge.RB, "RB", -240f, -40f, 60f, visible = false, sub = "DASH", sub2 = "DASH"),
-
-                    // Skill stick, hidden by default
-                    place("right_stick", ControlKind.STICK, 1, "RS", -255f, -170f, 100f, 0.40f, visible = false),
-
-                    // Stick clicks: hidden until wanted
-                    place("l3", ControlKind.BUTTON, NativeBridge.L3, "L3", 200f, -40f, 52f, visible = false),
-                    place("r3", ControlKind.BUTTON, NativeBridge.R3, "R3", -320f, -45f, 52f, visible = false),
-
-                    // Menus
-                    place("start", ControlKind.BUTTON, NativeBridge.START, "START", centre + 60f, 37f, 54f, 0.75f),
-                    place("back", ControlKind.BUTTON, NativeBridge.BACK, "SELECT", centre - 40f, 37f, 54f, 0.75f),
-                ),
+                baseList,
                 widthDp, heightDp,
-                sprintThreshold = 0.85f,
+                sprintThreshold = sprintThresh,
                 autoSprintEnabled = true,
                 flickGesturesEnabled = true,
                 deadzoneThreshold = 0.15f,
                 pressedAlpha = 0.85f,
+                currentProfile = profile,
             )
         }
 

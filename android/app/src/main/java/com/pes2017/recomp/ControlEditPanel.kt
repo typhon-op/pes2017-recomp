@@ -35,6 +35,7 @@ class ControlEditPanel(
     private val sprintThreshold: SeekBar = view.findViewById(R.id.edit_sprint_threshold)
     private val autoSprint: SwitchCompat = view.findViewById(R.id.edit_auto_sprint)
     private val flicks: SwitchCompat = view.findViewById(R.id.edit_flicks)
+    private val profileBtn: Button = view.findViewById(R.id.edit_profile_btn)
     private val visible: SwitchCompat = view.findViewById(R.id.edit_visible)
     private val toggle: SwitchCompat = view.findViewById(R.id.edit_toggle)
     private val snap: SwitchCompat = view.findViewById(R.id.edit_snap)
@@ -121,6 +122,20 @@ class ControlEditPanel(
         flicks.setOnCheckedChangeListener { _, checked ->
             overlay.layout.flickGesturesEnabled = checked
             save()
+        }
+        profileBtn.setOnClickListener {
+            val profiles = arrayOf(ControlLayout.PROFILE_DEFAULT, ControlLayout.PROFILE_TIKI_TAKA, ControlLayout.PROFILE_DEFENSIVE)
+            AlertDialog.Builder(activity)
+                .setTitle("Select Control Profile")
+                .setItems(profiles) { _, which ->
+                    val chosen = profiles[which]
+                    overlay.layout.applyProfile(chosen)
+                    profileBtn.text = "Profile: $chosen"
+                    overlay.refresh()
+                    save()
+                    show(current)
+                }
+                .show()
         }
         visible.setOnCheckedChangeListener { _, checked ->
             val element = current ?: return@setOnCheckedChangeListener
@@ -235,5 +250,6 @@ class ControlEditPanel(
         sprintThreshold.progress = sprintVal
         autoSprint.isChecked = overlay.layout.autoSprintEnabled
         flicks.isChecked = overlay.layout.flickGesturesEnabled
+        profileBtn.text = "Profile: ${overlay.layout.currentProfile}"
     }
 }

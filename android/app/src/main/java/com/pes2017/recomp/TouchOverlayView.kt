@@ -72,6 +72,17 @@ class TouchOverlayView @JvmOverloads constructor(
         set(value) {
             if (field == value) return
             field = value
+            TouchEventBus.postStateChange(value, inMenuMode)
+            invalidate()
+        }
+
+    /** Contextual Menu D-Pad mode: switches analog stick to crisp discrete D-Pad cardinal outputs. */
+    var inMenuMode: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            releaseEverything()
+            TouchEventBus.postStateChange(isDefending, value)
             invalidate()
         }
 
@@ -84,15 +95,28 @@ class TouchOverlayView @JvmOverloads constructor(
     private val claims = HashMap<Int, ControlElement>()
     private val stickPositions = HashMap<String, FloatArray>()   // id -> normalised x, y
     private val floatingStickCenters = HashMap<String, FloatArray>() // id -> dynamic cx, cy (px)
+    val activeTouchPoints = HashMap<Int, FloatArray>() // pointerId -> [x, y] for HUD tracker
     private val held = HashSet<String>()
     private val toggled = HashSet<String>()
     private val buttonDownCoords = HashMap<Int, FloatArray>()
     private val activeFlickMods = HashSet<String>()
+    val flickRipples = ArrayList<FloatArray>() // [x, y, dx, dy, lifetime]
+    var actionToastText: String = ""
+    var actionToastTime: Long = 0L
     private var autoSprintLatched = false
     private var lastLeftTapTime = 0L
+    private var lastPassTapTime = 0L
+    private var shotFakeActive = false
     private var lookPointer = -1
     private var lookLastX = 0f
     private var lookLastY = 0f
+
+    fun showActionBadge(badge: String) {
+        actionToastText = badge
+        actionToastTime = System.currentTimeMillis()
+        TouchEventBus.postToast(badge)
+        invalidate()
+    }
 
     // ---- editing -----------------------------------------------------------
     private var dragPointer = -1
@@ -209,7 +233,13 @@ class TouchOverlayView @JvmOverloads constructor(
             if (!element.visible) continue
             val on = held.contains(element.id) || toggled.contains(element.id)
             when (element.kind) {
-                ControlKind.BUTTON -> if (on) buttons = buttons or element.value
+                ControlKind.BUTTON -> if (on) {
+                    buttons = buttons or (element.value and 0xFFFF)
+                    // Multi-Action Merged Button support (e.g. super_cancel triggering RT)
+                    if (element.id == "super_cancel") {
+                        rightTrigger = 255
+                    }
+                }
                 ControlKind.TRIGGER -> if (on) {
                     if (element.value == 0) leftTrigger = 255 else rightTrigger = 255
                 }
@@ -217,8 +247,18 @@ class TouchOverlayView @JvmOverloads constructor(
                     val position = stickPositions[element.id]
                     if (position != null) {
                         if (element.value == 0) {
-                            leftX += position[0]
-                            leftY += position[1]
+                            if (inMenuMode) {
+                                val px = position[0]
+                                val py = position[1]
+                                val deadzone = 0.35f
+                                if (px > deadzone) buttons = buttons or NativeBridge.RIGHT
+                                else if (px < -deadzone) buttons = buttons or NativeBridge.LEFT
+                                if (py > deadzone) buttons = buttons or NativeBridge.UP
+                                else if (py < -deadzone) buttons = buttons or NativeBridge.DOWN
+                            } else {
+                                leftX += position[0]
+                                leftY += position[1]
+                            }
                         } else {
                             rightX += position[0]
                             rightY += position[1]
@@ -255,8 +295,10 @@ class TouchOverlayView @JvmOverloads constructor(
         claims.clear()
         stickPositions.clear()
         floatingStickCenters.clear()
+        activeTouchPoints.clear()
         buttonDownCoords.clear()
         activeFlickMods.clear()
+        shotFakeActive = false
         autoSprintLatched = false
         held.clear()
         isDefending = false
@@ -293,9 +335,8 @@ class TouchOverlayView @JvmOverloads constructor(
                     val id = event.getPointerId(index)
                     val x = event.getX(index)
                     val y = event.getY(index)
+                    activeTouchPoints[id] = floatArrayOf(x, y)
                     if (id == lookPointer) {
-                        // Every sample between frames matters for a smooth
-                        // turn, so the batched history is used too.
                         for (h in 0 until event.historySize) {
                             sendLook(event.getHistoricalX(index, h), event.getHistoricalY(index, h))
                         }
@@ -306,7 +347,28 @@ class TouchOverlayView @JvmOverloads constructor(
                     when (element.kind) {
                         ControlKind.STICK -> { moveStick(element, x, y); changed = true }
                         ControlKind.BUTTON -> {
-                            if (layout.flickGesturesEnabled) {
+                            // Shot Fake gesture: dragging thumb from SHOOT (X) into PASS (A) hit-box
+                            if (element.id.equals("x", ignoreCase = true) && !shotFakeActive) {
+                                val passBtn = layout.find("a")
+                                if (passBtn != null && hit(passBtn, x, y)) {
+                                    shotFakeActive = true
+                                    triggerHaptic()
+                                    TouchEventBus.postGesture(TouchEventBus.GestureType.SHOT_FAKE, "Shot Fake")
+                                    showActionBadge("SHOT FAKE")
+                                    held.add("a")
+                                    postDelayed({
+                                        held.remove("a")
+                                        held.remove("x")
+                                        shotFakeActive = false
+                                        pushState()
+                                        invalidate()
+                                    }, 200)
+                                    changed = true
+                                    continue
+                                }
+                            }
+
+                            if (layout.flickGesturesEnabled && !shotFakeActive) {
                                 val down = buttonDownCoords[id]
                                 if (down != null) {
                                     val deltaX = x - down[0]
@@ -322,12 +384,16 @@ class TouchOverlayView @JvmOverloads constructor(
                                                     if (!activeFlickMods.contains("lb")) {
                                                         activeFlickMods.add("lb")
                                                         triggerHaptic()
+                                                        flickRipples.add(floatArrayOf(down[0], down[1], deltaX, deltaY, 1f))
+                                                        showActionBadge("LOFTED PASS")
                                                         changed = true
                                                     }
                                                 } else if (absX > absY) {
                                                     if (!activeFlickMods.contains("rt")) {
                                                         activeFlickMods.add("rt")
                                                         triggerHaptic()
+                                                        flickRipples.add(floatArrayOf(down[0], down[1], deltaX, deltaY, 1f))
+                                                        showActionBadge("DRIVEN PASS")
                                                         changed = true
                                                     }
                                                 }
@@ -337,16 +403,22 @@ class TouchOverlayView @JvmOverloads constructor(
                                                     if (deltaY < 0 && !activeFlickMods.contains("lb")) {
                                                         activeFlickMods.add("lb")
                                                         triggerHaptic()
+                                                        flickRipples.add(floatArrayOf(down[0], down[1], deltaX, deltaY, 1f))
+                                                        showActionBadge("CHIP SHOT")
                                                         changed = true
                                                     } else if (deltaY > 0 && !activeFlickMods.contains("rt")) {
                                                         activeFlickMods.add("rt")
                                                         triggerHaptic()
+                                                        flickRipples.add(floatArrayOf(down[0], down[1], deltaX, deltaY, 1f))
+                                                        showActionBadge("CONTROLLED SHOT")
                                                         changed = true
                                                     }
                                                 } else if (absX > absY) {
                                                     if (!activeFlickMods.contains("rt")) {
                                                         activeFlickMods.add("rt")
                                                         triggerHaptic()
+                                                        flickRipples.add(floatArrayOf(down[0], down[1], deltaX, deltaY, 1f))
+                                                        showActionBadge("STUNNING SHOT")
                                                         changed = true
                                                     }
                                                 }
@@ -355,6 +427,8 @@ class TouchOverlayView @JvmOverloads constructor(
                                                 if (!activeFlickMods.contains("lb")) {
                                                     activeFlickMods.add("lb")
                                                     triggerHaptic()
+                                                    flickRipples.add(floatArrayOf(down[0], down[1], deltaX, deltaY, 1f))
+                                                    showActionBadge("CHIPPED THROUGH")
                                                     changed = true
                                                 }
                                             }
@@ -396,20 +470,19 @@ class TouchOverlayView @JvmOverloads constructor(
     }
 
     private fun press(pointerId: Int, x: Float, y: Float): Boolean {
+        activeTouchPoints[pointerId] = floatArrayOf(x, y)
         var element = elementAt(x, y)
-        // eFootball Floating Joystick: if touching left half of screen outside existing elements,
-        // float the left stick dynamically to the touch location (X0, Y0)
         if (element == null && x < width * 0.45f) {
             val stick = layout.find("stick")
             if (stick != null && stick.visible && !claims.values.contains(stick)) {
                 floatingStickCenters[stick.id] = floatArrayOf(x, y)
                 element = stick
 
-                // Left-zone double-tap gesture: Quick Stop / Face Goal
                 val now = System.currentTimeMillis()
                 if (now - lastLeftTapTime < 300) {
                     triggerHaptic()
-                    // Quick Stop in PES: Left bumper (LB) or Right trigger tap resets orientation
+                    TouchEventBus.postGesture(TouchEventBus.GestureType.QUICK_STOP, "Face Goal")
+                    showActionBadge("QUICK STOP")
                     held.add("lb")
                     postDelayed({
                         held.remove("lb")
@@ -439,8 +512,35 @@ class TouchOverlayView @JvmOverloads constructor(
                 } else {
                     held.add(element.id)
                 }
-                // Contextual defensive switch: pressing RT (match-up) or LB (switch)
-                // indicates active defensive engagement
+
+                // Double-tap shortcuts: A (Give-and-Go in attack, Teammate Press in defense)
+                if (element.id.equals("a", ignoreCase = true)) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastPassTapTime < 280) {
+                        triggerHaptic()
+                        if (isDefending) {
+                            TouchEventBus.postGesture(TouchEventBus.GestureType.TEAMMATE_PRESS, "Teammate Press")
+                            showActionBadge("TEAMMATE PRESS")
+                            held.add("x")
+                            postDelayed({
+                                held.remove("x")
+                                pushState()
+                                invalidate()
+                            }, 350)
+                        } else {
+                            TouchEventBus.postGesture(TouchEventBus.GestureType.GIVE_AND_GO, "Give & Go")
+                            showActionBadge("GIVE & GO")
+                            held.add("lb")
+                            postDelayed({
+                                held.remove("lb")
+                                pushState()
+                                invalidate()
+                            }, 250)
+                        }
+                    }
+                    lastPassTapTime = now
+                }
+
                 if (element.id.equals("rt", ignoreCase = true) || element.id.equals("lb", ignoreCase = true)) {
                     isDefending = true
                 }
@@ -451,6 +551,7 @@ class TouchOverlayView @JvmOverloads constructor(
     }
 
     private fun release(pointerId: Int): Boolean {
+        activeTouchPoints.remove(pointerId)
         if (pointerId == lookPointer) {
             lookPointer = -1
             NativeBridge.nativeLookEnd()
@@ -472,6 +573,7 @@ class TouchOverlayView @JvmOverloads constructor(
                 }
                 if (held.isEmpty()) {
                     activeFlickMods.clear()
+                    shotFakeActive = false
                 }
             }
         }
@@ -663,6 +765,71 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.BUTTON, ControlKind.TRIGGER -> drawButton(canvas, element, alpha, faded)
             }
             if (editing && element === selected) drawSelection(canvas, element)
+        }
+
+        // 1. Draw touch feedback tracker overlay (glow rings under active fingers)
+        if (!editing) {
+            for (entry in activeTouchPoints.values) {
+                val tx = entry[0]
+                val ty = entry[1]
+                fill.color = Color.argb(45, 56, 189, 248)
+                canvas.drawCircle(tx, ty, 28f * density, fill)
+                stroke.color = Color.argb(120, 56, 189, 248)
+                stroke.strokeWidth = 1.5f * density
+                canvas.drawCircle(tx, ty, 28f * density, stroke)
+            }
+        }
+
+        // 2. Draw directional micro-flick ripples & trails
+        val iterator = flickRipples.iterator()
+        while (iterator.hasNext()) {
+            val rip = iterator.next()
+            val startX = rip[0]
+            val startY = rip[1]
+            val dx = rip[2]
+            val dy = rip[3]
+            var life = rip[4]
+
+            if (life <= 0f) {
+                iterator.remove()
+                continue
+            }
+
+            val alpha = (life * 220).toInt().coerceIn(0, 255)
+            notchPaint.color = Color.argb(alpha, 56, 189, 248)
+            notchPaint.strokeWidth = max(2f, 3.5f * density)
+            canvas.drawLine(startX, startY, startX + dx, startY + dy, notchPaint)
+
+            fill.color = Color.argb(alpha, 255, 255, 255)
+            canvas.drawCircle(startX + dx, startY + dy, 4.5f * density, fill)
+
+            rip[4] -= 0.12f
+            invalidate()
+        }
+
+        // 3. Draw on-screen Action Toast Badges (e.g. SHOT FAKE, QUICK STOP, GIVE & GO)
+        val now = System.currentTimeMillis()
+        if (actionToastText.isNotEmpty() && now - actionToastTime < 1400) {
+            val age = (now - actionToastTime).toFloat() / 1400f
+            val toastAlpha = ((1f - age) * 255).toInt().coerceIn(0, 255)
+
+            val badgeX = width * 0.5f
+            val badgeY = height * 0.18f
+            val badgeW = 140f * density
+            val badgeH = 28f * density
+
+            tempRect.set(badgeX - badgeW * 0.5f, badgeY - badgeH * 0.5f, badgeX + badgeW * 0.5f, badgeY + badgeH * 0.5f)
+            fill.color = Color.argb((toastAlpha * 0.85f).toInt(), 15, 23, 42)
+            canvas.drawRoundRect(tempRect, 14f * density, 14f * density, fill)
+
+            stroke.color = Color.argb((toastAlpha * 0.90f).toInt(), 56, 189, 248)
+            stroke.strokeWidth = 1.2f * density
+            canvas.drawRoundRect(tempRect, 14f * density, 14f * density, stroke)
+
+            text.textSize = 12f * density
+            text.color = Color.argb(toastAlpha, 241, 245, 249)
+            canvas.drawText(actionToastText, badgeX, badgeY - (text.descent() + text.ascent()) * 0.5f, text)
+            invalidate()
         }
     }
 
