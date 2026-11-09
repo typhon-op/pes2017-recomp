@@ -42,9 +42,9 @@ data class ControlElement(
     /** Tap to hold, tap again to let go. */
     var toggle: Boolean = false,
     /** What it does on the ball (or, for a stick, a short name), drawn on the control. */
-    val sub: String = "",
+    var sub: String = "",
     /** What it does without the ball -- defending -- drawn smaller beneath. */
-    val sub2: String = "",
+    var sub2: String = "",
 )
 
 /**
@@ -85,6 +85,8 @@ class ControlLayout private constructor(
             item.put("alpha", element.alpha.toDouble())
             item.put("visible", element.visible)
             item.put("toggle", element.toggle)
+            if (element.sub.isNotEmpty()) item.put("sub", element.sub)
+            if (element.sub2.isNotEmpty()) item.put("sub2", element.sub2)
             array.put(item)
         }
         val root = JSONObject()
@@ -113,7 +115,7 @@ class ControlLayout private constructor(
 
     companion object {
         private const val FILE_NAME = "controls.json"
-        private const val FORMAT_VERSION = 6
+        private const val FORMAT_VERSION = 7
 
         fun load(context: Context): ControlLayout {
             // The whole screen (the match is full screen, into the cutout), in
@@ -160,6 +162,10 @@ class ControlLayout private constructor(
                         .toFloat().coerceIn(0.05f, 1f)
                     element.visible = item.optBoolean("visible", element.visible)
                     element.toggle = item.optBoolean("toggle", element.toggle)
+                    val s1 = item.optString("sub", "")
+                    if (s1.isNotEmpty()) element.sub = s1
+                    val s2 = item.optString("sub2", "")
+                    if (s2.isNotEmpty()) element.sub2 = s2
                 }
             } catch (_: Throwable) {
                 return defaults(widthDp, heightDp)
@@ -196,40 +202,50 @@ class ControlLayout private constructor(
             /** A control at x, y dp: positive from the left / top, negative from the right / bottom. */
             fun place(
                 id: String, kind: ControlKind, value: Int, label: String,
-                x: Float, y: Float, size: Float, alpha: Float = 0.45f, visible: Boolean = true,
+                x: Float, y: Float, size: Float, alpha: Float = 0.50f, visible: Boolean = true,
+                sub: String = "", sub2: String = "",
             ) = ControlElement(
                 id, kind, value, label,
                 (if (x >= 0f) x else w + x) / w, (if (y >= 0f) y else h + y) / h,
                 size, alpha, visible,
+                sub = sub, sub2 = sub2,
             )
 
             val centre = w / 2f
             return ControlLayout(
                 mutableListOf(
-                    // Left thumb: movement.
-                    place("stick", ControlKind.STICK, 0, "LS", 95f, -95f, 150f, 0.40f),
+                    // Left thumb: eFootball floating/fixed analogue joystick
+                    place("stick", ControlKind.STICK, 0, "LS", 100f, -100f, 150f, 0.40f),
 
-                    // Right thumb: the four actions as the pad's diamond.
-                    place("a", ControlKind.BUTTON, NativeBridge.A, "A", -110f, -52f, 68f),
-                    place("b", ControlKind.BUTTON, NativeBridge.B, "B", -52f, -110f, 68f),
-                    place("x", ControlKind.BUTTON, NativeBridge.X, "X", -168f, -110f, 68f),
-                    place("y", ControlKind.BUTTON, NativeBridge.Y, "Y", -110f, -168f, 68f),
+                    // Right thumb: eFootball Classic action arrangement
+                    // Upper: THROUGH (Y) / GK RUSH
+                    place("y", ControlKind.BUTTON, NativeBridge.Y, "Y", -110f, -172f, 72f, sub = "THROUGH", sub2 = "GK RUSH"),
+                    // Left: SHOOT (X) / TACKLE
+                    place("x", ControlKind.BUTTON, NativeBridge.X, "X", -172f, -112f, 72f, sub = "SHOOT", sub2 = "TACKLE"),
+                    // Right: CROSS (B) / CLEAR
+                    place("b", ControlKind.BUTTON, NativeBridge.B, "B", -50f, -112f, 72f, sub = "CROSS", sub2 = "CLEAR"),
+                    // Lower: PASS (A) / PRESSURE
+                    place("a", ControlKind.BUTTON, NativeBridge.A, "A", -110f, -50f, 72f, sub = "PASS", sub2 = "PRESSURE"),
 
-                    // The shoulders where a pad has them: L2 / L1 along the top left,
-                    // R1 / R2 along the top right, triggers outermost.
-                    place("lt", ControlKind.TRIGGER, 0, "LT", 44f, 76f, 56f),
-                    place("lb", ControlKind.BUTTON, NativeBridge.LB, "LB", 110f, 76f, 56f),
-                    place("rb", ControlKind.BUTTON, NativeBridge.RB, "RB", -110f, 76f, 56f),
-                    place("rt", ControlKind.TRIGGER, 1, "RT", -44f, 76f, 56f),
+                    // Below cluster: DASH (RB)
+                    place("rb", ControlKind.BUTTON, NativeBridge.RB, "RB", -175f, -48f, 72f, sub = "DASH", sub2 = "DASH"),
 
-                    // The skill stick, left of the actions.
-                    place("right_stick", ControlKind.STICK, 1, "RS", -250f, -170f, 100f, 0.40f),
+                    // Defensive / Tactical shoulders:
+                    // LB: PLAYER SWITCH
+                    place("lb", ControlKind.BUTTON, NativeBridge.LB, "LB", -110f, 70f, 56f, sub = "SWITCH", sub2 = "SWITCH"),
+                    // RT: MATCH-UP / Jockey
+                    place("rt", ControlKind.TRIGGER, 1, "RT", -44f, 70f, 56f, sub = "MATCH UP", sub2 = "MATCH UP"),
+                    // LT: Manual control / Secondary Trigger
+                    place("lt", ControlKind.TRIGGER, 0, "LT", 44f, 70f, 56f),
 
-                    // Stick clicks: kept for the editor, hidden until wanted.
+                    // Skill stick, hidden by default unless enabled
+                    place("right_stick", ControlKind.STICK, 1, "RS", -255f, -170f, 100f, 0.40f, visible = false),
+
+                    // Stick clicks: kept for editor
                     place("l3", ControlKind.BUTTON, NativeBridge.L3, "L3", 200f, -40f, 52f, visible = false),
                     place("r3", ControlKind.BUTTON, NativeBridge.R3, "R3", -320f, -45f, 52f, visible = false),
 
-                    // Menus have to be found at a glance in a football game.
+                    // Menus
                     place("start", ControlKind.BUTTON, NativeBridge.START, "START", centre + 60f, 37f, 54f, 0.75f),
                     place("back", ControlKind.BUTTON, NativeBridge.BACK, "SELECT", centre - 40f, 37f, 54f, 0.75f),
                 ),

@@ -60,7 +60,15 @@ class TouchOverlayView @JvmOverloads constructor(
         private set
 
     /** PlayStation names and symbols (Cross, Circle, L1, OPTIONS) instead of Xbox ones (A, B, LB, START). */
-    var playStation: Boolean = true
+    var playStation: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            invalidate()
+        }
+
+    /** Defensive mode state: when defending, actions adapt to PRESSURE, TACKLE, CLEAR, GK RUSH. */
+    var isDefending: Boolean = false
         set(value) {
             if (field == value) return
             field = value
@@ -73,11 +81,9 @@ class TouchOverlayView @JvmOverloads constructor(
     private val density = resources.displayMetrics.density
 
     // ---- what is being touched right now ----------------------------------
-    // A pointer is claimed by one control for as long as it is down, so a
-    // thumb that slides off the fire button keeps firing -- which is what
-    // every phone shooter does, and what a player expects.
     private val claims = HashMap<Int, ControlElement>()
     private val stickPositions = HashMap<String, FloatArray>()   // id -> normalised x, y
+    private val floatingStickCenters = HashMap<String, FloatArray>() // id -> dynamic cx, cy (px)
     private val held = HashSet<String>()
     private val toggled = HashSet<String>()
     private var lookPointer = -1
@@ -133,8 +139,18 @@ class TouchOverlayView @JvmOverloads constructor(
 
     // ---- geometry ----------------------------------------------------------
 
-    private fun centreX(element: ControlElement) = element.xFrac * width
-    private fun centreY(element: ControlElement) = element.yFrac * height
+    private fun centreX(element: ControlElement): Float {
+        val floating = floatingStickCenters[element.id]
+        if (floating != null && !editing) return floating[0]
+        return element.xFrac * width
+    }
+
+    private fun centreY(element: ControlElement): Float {
+        val floating = floatingStickCenters[element.id]
+        if (floating != null && !editing) return floating[1]
+        return element.yFrac * height
+    }
+
     private fun radius(element: ControlElement) = element.sizeDp * density * 0.5f
 
     /** The look area is a rectangle; everything else is a circle. */
@@ -220,7 +236,9 @@ class TouchOverlayView @JvmOverloads constructor(
     fun releaseEverything() {
         claims.clear()
         stickPositions.clear()
+        floatingStickCenters.clear()
         held.clear()
+        isDefending = false
         // Toggles survive a pause -- a player who was aiming down sights
         // before the phone rang is still aiming when they come back -- but
         // not the editor, which would otherwise leave a bit stuck down.
@@ -299,7 +317,18 @@ class TouchOverlayView @JvmOverloads constructor(
     }
 
     private fun press(pointerId: Int, x: Float, y: Float): Boolean {
-        val element = elementAt(x, y) ?: return false
+        var element = elementAt(x, y)
+        // eFootball Floating Joystick: if touching left half of screen outside existing elements,
+        // float the left stick to the touch location
+        if (element == null && x < width * 0.45f) {
+            val stick = layout.find("stick")
+            if (stick != null && stick.visible && !claims.values.contains(stick)) {
+                floatingStickCenters[stick.id] = floatArrayOf(x, y)
+                element = stick
+            }
+        }
+        if (element == null) return false
+
         if (element.kind == ControlKind.LOOK) {
             lookPointer = pointerId
             lookLastX = x
@@ -316,6 +345,11 @@ class TouchOverlayView @JvmOverloads constructor(
                 } else {
                     held.add(element.id)
                 }
+                // Contextual defensive switch: pressing RT (match-up) or LB (switch)
+                // indicates active defensive engagement
+                if (element.id.equals("rt", ignoreCase = true) || element.id.equals("lb", ignoreCase = true)) {
+                    isDefending = true
+                }
             }
             ControlKind.LOOK -> Unit
         }
@@ -330,8 +364,17 @@ class TouchOverlayView @JvmOverloads constructor(
         }
         val element = claims.remove(pointerId) ?: return false
         when (element.kind) {
-            ControlKind.STICK -> stickPositions.remove(element.id)
-            else -> held.remove(element.id)
+            ControlKind.STICK -> {
+                stickPositions.remove(element.id)
+                floatingStickCenters.remove(element.id)
+            }
+            else -> {
+                held.remove(element.id)
+                if (element.id.equals("rt", ignoreCase = true) || element.id.equals("lb", ignoreCase = true)) {
+                    val defStillHeld = held.contains("rt") || held.contains("lb")
+                    if (!defStillHeld) isDefending = false
+                }
+            }
         }
         return true
     }
@@ -635,11 +678,13 @@ class TouchOverlayView @JvmOverloads constructor(
             //    PlayStation symbol, or the Xbox letter.
             val ink = Color.argb((alpha * fadeFactor * 255).toInt().coerceIn(0, 255), 255, 255, 255)
             val shadow = Color.argb((alpha * fadeFactor * 140).toInt().coerceIn(0, 255), 0, 0, 0)
-            val actionSubtitle = when (id) {
-                "a" -> "PASS"
-                "x" -> "SHOOT"
-                "b" -> "CROSS"
-                "y" -> "THROUGH"
+            val actionSubtitle = when {
+                isDefending && element.sub2.isNotEmpty() -> element.sub2
+                element.sub.isNotEmpty() -> element.sub
+                id == "a" -> if (isDefending) "PRESSURE" else "PASS"
+                id == "x" -> if (isDefending) "TACKLE" else "SHOOT"
+                id == "b" -> if (isDefending) "CLEAR" else "CROSS"
+                id == "y" -> if (isDefending) "GK RUSH" else "THROUGH"
                 else -> ""
             }
 
@@ -667,48 +712,59 @@ class TouchOverlayView @JvmOverloads constructor(
                 subText.color = Color.argb((alpha * fadeFactor * 220).toInt().coerceIn(0, 255), 241, 245, 249)
                 canvas.drawText(actionSubtitle, cx, subY, subText)
             }
-        } else if (isRT || isLT) {
-            // Xbox Ergonomic Trigger (RT / LT)
-            val fillA = (alpha * fadeFactor * (if (pressed) 190 else 95)).toInt().coerceIn(0, 255)
-            fill.color = Color.argb(fillA, Color.red(coreColor), Color.green(coreColor), Color.blue(coreColor))
+        } else if (isRT || isLT || isBumper) {
+            // eFootball Frosted Shoulder & Dash Buttons (RB DASH / RT MATCH UP / LB SWITCH / LT)
+            fill.color = Color.argb((alpha * fadeFactor * 180).toInt().coerceIn(0, 255), 12, 16, 24)
             canvas.drawCircle(cx, cy, r, fill)
 
             stroke.color = Color.argb(
-                (alpha * fadeFactor * (if (pressed) 255 else 170)).toInt().coerceIn(0, 255),
+                (alpha * fadeFactor * (if (pressed) 255 else 175)).toInt().coerceIn(0, 255),
                 Color.red(glowColor), Color.green(glowColor), Color.blue(glowColor),
             )
-            stroke.strokeWidth = max(2f, r * 0.065f)
+            stroke.strokeWidth = max(1.5f, r * 0.045f)
             canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
 
-            text.textSize = r * 0.58f
-            text.color = Color.WHITE
-            canvas.drawText(label, cx, cy - (text.descent() + text.ascent()) * 0.5f, text)
+            val coreR = r * 0.90f
+            val tintAlpha = if (pressed) 140 else 55
+            fill.color = Color.argb(
+                (alpha * fadeFactor * tintAlpha).toInt().coerceIn(0, 255),
+                Color.red(coreColor), Color.green(coreColor), Color.blue(coreColor),
+            )
+            canvas.drawCircle(cx, cy, coreR, fill)
 
-            if (element.toggle && toggled.contains(element.id)) {
-                fill.color = Color.argb(255, 56, 189, 248)
-                canvas.drawCircle(cx, cy - r * 0.55f, 3.5f * density, fill)
+            // Specular top crest
+            highlightPaint.color = Color.argb((alpha * fadeFactor * (if (pressed) 90 else 50)).toInt().coerceIn(0, 255), 255, 255, 255)
+            highlightPaint.strokeWidth = max(1.0f, coreR * 0.04f)
+            val arcInset = coreR * 0.10f
+            tempRect.set(cx - coreR + arcInset, cy - coreR + arcInset * 0.4f, cx + coreR - arcInset, cy + coreR - arcInset * 1.6f)
+            canvas.drawArc(tempRect, -150f, 120f, false, highlightPaint)
+
+            val actionSubtitle = when {
+                isDefending && element.sub2.isNotEmpty() -> element.sub2
+                element.sub.isNotEmpty() -> element.sub
+                id == "rb" -> "DASH"
+                id == "rt" -> "MATCH UP"
+                id == "lb" -> "SWITCH"
+                else -> ""
             }
-        } else if (isBumper) {
-            // Xbox Bumper (LB / RB)
-            val fillA = (alpha * fadeFactor * (if (pressed) 180 else 85)).toInt().coerceIn(0, 255)
-            fill.color = Color.argb(fillA, 30, 38, 48)
-            canvas.drawCircle(cx, cy, r, fill)
 
-            stroke.color = Color.argb(
-                (alpha * fadeFactor * (if (pressed) 240 else 140)).toInt().coerceIn(0, 255),
-                Color.red(glowColor), Color.green(glowColor), Color.blue(glowColor),
-            )
-            stroke.strokeWidth = max(1.5f, r * 0.055f)
-            canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+            val ink = Color.argb((alpha * fadeFactor * 255).toInt().coerceIn(0, 255), 255, 255, 255)
+            val shadow = Color.argb((alpha * fadeFactor * 140).toInt().coerceIn(0, 255), 0, 0, 0)
+            text.textSize = coreR * (if (actionSubtitle.isNotEmpty()) 0.65f else 0.82f)
+            val baseLetterY = if (actionSubtitle.isNotEmpty()) cy - coreR * 0.10f else cy
+            val letterY = baseLetterY - (text.descent() + text.ascent()) * 0.5f
+            text.color = shadow
+            canvas.drawText(label, cx, letterY + 1.2f * density, text)
+            text.color = ink
+            canvas.drawText(label, cx, letterY, text)
 
-            text.textSize = r * (if (element.sub.isEmpty()) 0.52f else 0.46f)
-            text.color = Color.WHITE
-            val labelY = if (element.sub.isEmpty()) cy - (text.descent() + text.ascent()) * 0.5f else cy - r * 0.06f
-            canvas.drawText(label, cx, labelY, text)
-            if (element.sub.isNotEmpty()) {
-                subText.textSize = r * 0.27f
-                subText.color = Color.argb((alpha * fadeFactor * 220).toInt().coerceIn(0, 255), 226, 232, 240)
-                canvas.drawText(element.sub, cx, cy + r * 0.44f, subText)
+            if (actionSubtitle.isNotEmpty()) {
+                subText.textSize = max(7.5f, coreR * 0.25f)
+                val subY = cy + coreR * 0.58f
+                subText.color = Color.argb((alpha * fadeFactor * 140).toInt().coerceIn(0, 255), 0, 0, 0)
+                canvas.drawText(actionSubtitle, cx, subY + 1f * density, subText)
+                subText.color = Color.argb((alpha * fadeFactor * 220).toInt().coerceIn(0, 255), 241, 245, 249)
+                canvas.drawText(actionSubtitle, cx, subY, subText)
             }
         } else if (isThumbClick) {
             // Thumbstick Click (L3 / R3)
