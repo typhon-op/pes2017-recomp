@@ -86,6 +86,10 @@ class TouchOverlayView @JvmOverloads constructor(
     private val floatingStickCenters = HashMap<String, FloatArray>() // id -> dynamic cx, cy (px)
     private val held = HashSet<String>()
     private val toggled = HashSet<String>()
+    private val buttonDownCoords = HashMap<Int, FloatArray>()
+    private val activeFlickMods = HashSet<String>()
+    private var autoSprintLatched = false
+    private var lastLeftTapTime = 0L
     private var lookPointer = -1
     private var lookLastX = 0f
     private var lookLastY = 0f
@@ -221,9 +225,23 @@ class TouchOverlayView @JvmOverloads constructor(
                         }
                     }
                 }
-                ControlKind.LOOK -> Unit   // sent as deltas, not as a stick
+                ControlKind.LOOK -> Unit
             }
         }
+
+        // Auto-sprint integration: when outer-ring deflection threshold is reached,
+        // latch Xbox RB (0x0200) sprint bitmask simultaneously
+        if (autoSprintLatched && layout.autoSprintEnabled) {
+            buttons = buttons or NativeBridge.RB
+        }
+
+        for (mod in activeFlickMods) {
+            when (mod) {
+                "lb" -> buttons = buttons or NativeBridge.LB
+                "rt" -> rightTrigger = 255
+            }
+        }
+
         // A macro is playing: the fingers are not heard, so a run repeats exactly.
         if (Macro.playing) return
         val lx = leftX.coerceIn(-1f, 1f); val ly = leftY.coerceIn(-1f, 1f)
@@ -237,6 +255,9 @@ class TouchOverlayView @JvmOverloads constructor(
         claims.clear()
         stickPositions.clear()
         floatingStickCenters.clear()
+        buttonDownCoords.clear()
+        activeFlickMods.clear()
+        autoSprintLatched = false
         held.clear()
         isDefending = false
         // Toggles survive a pause -- a player who was aiming down sights
@@ -284,6 +305,64 @@ class TouchOverlayView @JvmOverloads constructor(
                     val element = claims[id] ?: continue
                     when (element.kind) {
                         ControlKind.STICK -> { moveStick(element, x, y); changed = true }
+                        ControlKind.BUTTON -> {
+                            if (layout.flickGesturesEnabled) {
+                                val down = buttonDownCoords[id]
+                                if (down != null) {
+                                    val deltaX = x - down[0]
+                                    val deltaY = y - down[1]
+                                    val dist = hypot(deltaX, deltaY)
+                                    val flickThreshold = radius(element) * 0.70f
+                                    if (dist >= flickThreshold) {
+                                        val absX = kotlin.math.abs(deltaX)
+                                        val absY = kotlin.math.abs(deltaY)
+                                        when (element.id) {
+                                            "a" -> {
+                                                if (absY > absX && deltaY < 0) {
+                                                    if (!activeFlickMods.contains("lb")) {
+                                                        activeFlickMods.add("lb")
+                                                        triggerHaptic()
+                                                        changed = true
+                                                    }
+                                                } else if (absX > absY) {
+                                                    if (!activeFlickMods.contains("rt")) {
+                                                        activeFlickMods.add("rt")
+                                                        triggerHaptic()
+                                                        changed = true
+                                                    }
+                                                }
+                                            }
+                                            "x" -> {
+                                                if (absY > absX) {
+                                                    if (deltaY < 0 && !activeFlickMods.contains("lb")) {
+                                                        activeFlickMods.add("lb")
+                                                        triggerHaptic()
+                                                        changed = true
+                                                    } else if (deltaY > 0 && !activeFlickMods.contains("rt")) {
+                                                        activeFlickMods.add("rt")
+                                                        triggerHaptic()
+                                                        changed = true
+                                                    }
+                                                } else if (absX > absY) {
+                                                    if (!activeFlickMods.contains("rt")) {
+                                                        activeFlickMods.add("rt")
+                                                        triggerHaptic()
+                                                        changed = true
+                                                    }
+                                                }
+                                            }
+                                            "y" -> {
+                                                if (!activeFlickMods.contains("lb")) {
+                                                    activeFlickMods.add("lb")
+                                                    triggerHaptic()
+                                                    changed = true
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         else -> Unit
                     }
                 }
@@ -319,12 +398,26 @@ class TouchOverlayView @JvmOverloads constructor(
     private fun press(pointerId: Int, x: Float, y: Float): Boolean {
         var element = elementAt(x, y)
         // eFootball Floating Joystick: if touching left half of screen outside existing elements,
-        // float the left stick to the touch location
+        // float the left stick dynamically to the touch location (X0, Y0)
         if (element == null && x < width * 0.45f) {
             val stick = layout.find("stick")
             if (stick != null && stick.visible && !claims.values.contains(stick)) {
                 floatingStickCenters[stick.id] = floatArrayOf(x, y)
                 element = stick
+
+                // Left-zone double-tap gesture: Quick Stop / Face Goal
+                val now = System.currentTimeMillis()
+                if (now - lastLeftTapTime < 300) {
+                    triggerHaptic()
+                    // Quick Stop in PES: Left bumper (LB) or Right trigger tap resets orientation
+                    held.add("lb")
+                    postDelayed({
+                        held.remove("lb")
+                        pushState()
+                        invalidate()
+                    }, 120)
+                }
+                lastLeftTapTime = now
             }
         }
         if (element == null) return false
@@ -340,6 +433,7 @@ class TouchOverlayView @JvmOverloads constructor(
         when (element.kind) {
             ControlKind.STICK -> moveStick(element, x, y)
             ControlKind.BUTTON, ControlKind.TRIGGER -> {
+                buttonDownCoords[pointerId] = floatArrayOf(x, y)
                 if (element.toggle) {
                     if (!toggled.remove(element.id)) toggled.add(element.id)
                 } else {
@@ -367,12 +461,17 @@ class TouchOverlayView @JvmOverloads constructor(
             ControlKind.STICK -> {
                 stickPositions.remove(element.id)
                 floatingStickCenters.remove(element.id)
+                if (element.value == 0) autoSprintLatched = false
             }
             else -> {
+                buttonDownCoords.remove(pointerId)
                 held.remove(element.id)
                 if (element.id.equals("rt", ignoreCase = true) || element.id.equals("lb", ignoreCase = true)) {
                     val defStillHeld = held.contains("rt") || held.contains("lb")
                     if (!defStillHeld) isDefending = false
+                }
+                if (held.isEmpty()) {
+                    activeFlickMods.clear()
                 }
             }
         }
@@ -393,8 +492,24 @@ class TouchOverlayView @JvmOverloads constructor(
         // The guest's Y points up; the screen's points down.
         var dy = -(y - centreY(element)) / r
         val length = hypot(dx, dy)
-        if (length > 1f) { dx /= length; dy /= length }
-        stickPositions[element.id] = floatArrayOf(dx, dy)
+        if (length < layout.deadzoneThreshold) {
+            stickPositions.remove(element.id)
+            if (element.value == 0) autoSprintLatched = false
+            return
+        }
+        val clampedLength = if (length > 1f) 1f else length
+        val normX = if (length > 1f) dx / length else dx
+        val normY = if (length > 1f) dy / length else dy
+        stickPositions[element.id] = floatArrayOf(normX * clampedLength, normY * clampedLength)
+
+        // eFootball Outer-Ring Auto-Sprint: compare magnitude with user sprint threshold
+        if (element.value == 0 && layout.autoSprintEnabled) {
+            val wasSprint = autoSprintLatched
+            autoSprintLatched = clampedLength >= layout.sprintThreshold
+            if (!wasSprint && autoSprintLatched) {
+                triggerHaptic()
+            }
+        }
     }
 
     // ---- editing ----------------------------------------------------------------

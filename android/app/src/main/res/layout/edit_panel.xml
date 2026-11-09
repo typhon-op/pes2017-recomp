@@ -59,6 +59,53 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
+        android:paddingTop="6dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:minWidth="90dp"
+            android:textColor="#D6E2FF"
+            android:textSize="12sp"
+            android:text="Sprint Limit" />
+
+        <SeekBar
+            android:id="@+id/edit_sprint_threshold"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="4dp">
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/edit_auto_sprint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#D6E2FF"
+            android:textSize="12sp"
+            android:text="Auto Sprint" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/edit_flicks"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:textColor="#D6E2FF"
+            android:textSize="12sp"
+            android:text="Micro-Flicks" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
         android:gravity="center_vertical"
         android:paddingTop="4dp">
 

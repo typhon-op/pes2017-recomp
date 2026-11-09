@@ -32,6 +32,9 @@ class ControlEditPanel(
     private val title: TextView = view.findViewById(R.id.edit_title)
     private val size: SeekBar = view.findViewById(R.id.edit_size)
     private val opacity: SeekBar = view.findViewById(R.id.edit_opacity)
+    private val sprintThreshold: SeekBar = view.findViewById(R.id.edit_sprint_threshold)
+    private val autoSprint: SwitchCompat = view.findViewById(R.id.edit_auto_sprint)
+    private val flicks: SwitchCompat = view.findViewById(R.id.edit_flicks)
     private val visible: SwitchCompat = view.findViewById(R.id.edit_visible)
     private val toggle: SwitchCompat = view.findViewById(R.id.edit_toggle)
     private val snap: SwitchCompat = view.findViewById(R.id.edit_snap)
@@ -101,6 +104,24 @@ class ControlEditPanel(
             override fun onStartTrackingTouch(bar: SeekBar) = Unit
             override fun onStopTrackingTouch(bar: SeekBar) = save()
         })
+        sprintThreshold.max = 100
+        sprintThreshold.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar, value: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                // Range 70% to 95%
+                overlay.layout.sprintThreshold = 0.70f + (0.25f * (value / 100f))
+            }
+            override fun onStartTrackingTouch(bar: SeekBar) = Unit
+            override fun onStopTrackingTouch(bar: SeekBar) = save()
+        })
+        autoSprint.setOnCheckedChangeListener { _, checked ->
+            overlay.layout.autoSprintEnabled = checked
+            save()
+        }
+        flicks.setOnCheckedChangeListener { _, checked ->
+            overlay.layout.flickGesturesEnabled = checked
+            save()
+        }
         visible.setOnCheckedChangeListener { _, checked ->
             val element = current ?: return@setOnCheckedChangeListener
             if (element.visible == checked) return@setOnCheckedChangeListener
@@ -209,5 +230,10 @@ class ControlEditPanel(
         opacity.progress = (element.alpha * 100f).roundToInt().coerceIn(0, 100)
         visible.isChecked = element.visible
         toggle.isChecked = element.toggle
+
+        val sprintVal = (((overlay.layout.sprintThreshold - 0.70f) / 0.25f) * 100f).roundToInt().coerceIn(0, 100)
+        sprintThreshold.progress = sprintVal
+        autoSprint.isChecked = overlay.layout.autoSprintEnabled
+        flicks.isChecked = overlay.layout.flickGesturesEnabled
     }
 }

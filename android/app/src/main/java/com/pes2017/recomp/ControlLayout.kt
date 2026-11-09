@@ -56,8 +56,13 @@ data class ControlElement(
 class ControlLayout private constructor(
     val elements: MutableList<ControlElement>,
     /** The window the defaults were laid out for, so a reset puts things back there. */
-    private val widthDp: Float,
-    private val heightDp: Float,
+    val widthDp: Float,
+    val heightDp: Float,
+    var sprintThreshold: Float = 0.85f,
+    var autoSprintEnabled: Boolean = true,
+    var flickGesturesEnabled: Boolean = true,
+    var deadzoneThreshold: Float = 0.15f,
+    var pressedAlpha: Float = 0.85f,
 ) {
 
     fun find(id: String): ControlElement? = elements.firstOrNull { it.id == id }
@@ -66,6 +71,11 @@ class ControlLayout private constructor(
         val fresh = defaults(widthDp, heightDp)
         elements.clear()
         elements.addAll(fresh.elements)
+        sprintThreshold = fresh.sprintThreshold
+        autoSprintEnabled = fresh.autoSprintEnabled
+        flickGesturesEnabled = fresh.flickGesturesEnabled
+        deadzoneThreshold = fresh.deadzoneThreshold
+        pressedAlpha = fresh.pressedAlpha
     }
 
     fun reset(id: String) {
@@ -91,6 +101,11 @@ class ControlLayout private constructor(
         }
         val root = JSONObject()
         root.put("version", FORMAT_VERSION)
+        root.put("sprintThreshold", sprintThreshold.toDouble())
+        root.put("autoSprintEnabled", autoSprintEnabled)
+        root.put("flickGesturesEnabled", flickGesturesEnabled)
+        root.put("deadzoneThreshold", deadzoneThreshold.toDouble())
+        root.put("pressedAlpha", pressedAlpha.toDouble())
         root.put("elements", array)
         return root.toString(2)
     }
@@ -115,11 +130,9 @@ class ControlLayout private constructor(
 
     companion object {
         private const val FILE_NAME = "controls.json"
-        private const val FORMAT_VERSION = 7
+        private const val FORMAT_VERSION = 9
 
         fun load(context: Context): ControlLayout {
-            // The whole screen (the match is full screen, into the cutout), in
-            // landscape whichever way the phone was held when asked.
             val metrics = context.resources.displayMetrics
             var widthPx = metrics.widthPixels
             var heightPx = metrics.heightPixels
@@ -141,16 +154,18 @@ class ControlLayout private constructor(
                 val root = JSONObject(file.readText())
                 val version = root.optInt("version", 1)
                 if (version < FORMAT_VERSION) {
-                    // An older layout (the shooter's look area, the d-pad, the old places): start over.
                     try { file.delete() } catch (_: Throwable) {}
                     return layout
                 }
+                layout.sprintThreshold = root.optDouble("sprintThreshold", 0.85).toFloat().coerceIn(0.70f, 0.95f)
+                layout.autoSprintEnabled = root.optBoolean("autoSprintEnabled", true)
+                layout.flickGesturesEnabled = root.optBoolean("flickGesturesEnabled", true)
+                layout.deadzoneThreshold = root.optDouble("deadzoneThreshold", 0.15).toFloat().coerceIn(0.05f, 0.35f)
+                layout.pressedAlpha = root.optDouble("pressedAlpha", 0.85).toFloat().coerceIn(0.10f, 1.0f)
+
                 val array = root.optJSONArray("elements") ?: return layout
                 for (i in 0 until array.length()) {
                     val item = array.optJSONObject(i) ?: continue
-                    // Only what the app still knows about: an element dropped
-                    // in a later version is ignored rather than resurrected,
-                    // and a new one keeps its default.
                     val element = layout.find(item.optString("id")) ?: continue
                     element.xFrac = item.optDouble("x", element.xFrac.toDouble())
                         .toFloat().coerceIn(0.02f, 0.98f)
@@ -173,33 +188,10 @@ class ControlLayout private constructor(
             return layout
         }
 
-        /**
-         * Where everything starts: a football pad laid out for thumbs, the way
-         * PES is played on a phone. The left thumb has only the move stick. The
-         * right thumb has everything else in an arc around the four actions:
-         *
-         *  - Cross / A (pass) at the bottom, where the thumb rests, with
-         *    Square / X (lob, cross) beside it: close enough to roll between,
-         *    with a gap a thumb does not bridge by accident.
-         *  - R1 / RB (sprint, "run") bigger and left of the actions, so the
-         *    thumb can hold it and slide onto pass or shoot.
-         *  - L1 / LB (change player) above the actions, the next thing the thumb
-         *    reaches for when defending.
-         *  - The skill stick above the sprint button; L2 / R2 small, under the
-         *    HUD and the MENU button at the top; start and select top centre.
-         *
-         * Positions are in dp from the nearest edge, so the thumb distances are
-         * the same on every phone and a wider screen only opens up the middle.
-         * Nothing touches (with the touch slack) from a 592 x 336 dp window up.
-         *
-         * The game's default binding, for reference: Cross pass, Circle shoot,
-         * Square lob / cross, Triangle through pass, R1 sprint, L1 change player.
-         */
         fun defaults(widthDp: Float = 800f, heightDp: Float = 360f): ControlLayout {
             val w = max(widthDp, 320f)
             val h = max(heightDp, 240f)
 
-            /** A control at x, y dp: positive from the left / top, negative from the right / bottom. */
             fun place(
                 id: String, kind: ControlKind, value: Int, label: String,
                 x: Float, y: Float, size: Float, alpha: Float = 0.50f, visible: Boolean = true,
@@ -214,23 +206,20 @@ class ControlLayout private constructor(
             val centre = w / 2f
             return ControlLayout(
                 mutableListOf(
-                    // Left thumb: eFootball floating/fixed analogue joystick
+                    // Left thumb: eFootball floating/fixed analogue joystick with auto-sprint
                     place("stick", ControlKind.STICK, 0, "LS", 100f, -100f, 150f, 0.40f),
 
-                    // Right thumb: eFootball Classic action arrangement
+                    // Right thumb: eFootball Classic 4-button action cluster
                     // Upper: THROUGH (Y) / GK RUSH
-                    place("y", ControlKind.BUTTON, NativeBridge.Y, "Y", -110f, -172f, 72f, sub = "THROUGH", sub2 = "GK RUSH"),
+                    place("y", ControlKind.BUTTON, NativeBridge.Y, "Y", -105f, -170f, 74f, sub = "THROUGH", sub2 = "GK RUSH"),
                     // Left: SHOOT (X) / TACKLE
-                    place("x", ControlKind.BUTTON, NativeBridge.X, "X", -172f, -112f, 72f, sub = "SHOOT", sub2 = "TACKLE"),
+                    place("x", ControlKind.BUTTON, NativeBridge.X, "X", -170f, -105f, 74f, sub = "SHOOT", sub2 = "TACKLE"),
                     // Right: CROSS (B) / CLEAR
-                    place("b", ControlKind.BUTTON, NativeBridge.B, "B", -50f, -112f, 72f, sub = "CROSS", sub2 = "CLEAR"),
+                    place("b", ControlKind.BUTTON, NativeBridge.B, "B", -40f, -105f, 74f, sub = "CROSS", sub2 = "CLEAR"),
                     // Lower: PASS (A) / PRESSURE
-                    place("a", ControlKind.BUTTON, NativeBridge.A, "A", -110f, -50f, 72f, sub = "PASS", sub2 = "PRESSURE"),
+                    place("a", ControlKind.BUTTON, NativeBridge.A, "A", -105f, -40f, 74f, sub = "PASS", sub2 = "PRESSURE"),
 
-                    // Below cluster: DASH (RB)
-                    place("rb", ControlKind.BUTTON, NativeBridge.RB, "RB", -175f, -48f, 72f, sub = "DASH", sub2 = "DASH"),
-
-                    // Defensive / Tactical shoulders:
+                    // Tactical / Shoulder controls along top
                     // LB: PLAYER SWITCH
                     place("lb", ControlKind.BUTTON, NativeBridge.LB, "LB", -110f, 70f, 56f, sub = "SWITCH", sub2 = "SWITCH"),
                     // RT: MATCH-UP / Jockey
@@ -238,10 +227,13 @@ class ControlLayout private constructor(
                     // LT: Manual control / Secondary Trigger
                     place("lt", ControlKind.TRIGGER, 0, "LT", 44f, 70f, 56f),
 
-                    // Skill stick, hidden by default unless enabled
+                    // Standalone DASH (RB) removed from active cluster; hidden fallback only
+                    place("rb", ControlKind.BUTTON, NativeBridge.RB, "RB", -240f, -40f, 60f, visible = false, sub = "DASH", sub2 = "DASH"),
+
+                    // Skill stick, hidden by default
                     place("right_stick", ControlKind.STICK, 1, "RS", -255f, -170f, 100f, 0.40f, visible = false),
 
-                    // Stick clicks: kept for editor
+                    // Stick clicks: hidden until wanted
                     place("l3", ControlKind.BUTTON, NativeBridge.L3, "L3", 200f, -40f, 52f, visible = false),
                     place("r3", ControlKind.BUTTON, NativeBridge.R3, "R3", -320f, -45f, 52f, visible = false),
 
@@ -250,6 +242,11 @@ class ControlLayout private constructor(
                     place("back", ControlKind.BUTTON, NativeBridge.BACK, "SELECT", centre - 40f, 37f, 54f, 0.75f),
                 ),
                 widthDp, heightDp,
+                sprintThreshold = 0.85f,
+                autoSprintEnabled = true,
+                flickGesturesEnabled = true,
+                deadzoneThreshold = 0.15f,
+                pressedAlpha = 0.85f,
             )
         }
 
