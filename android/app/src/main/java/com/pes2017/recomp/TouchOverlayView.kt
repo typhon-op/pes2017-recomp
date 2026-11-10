@@ -101,6 +101,7 @@ class TouchOverlayView @JvmOverloads constructor(
     private val buttonDownCoords = HashMap<Int, FloatArray>()
     private val activeFlickMods = HashSet<String>()
     private val buttonPressStartTimes = HashMap<String, Long>()
+    val activeButtonDirections = HashMap<String, Int>() // id -> 0: none, 1: UP, 2: DOWN, 3: LEFT, 4: RIGHT
     val flickRipples = ArrayList<FloatArray>() // [x, y, dx, dy, lifetime]
     val skillFlickVector = FloatArray(4) // [originX, originY, curX, curY]
     var skillFlickActive = false
@@ -308,6 +309,7 @@ class TouchOverlayView @JvmOverloads constructor(
         buttonDownCoords.clear()
         activeFlickMods.clear()
         buttonPressStartTimes.clear()
+        activeButtonDirections.clear()
         skillFlickActive = false
         shotFakeActive = false
         teammateRunActive = false
@@ -359,144 +361,88 @@ class TouchOverlayView @JvmOverloads constructor(
                     when (element.kind) {
                         ControlKind.STICK -> { moveStick(element, x, y); changed = true }
                         ControlKind.BUTTON -> {
-                            // Isolated 4-Way Skill Flick Engine: exclusive processing for "skill" button
-                            if (element.id == "skill") {
-                                val down = buttonDownCoords[id]
-                                if (down != null) {
-                                    val deltaX = x - down[0]
-                                    val deltaY = y - down[1]
-                                    val dist = hypot(deltaX, deltaY)
-                                    if (dist > 25f) {
-                                        skillFlickActive = true
-                                        skillFlickVector[0] = down[0]
-                                        skillFlickVector[1] = down[1]
-                                        skillFlickVector[2] = x
-                                        skillFlickVector[3] = y
-                                        changed = true
+                            val down = buttonDownCoords[id]
+                            if (down != null) {
+                                val deltaX = x - down[0]
+                                val deltaY = y - down[1]
+                                val dist = hypot(deltaX, deltaY)
+
+                                // Loose Radial Distance Tolerance (25px <= deltaR <= 70px)
+                                val minThreshold = 25f * density
+                                if (dist >= minThreshold) {
+                                    val absX = kotlin.math.abs(deltaX)
+                                    val absY = kotlin.math.abs(deltaY)
+                                    // Hard 4-Direction Sector Snap
+                                    val dir = when {
+                                        absY > absX && deltaY < 0 -> 1 // UP
+                                        absY > absX && deltaY > 0 -> 2 // DOWN
+                                        absX >= absY && deltaX < 0 -> 3 // LEFT
+                                        absX >= absY && deltaX > 0 -> 4 // RIGHT
+                                        else -> 0
                                     }
-                                }
-                                continue
-                            }
 
-                            // Shot Fake gesture: dragging thumb from SHOOT (X) into PASS (A) hit-box
-                            // Enforce strict check ensuring touch did not originate in SKILL button
-                            if (element.id.equals("x", ignoreCase = true) && !shotFakeActive) {
-                                val passBtn = layout.find("a")
-                                if (passBtn != null && hit(passBtn, x, y)) {
-                                    shotFakeActive = true
-                                    triggerHaptic()
-                                    TouchEventBus.postGesture(TouchEventBus.GestureType.SHOT_FAKE, "Shot Fake")
-                                    showActionBadge("SHOT FAKE")
-                                    held.add("a")
-                                    postDelayed({
-                                        held.remove("a")
-                                        held.remove("x")
-                                        shotFakeActive = false
-                                        pushState()
-                                        invalidate()
-                                    }, 200)
-                                    changed = true
-                                    continue
-                                }
-                            }
+                                    if (dir != 0 && activeButtonDirections[element.id] != dir) {
+                                        activeButtonDirections[element.id] = dir
+                                        triggerHaptic()
+                                        changed = true
 
-                            if (layout.flickGesturesEnabled && !shotFakeActive) {
-                                val down = buttonDownCoords[id]
-                                if (down != null) {
-                                    val deltaX = x - down[0]
-                                    val deltaY = y - down[1]
-                                    val dist = hypot(deltaX, deltaY)
-                                    val flickThreshold = radius(element) * 0.70f
-                                    if (dist >= flickThreshold) {
-                                        val absX = kotlin.math.abs(deltaX)
-                                        val absY = kotlin.math.abs(deltaY)
-                                        val clampedDeltaX = deltaX.coerceIn(-60f * density, 60f * density)
-                                        val clampedDeltaY = deltaY.coerceIn(-60f * density, 60f * density)
-                                        when (element.id) {
-                                            "a" -> {
-                                                if (absY > absX) {
-                                                    if (deltaY < 0) {
-                                                        if (!activeFlickMods.contains("lb")) {
-                                                            activeFlickMods.add("lb")
-                                                            triggerHaptic()
-                                                            flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
-                                                            showActionBadge("LOFTED PASS")
-                                                            changed = true
-                                                        }
-                                                    } else {
-                                                        if (!activeFlickMods.contains("lb")) {
-                                                            activeFlickMods.add("lb")
-                                                            triggerHaptic()
-                                                            teammateRunActive = true
-                                                            teammateRunTime = System.currentTimeMillis()
-                                                            flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
-                                                            showActionBadge("GIVE & GO / MANUAL RUN")
-                                                            changed = true
-                                                        }
-                                                    }
-                                                } else {
-                                                    if (!activeFlickMods.contains("rt")) {
-                                                        activeFlickMods.add("rt")
-                                                        triggerHaptic()
-                                                        flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
-                                                        showActionBadge("DRIVEN PASS")
-                                                        changed = true
-                                                    }
+                                        if (element.id == "skill") {
+                                            when (dir) {
+                                                1 -> showActionBadge("DOUBLE TOUCH")
+                                                2 -> showActionBadge("MARSEILLE TURN")
+                                                4 -> showActionBadge("STEP-OVER")
+                                                3 -> showActionBadge("DRAG BACK")
+                                            }
+                                        } else if (element.id == "a") {
+                                            when (dir) {
+                                                1 -> {
+                                                    activeFlickMods.add("lb")
+                                                    showActionBadge("LOFTED PASS")
+                                                }
+                                                2 -> {
+                                                    activeFlickMods.add("lb")
+                                                    teammateRunActive = true
+                                                    teammateRunTime = System.currentTimeMillis()
+                                                    showActionBadge("GIVE & GO / MANUAL RUN")
+                                                }
+                                                3, 4 -> {
+                                                    activeFlickMods.add("rt")
+                                                    showActionBadge("DRIVEN PASS")
                                                 }
                                             }
-                                            "x" -> {
-                                                if (absY > absX) {
-                                                    if (deltaY < 0 && !activeFlickMods.contains("lb")) {
-                                                        activeFlickMods.add("lb")
-                                                        triggerHaptic()
-                                                        flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
-                                                        showActionBadge("CHIP SHOT")
-                                                        changed = true
-                                                    } else if (deltaY > 0 && !activeFlickMods.contains("rt")) {
-                                                        activeFlickMods.add("rt")
-                                                        triggerHaptic()
-                                                        flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
-                                                        showActionBadge("FINESSE SHOT")
-                                                        changed = true
-                                                    }
-                                                } else if (absX > absY) {
-                                                    if (!activeFlickMods.contains("rt")) {
-                                                        activeFlickMods.add("rt")
-                                                        triggerHaptic()
-                                                        flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
-                                                        showActionBadge("STUNNING SHOT")
-                                                        changed = true
-                                                    }
+                                        } else if (element.id == "x") {
+                                            when (dir) {
+                                                1 -> {
+                                                    activeFlickMods.add("lb")
+                                                    showActionBadge("CHIP SHOT")
+                                                }
+                                                2 -> {
+                                                    activeFlickMods.add("rt")
+                                                    showActionBadge("FINESSE SHOT")
+                                                }
+                                                3, 4 -> {
+                                                    activeFlickMods.add("rt")
+                                                    showActionBadge("STUNNING SHOT")
                                                 }
                                             }
-                                            "b" -> {
-                                                if (absY > absX) {
-                                                    if (deltaY < 0) {
-                                                        triggerHaptic()
-                                                        flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
-                                                        showActionBadge("WHIPPED CROSS")
-                                                        changed = true
-                                                    } else {
-                                                        triggerHaptic()
-                                                        flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
-                                                        showActionBadge("LOW CROSS")
-                                                        changed = true
-                                                    }
-                                                }
+                                        } else if (element.id == "b") {
+                                            when (dir) {
+                                                1 -> showActionBadge("WHIPPED CROSS")
+                                                2 -> showActionBadge("LOW CROSS")
+                                                3, 4 -> showActionBadge("EARLY CROSS")
                                             }
-                                            "y" -> {
-                                                if (absY > absX && deltaY < 0) {
-                                                    if (!activeFlickMods.contains("lb")) {
-                                                        activeFlickMods.add("lb")
-                                                        triggerHaptic()
-                                                        flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
-                                                        showActionBadge("LOFTED THROUGH PASS")
-                                                        changed = true
-                                                    }
+                                        } else if (element.id == "y") {
+                                            when (dir) {
+                                                1 -> {
+                                                    activeFlickMods.add("lb")
+                                                    showActionBadge("LOFTED THROUGH PASS")
                                                 }
+                                                2, 3, 4 -> showActionBadge("THROUGH PASS")
                                             }
                                         }
                                     }
+                                } else {
+                                    activeButtonDirections[element.id] = 0
                                 }
                             }
                         }
@@ -688,6 +634,7 @@ class TouchOverlayView @JvmOverloads constructor(
 
                 held.remove(element.id)
                 buttonPressStartTimes.remove(element.id)
+                activeButtonDirections.remove(element.id)
                 if (element.id.equals("rt", ignoreCase = true) || element.id.equals("lb", ignoreCase = true)) {
                     val defStillHeld = held.contains("rt") || held.contains("lb")
                     if (!defStillHeld) isDefending = false
@@ -1170,6 +1117,29 @@ class TouchOverlayView @JvmOverloads constructor(
                 subText.color = Color.argb((alpha * fadeFactor * 220).toInt().coerceIn(0, 255), 241, 245, 249)
                 canvas.drawText(actionSubtitle, cx, subY, subText)
             }
+
+            // Directional Arrow Feedback: 4 clean directional arrows (UP, DOWN, LEFT, RIGHT)
+            val activeDir = activeButtonDirections[element.id] ?: 0
+            val arrowDist = r * 0.82f
+            val arrowLen = 6f * density
+
+            fun drawArrow(arrowDir: Int, ax: Float, ay: Float, ddx: Float, ddy: Float) {
+                val isActive = activeDir == arrowDir
+                val arrowAlpha = if (isActive) 255 else (alpha * fadeFactor * 70).toInt().coerceIn(0, 255)
+                notchPaint.color = if (isActive) Color.argb(arrowAlpha, 56, 189, 248) else Color.argb(arrowAlpha, 148, 163, 184)
+                notchPaint.strokeWidth = if (isActive) 2.5f * density else 1.2f * density
+                canvas.drawLine(ax - ddy * arrowLen * 0.6f, ay - ddx * arrowLen * 0.6f, ax + ddx * arrowLen, ay + ddy * arrowLen, notchPaint)
+                canvas.drawLine(ax + ddy * arrowLen * 0.6f, ay + ddx * arrowLen * 0.6f, ax + ddx * arrowLen, ay + ddy * arrowLen, notchPaint)
+            }
+
+            // UP (1)
+            drawArrow(1, cx, cy - arrowDist, 0f, -1f)
+            // DOWN (2)
+            drawArrow(2, cx, cy + arrowDist, 0f, 1f)
+            // LEFT (3)
+            drawArrow(3, cx - arrowDist, cy, -1f, 0f)
+            // RIGHT (4)
+            drawArrow(4, cx + arrowDist, cy, 1f, 0f)
         } else if (isRT || isLT || isBumper) {
             // eFootball Frosted Shoulder & Dash Buttons (RB DASH / RT MATCH UP / LB SWITCH / LT)
             fill.color = Color.argb((alpha * fadeFactor * 180).toInt().coerceIn(0, 255), 12, 16, 24)
