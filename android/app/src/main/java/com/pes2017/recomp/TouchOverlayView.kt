@@ -573,7 +573,7 @@ class TouchOverlayView @JvmOverloads constructor(
     }
 
     private fun release(pointerId: Int): Boolean {
-        activeTouchPoints.remove(pointerId)
+        val lastTouchPt = activeTouchPoints.remove(pointerId)
         if (pointerId == lookPointer) {
             lookPointer = -1
             NativeBridge.nativeLookEnd()
@@ -590,7 +590,7 @@ class TouchOverlayView @JvmOverloads constructor(
                 val down = buttonDownCoords.remove(pointerId)
                 // Execute Isolated 4-Way Skill Flick upon ACTION_UP with distance gating
                 if (element.id == "skill" && down != null) {
-                    val lastPt = activeTouchPoints[pointerId] ?: down
+                    val lastPt = lastTouchPt ?: down
                     val deltaX = lastPt[0] - down[0]
                     val deltaY = lastPt[1] - down[1]
                     val dist = hypot(deltaX, deltaY)
