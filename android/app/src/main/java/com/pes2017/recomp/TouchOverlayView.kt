@@ -101,6 +101,8 @@ class TouchOverlayView @JvmOverloads constructor(
     private val buttonDownCoords = HashMap<Int, FloatArray>()
     private val activeFlickMods = HashSet<String>()
     val flickRipples = ArrayList<FloatArray>() // [x, y, dx, dy, lifetime]
+    val skillFlickVector = FloatArray(4) // [originX, originY, curX, curY]
+    var skillFlickActive = false
     var actionToastText: String = ""
     var actionToastTime: Long = 0L
     private var autoSprintLatched = false
@@ -279,6 +281,10 @@ class TouchOverlayView @JvmOverloads constructor(
             when (mod) {
                 "lb" -> buttons = buttons or NativeBridge.LB
                 "rt" -> rightTrigger = 255
+                "rs_up" -> rightY = 1.0f
+                "rs_down" -> rightY = -1.0f
+                "rs_right" -> rightX = 1.0f
+                "rs_left" -> rightX = -1.0f
             }
         }
 
@@ -298,6 +304,7 @@ class TouchOverlayView @JvmOverloads constructor(
         activeTouchPoints.clear()
         buttonDownCoords.clear()
         activeFlickMods.clear()
+        skillFlickActive = false
         shotFakeActive = false
         autoSprintLatched = false
         held.clear()
@@ -347,7 +354,27 @@ class TouchOverlayView @JvmOverloads constructor(
                     when (element.kind) {
                         ControlKind.STICK -> { moveStick(element, x, y); changed = true }
                         ControlKind.BUTTON -> {
+                            // Isolated 4-Way Skill Flick Engine: exclusive processing for "skill" button
+                            if (element.id == "skill") {
+                                val down = buttonDownCoords[id]
+                                if (down != null) {
+                                    val deltaX = x - down[0]
+                                    val deltaY = y - down[1]
+                                    val dist = hypot(deltaX, deltaY)
+                                    if (dist > 25f) {
+                                        skillFlickActive = true
+                                        skillFlickVector[0] = down[0]
+                                        skillFlickVector[1] = down[1]
+                                        skillFlickVector[2] = x
+                                        skillFlickVector[3] = y
+                                        changed = true
+                                    }
+                                }
+                                continue
+                            }
+
                             // Shot Fake gesture: dragging thumb from SHOOT (X) into PASS (A) hit-box
+                            // Enforce strict check ensuring touch did not originate in SKILL button
                             if (element.id.equals("x", ignoreCase = true) && !shotFakeActive) {
                                 val passBtn = layout.find("a")
                                 if (passBtn != null && hit(passBtn, x, y)) {
@@ -565,7 +592,51 @@ class TouchOverlayView @JvmOverloads constructor(
                 if (element.value == 0) autoSprintLatched = false
             }
             else -> {
-                buttonDownCoords.remove(pointerId)
+                val down = buttonDownCoords.remove(pointerId)
+                // Execute Isolated 4-Way Skill Flick upon ACTION_UP with distance gating
+                if (element.id == "skill" && down != null) {
+                    val lastPt = activeTouchPoints[pointerId] ?: down
+                    val deltaX = lastPt[0] - down[0]
+                    val deltaY = lastPt[1] - down[1]
+                    val dist = hypot(deltaX, deltaY)
+                    if (dist >= 30f * density) {
+                        triggerHaptic()
+                        val absX = kotlin.math.abs(deltaX)
+                        val absY = kotlin.math.abs(deltaY)
+                        if (absY > absX) {
+                            if (deltaY < 0) {
+                                // Flick Up: Double Touch (RS Up)
+                                activeFlickMods.add("rs_up")
+                                showActionBadge("STEP 1: SETUP ➔ DOUBLE TOUCH")
+                            } else {
+                                // Flick Down: Marseille Turn (RS Down)
+                                activeFlickMods.add("rs_down")
+                                showActionBadge("STEP 1: SETUP ➔ MARSEILLE TURN")
+                            }
+                        } else {
+                            if (deltaX > 0) {
+                                // Flick Forward / Right: Step-Over / Scissors (RS Right)
+                                activeFlickMods.add("rs_right")
+                                showActionBadge("STEP 1: SETUP ➔ STEP-OVER")
+                            } else {
+                                // Flick Back / Left: Drag Back / L-Feint (RS Left)
+                                activeFlickMods.add("rs_left")
+                                showActionBadge("STEP 1: SETUP ➔ DRAG BACK")
+                            }
+                        }
+                        postDelayed({
+                            activeFlickMods.remove("rs_up")
+                            activeFlickMods.remove("rs_down")
+                            activeFlickMods.remove("rs_right")
+                            activeFlickMods.remove("rs_left")
+                            skillFlickActive = false
+                            pushState()
+                            invalidate()
+                        }, 250)
+                    }
+                    skillFlickActive = false
+                }
+
                 held.remove(element.id)
                 if (element.id.equals("rt", ignoreCase = true) || element.id.equals("lb", ignoreCase = true)) {
                     val defStillHeld = held.contains("rt") || held.contains("lb")
@@ -778,6 +849,15 @@ class TouchOverlayView @JvmOverloads constructor(
                 stroke.strokeWidth = 1.5f * density
                 canvas.drawCircle(tx, ty, 28f * density, stroke)
             }
+        }
+
+        // 1b. Draw localized vector glow trail on the SKILL button face
+        if (skillFlickActive) {
+            stroke.color = Color.argb(220, 245, 158, 11)
+            stroke.strokeWidth = 3f * density
+            canvas.drawLine(skillFlickVector[0], skillFlickVector[1], skillFlickVector[2], skillFlickVector[3], stroke)
+            fill.color = Color.argb(255, 251, 191, 36)
+            canvas.drawCircle(skillFlickVector[2], skillFlickVector[3], 5f * density, fill)
         }
 
         // 2. Draw directional micro-flick ripples & trails

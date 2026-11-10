@@ -232,6 +232,9 @@ class ControlLayout private constructor(
                 place("b", ControlKind.BUTTON, NativeBridge.B, "B", -40f, -105f, 74f, sub = "CROSS", sub2 = "CLEAR"),
                 place("a", ControlKind.BUTTON, NativeBridge.A, "A", -105f, -40f, 74f, sub = "PASS", sub2 = "PRESSURE"),
 
+                // Dedicated Modular SKILL Button (Feints / Skills)
+                place("skill", ControlKind.BUTTON, 0, "SKILL", -225f, -110f, 66f, alpha = 0.50f, visible = true, sub = "FEINT", sub2 = "FEINT"),
+
                 // Multi-Action Merged Button: Super-Cancel (RB + RT)
                 place("super_cancel", ControlKind.BUTTON, NativeBridge.RB or 0x00010000, "CANCEL", -175f, -175f, 54f, alpha = 0.40f, visible = false, sub = "CANCEL", sub2 = "CANCEL"),
 
