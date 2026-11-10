@@ -100,11 +100,14 @@ class TouchOverlayView @JvmOverloads constructor(
     private val toggled = HashSet<String>()
     private val buttonDownCoords = HashMap<Int, FloatArray>()
     private val activeFlickMods = HashSet<String>()
+    private val buttonPressStartTimes = HashMap<String, Long>()
     val flickRipples = ArrayList<FloatArray>() // [x, y, dx, dy, lifetime]
     val skillFlickVector = FloatArray(4) // [originX, originY, curX, curY]
     var skillFlickActive = false
     var actionToastText: String = ""
     var actionToastTime: Long = 0L
+    var teammateRunActive = false
+    var teammateRunTime: Long = 0L
     private var autoSprintLatched = false
     private var lastLeftTapTime = 0L
     private var lastPassTapTime = 0L
@@ -304,8 +307,10 @@ class TouchOverlayView @JvmOverloads constructor(
         activeTouchPoints.clear()
         buttonDownCoords.clear()
         activeFlickMods.clear()
+        buttonPressStartTimes.clear()
         skillFlickActive = false
         shotFakeActive = false
+        teammateRunActive = false
         autoSprintLatched = false
         held.clear()
         isDefending = false
@@ -534,6 +539,7 @@ class TouchOverlayView @JvmOverloads constructor(
             ControlKind.STICK -> moveStick(element, x, y)
             ControlKind.BUTTON, ControlKind.TRIGGER -> {
                 buttonDownCoords[pointerId] = floatArrayOf(x, y)
+                buttonPressStartTimes[element.id] = System.currentTimeMillis()
                 if (element.toggle) {
                     if (!toggled.remove(element.id)) toggled.add(element.id)
                 } else {
@@ -557,12 +563,18 @@ class TouchOverlayView @JvmOverloads constructor(
                         } else {
                             TouchEventBus.postGesture(TouchEventBus.GestureType.GIVE_AND_GO, "Give & Go")
                             showActionBadge("GIVE & GO")
+                            teammateRunActive = true
+                            teammateRunTime = System.currentTimeMillis()
                             held.add("lb")
                             postDelayed({
                                 held.remove("lb")
                                 pushState()
                                 invalidate()
                             }, 250)
+                            postDelayed({
+                                teammateRunActive = false
+                                invalidate()
+                            }, 1200)
                         }
                     }
                     lastPassTapTime = now
@@ -638,6 +650,7 @@ class TouchOverlayView @JvmOverloads constructor(
                 }
 
                 held.remove(element.id)
+                buttonPressStartTimes.remove(element.id)
                 if (element.id.equals("rt", ignoreCase = true) || element.id.equals("lb", ignoreCase = true)) {
                     val defStillHeld = held.contains("rt") || held.contains("lb")
                     if (!defStillHeld) isDefending = false
@@ -838,16 +851,38 @@ class TouchOverlayView @JvmOverloads constructor(
             if (editing && element === selected) drawSelection(canvas, element)
         }
 
-        // 1. Draw touch feedback tracker overlay (glow rings under active fingers)
+        // 1. Draw touch feedback tracker overlay (glow rings under active fingers with micro-expansion)
         if (!editing) {
+            val pulseRadius = (28f + (kotlin.math.sin(System.currentTimeMillis() * 0.008) * 3f).toFloat()) * density
             for (entry in activeTouchPoints.values) {
                 val tx = entry[0]
                 val ty = entry[1]
-                fill.color = Color.argb(45, 56, 189, 248)
-                canvas.drawCircle(tx, ty, 28f * density, fill)
-                stroke.color = Color.argb(120, 56, 189, 248)
+                fill.color = Color.argb(40, 56, 189, 248)
+                canvas.drawCircle(tx, ty, pulseRadius, fill)
+                stroke.color = Color.argb(130, 56, 189, 248)
                 stroke.strokeWidth = 1.5f * density
-                canvas.drawCircle(tx, ty, 28f * density, stroke)
+                canvas.drawCircle(tx, ty, pulseRadius, stroke)
+            }
+        }
+
+        // 1c. Draw Teammate Run Target Indicator (On-Pitch Layer) during Give-and-Go
+        if (teammateRunActive) {
+            val runAge = (System.currentTimeMillis() - teammateRunTime).toFloat() / 1200f
+            if (runAge < 1f) {
+                val chevAlpha = ((1f - runAge) * 230).toInt().coerceIn(0, 255)
+                val chevX = width * 0.65f + (runAge * 50f * density)
+                val chevY = height * 0.42f
+                val chevSize = 16f * density
+
+                stroke.color = Color.argb(chevAlpha, 34, 197, 94)
+                stroke.strokeWidth = 3f * density
+                canvas.drawLine(chevX - chevSize, chevY - chevSize * 0.8f, chevX, chevY, stroke)
+                canvas.drawLine(chevX - chevSize, chevY + chevSize * 0.8f, chevX, chevY, stroke)
+
+                text.textSize = 10f * density
+                text.color = Color.argb(chevAlpha, 34, 197, 94)
+                canvas.drawText("RUN", chevX - chevSize * 0.5f, chevY - chevSize * 1.2f, text)
+                invalidate()
             }
         }
 
@@ -1016,6 +1051,30 @@ class TouchOverlayView @JvmOverloads constructor(
             )
             stroke.strokeWidth = max(1.5f, r * 0.045f)
             canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+
+            // Perimeter Power Fill Arc: circular charge bar filling based on hold duration (0 to 800ms)
+            val startTime = buttonPressStartTimes[element.id]
+            if (pressed && startTime != null) {
+                val holdDuration = System.currentTimeMillis() - startTime
+                val chargeRatio = (holdDuration / 800f).coerceIn(0f, 1f)
+                if (chargeRatio > 0.05f) {
+                    val sweepAngle = chargeRatio * 360f
+                    val arcPaint = stroke
+                    val origColor = arcPaint.color
+                    val origWidth = arcPaint.strokeWidth
+                    arcPaint.strokeWidth = max(2.5f, r * 0.08f)
+                    arcPaint.color = when {
+                        chargeRatio < 0.5f -> Color.argb(240, 34, 197, 94)    // Green
+                        chargeRatio < 0.85f -> Color.argb(240, 234, 179, 8)   // Yellow
+                        else -> Color.argb(240, 239, 68, 68)                  // Red
+                    }
+                    tempRect.set(cx - r + arcPaint.strokeWidth * 0.5f, cy - r + arcPaint.strokeWidth * 0.5f, cx + r - arcPaint.strokeWidth * 0.5f, cy + r - arcPaint.strokeWidth * 0.5f)
+                    canvas.drawArc(tempRect, -90f, sweepAngle, false, arcPaint)
+                    arcPaint.color = origColor
+                    arcPaint.strokeWidth = origWidth
+                    invalidate()
+                }
+            }
 
             // 3. Modern dark translucent core tinted with accent color
             val coreR = r * 0.90f
@@ -1214,10 +1273,19 @@ class TouchOverlayView @JvmOverloads constructor(
         fill.color = Color.argb((alpha * fadeFactor * 75).toInt().coerceIn(0, 255), 16, 20, 26)
         canvas.drawCircle(cx, cy, r, fill)
 
-        // Outer socket rim stroke
-        stroke.color = Color.argb((alpha * fadeFactor * 130).toInt().coerceIn(0, 255), 45, 55, 70)
-        stroke.strokeWidth = max(1.5f, r * 0.035f)
-        canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+        // Outer socket rim stroke & Left Stick Sprint Edge-Glow
+        if (autoSprintLatched && element.value == 0) {
+            val pulse = (kotlin.math.sin(System.currentTimeMillis() * 0.015) * 40).toInt()
+            val glowA = (215 + pulse).coerceIn(160, 255)
+            stroke.color = Color.argb(glowA, 245, 158, 11) // Vibrant amber sprint glow
+            stroke.strokeWidth = max(3f, r * 0.07f)
+            canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+            invalidate()
+        } else {
+            stroke.color = Color.argb((alpha * fadeFactor * 130).toInt().coerceIn(0, 255), 45, 55, 70)
+            stroke.strokeWidth = max(1.5f, r * 0.035f)
+            canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+        }
 
         // 4 Cardinal Guide Notches on the outer socket perimeter (Xbox stick housing style)
         val notchLen = r * 0.10f
