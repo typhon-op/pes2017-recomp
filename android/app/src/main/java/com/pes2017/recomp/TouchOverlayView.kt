@@ -410,21 +410,35 @@ class TouchOverlayView @JvmOverloads constructor(
                                     if (dist >= flickThreshold) {
                                         val absX = kotlin.math.abs(deltaX)
                                         val absY = kotlin.math.abs(deltaY)
+                                        val clampedDeltaX = deltaX.coerceIn(-60f * density, 60f * density)
+                                        val clampedDeltaY = deltaY.coerceIn(-60f * density, 60f * density)
                                         when (element.id) {
                                             "a" -> {
-                                                if (absY > absX && deltaY < 0) {
-                                                    if (!activeFlickMods.contains("lb")) {
-                                                        activeFlickMods.add("lb")
-                                                        triggerHaptic()
-                                                        flickRipples.add(floatArrayOf(down[0], down[1], deltaX, deltaY, 1f))
-                                                        showActionBadge("LOFTED PASS")
-                                                        changed = true
+                                                if (absY > absX) {
+                                                    if (deltaY < 0) {
+                                                        if (!activeFlickMods.contains("lb")) {
+                                                            activeFlickMods.add("lb")
+                                                            triggerHaptic()
+                                                            flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
+                                                            showActionBadge("LOFTED PASS")
+                                                            changed = true
+                                                        }
+                                                    } else {
+                                                        if (!activeFlickMods.contains("lb")) {
+                                                            activeFlickMods.add("lb")
+                                                            triggerHaptic()
+                                                            teammateRunActive = true
+                                                            teammateRunTime = System.currentTimeMillis()
+                                                            flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
+                                                            showActionBadge("GIVE & GO / MANUAL RUN")
+                                                            changed = true
+                                                        }
                                                     }
-                                                } else if (absX > absY) {
+                                                } else {
                                                     if (!activeFlickMods.contains("rt")) {
                                                         activeFlickMods.add("rt")
                                                         triggerHaptic()
-                                                        flickRipples.add(floatArrayOf(down[0], down[1], deltaX, deltaY, 1f))
+                                                        flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
                                                         showActionBadge("DRIVEN PASS")
                                                         changed = true
                                                     }
@@ -435,33 +449,50 @@ class TouchOverlayView @JvmOverloads constructor(
                                                     if (deltaY < 0 && !activeFlickMods.contains("lb")) {
                                                         activeFlickMods.add("lb")
                                                         triggerHaptic()
-                                                        flickRipples.add(floatArrayOf(down[0], down[1], deltaX, deltaY, 1f))
+                                                        flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
                                                         showActionBadge("CHIP SHOT")
                                                         changed = true
                                                     } else if (deltaY > 0 && !activeFlickMods.contains("rt")) {
                                                         activeFlickMods.add("rt")
                                                         triggerHaptic()
-                                                        flickRipples.add(floatArrayOf(down[0], down[1], deltaX, deltaY, 1f))
-                                                        showActionBadge("CONTROLLED SHOT")
+                                                        flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
+                                                        showActionBadge("FINESSE SHOT")
                                                         changed = true
                                                     }
                                                 } else if (absX > absY) {
                                                     if (!activeFlickMods.contains("rt")) {
                                                         activeFlickMods.add("rt")
                                                         triggerHaptic()
-                                                        flickRipples.add(floatArrayOf(down[0], down[1], deltaX, deltaY, 1f))
+                                                        flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
                                                         showActionBadge("STUNNING SHOT")
                                                         changed = true
                                                     }
                                                 }
                                             }
+                                            "b" -> {
+                                                if (absY > absX) {
+                                                    if (deltaY < 0) {
+                                                        triggerHaptic()
+                                                        flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
+                                                        showActionBadge("WHIPPED CROSS")
+                                                        changed = true
+                                                    } else {
+                                                        triggerHaptic()
+                                                        flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
+                                                        showActionBadge("LOW CROSS")
+                                                        changed = true
+                                                    }
+                                                }
+                                            }
                                             "y" -> {
-                                                if (!activeFlickMods.contains("lb")) {
-                                                    activeFlickMods.add("lb")
-                                                    triggerHaptic()
-                                                    flickRipples.add(floatArrayOf(down[0], down[1], deltaX, deltaY, 1f))
-                                                    showActionBadge("CHIPPED THROUGH")
-                                                    changed = true
+                                                if (absY > absX && deltaY < 0) {
+                                                    if (!activeFlickMods.contains("lb")) {
+                                                        activeFlickMods.add("lb")
+                                                        triggerHaptic()
+                                                        flickRipples.add(floatArrayOf(down[0], down[1], clampedDeltaX, clampedDeltaY, 1f))
+                                                        showActionBadge("LOFTED THROUGH PASS")
+                                                        changed = true
+                                                    }
                                                 }
                                             }
                                         }
@@ -546,38 +577,44 @@ class TouchOverlayView @JvmOverloads constructor(
                     held.add(element.id)
                 }
 
-                // Double-tap shortcuts: A (Give-and-Go in attack, Teammate Press in defense)
-                if (element.id.equals("a", ignoreCase = true)) {
-                    val now = System.currentTimeMillis()
-                    if (now - lastPassTapTime < 280) {
-                        triggerHaptic()
-                        if (isDefending) {
-                            TouchEventBus.postGesture(TouchEventBus.GestureType.TEAMMATE_PRESS, "Teammate Press")
-                            showActionBadge("TEAMMATE PRESS")
-                            held.add("x")
-                            postDelayed({
-                                held.remove("x")
-                                pushState()
-                                invalidate()
-                            }, 350)
+                when (element.id) {
+                    "a" -> {
+                        val now = System.currentTimeMillis()
+                        if (now - lastPassTapTime < 280) {
+                            triggerHaptic()
+                            if (isDefending) {
+                                TouchEventBus.postGesture(TouchEventBus.GestureType.TEAMMATE_PRESS, "Teammate Press")
+                                showActionBadge("TEAMMATE PRESS LOCK")
+                                held.add("x")
+                                postDelayed({
+                                    held.remove("x")
+                                    pushState()
+                                    invalidate()
+                                }, 350)
+                            } else {
+                                TouchEventBus.postGesture(TouchEventBus.GestureType.GIVE_AND_GO, "Give & Go")
+                                showActionBadge("GIVE & GO / MANUAL RUN")
+                                teammateRunActive = true
+                                teammateRunTime = System.currentTimeMillis()
+                                held.add("lb")
+                                postDelayed({
+                                    held.remove("lb")
+                                    pushState()
+                                    invalidate()
+                                }, 250)
+                                postDelayed({
+                                    teammateRunActive = false
+                                    invalidate()
+                                }, 1200)
+                            }
                         } else {
-                            TouchEventBus.postGesture(TouchEventBus.GestureType.GIVE_AND_GO, "Give & Go")
-                            showActionBadge("GIVE & GO")
-                            teammateRunActive = true
-                            teammateRunTime = System.currentTimeMillis()
-                            held.add("lb")
-                            postDelayed({
-                                held.remove("lb")
-                                pushState()
-                                invalidate()
-                            }, 250)
-                            postDelayed({
-                                teammateRunActive = false
-                                invalidate()
-                            }, 1200)
+                            showActionBadge(if (isDefending) "PRESS" else "PASS")
                         }
+                        lastPassTapTime = now
                     }
-                    lastPassTapTime = now
+                    "x" -> showActionBadge(if (isDefending) "SLIDING TACKLE" else "SHOOT")
+                    "b" -> showActionBadge(if (isDefending) "CLEAR" else "CROSS")
+                    "y" -> showActionBadge(if (isDefending) "GK RUSH" else "THROUGH PASS")
                 }
 
                 if (element.id.equals("rt", ignoreCase = true) || element.id.equals("lb", ignoreCase = true)) {
@@ -922,16 +959,16 @@ class TouchOverlayView @JvmOverloads constructor(
             invalidate()
         }
 
-        // 3. Draw on-screen Action Toast Badges (e.g. SHOT FAKE, QUICK STOP, GIVE & GO)
+        // 3. Universal Action Toast Overlay (Top-Center HUD at Y = 10% screen height, 600ms animated fade)
         val now = System.currentTimeMillis()
-        if (actionToastText.isNotEmpty() && now - actionToastTime < 1400) {
-            val age = (now - actionToastTime).toFloat() / 1400f
+        if (actionToastText.isNotEmpty() && now - actionToastTime < 600) {
+            val age = (now - actionToastTime).toFloat() / 600f
             val toastAlpha = ((1f - age) * 255).toInt().coerceIn(0, 255)
 
             val badgeX = width * 0.5f
-            val badgeY = height * 0.18f
-            val badgeW = 140f * density
-            val badgeH = 28f * density
+            val badgeY = height * 0.10f
+            val badgeW = max(130f * density, (actionToastText.length * 9.5f + 28f) * density)
+            val badgeH = 26f * density
 
             tempRect.set(badgeX - badgeW * 0.5f, badgeY - badgeH * 0.5f, badgeX + badgeW * 0.5f, badgeY + badgeH * 0.5f)
             fill.color = Color.argb((toastAlpha * 0.85f).toInt(), 15, 23, 42)
