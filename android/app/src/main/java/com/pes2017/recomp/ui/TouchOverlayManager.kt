@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import com.pes2017.recomp.TouchEventBus
 import kotlin.math.atan2
 import kotlin.math.hypot
 
@@ -18,44 +19,52 @@ class TouchOverlayManager @JvmOverloads constructor(
 
     // --- State & Constants ---
     private var isSprinting = false
-    private var inPossession = true // Controlled by game state memory hook
+    private var inPossession = true
+    private var inMenuMode = false
 
-    // Pointer tracking to prevent multi-touch deadlocks between Left Stick & Action Cluster
+    // Pointer tracking
     private var leftStickPointerId = -1
     private var actionPointerId = -1
 
-    // Fake Shot tracking (Shoot -> Pass drag)
+    // Fake Shot tracking
     private var shootTouchStartX = 0f
     private var shootTouchStartY = 0f
     private var shootTouchStartTime = 0L
     private val fakeShotWindowMs = 250L
     private val dragThresholdPx = 40f
 
-    // Swipe tracking for Action Cluster (Shoot, Cross, Skill)
+    // Swipe tracking for Action Cluster
     private var actionTouchStartX = 0f
     private var actionTouchStartY = 0f
 
-    // Paint for visual feedback & action toasts
     private val paint = Paint().apply {
         isAntiAlias = true
         textSize = 36f
         color = Color.WHITE
     }
 
+    init {
+        // Listen to UI/State updates from TouchEventBus
+        TouchEventBus.registerStateListener { state ->
+            inMenuMode = state.inMenuMode
+            inPossession = !state.isDefending
+            invalidate()
+        }
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        val actionMasked = event.actionMasked
         val actionIndex = event.actionIndex
         val pointerId = event.getPointerId(actionIndex)
-        val actionMasked = event.actionMasked
 
         when (actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val x = event.getX(actionIndex)
                 val y = event.getY(actionIndex)
 
-                // Divide screen: Left 45% = Analog Stick / Movement, Right 55% = Action Cluster
                 if (x < width * 0.45f && leftStickPointerId == -1) {
                     leftStickPointerId = pointerId
-                    handleLeftStickDown(x, y)
+                    if (inMenuMode) handleMenuDPadDown(x, y) else handleLeftStickDown(x, y)
                 } else if (x >= width * 0.45f && actionPointerId == -1) {
                     actionPointerId = pointerId
                     handleActionClusterDown(x, y)
@@ -63,14 +72,13 @@ class TouchOverlayManager @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_MOVE -> {
-                // Process active pointer movements independently to avoid deadlock
                 for (i in 0 until event.pointerCount) {
                     val id = event.getPointerId(i)
                     val x = event.getX(i)
                     val y = event.getY(i)
 
                     if (id == leftStickPointerId) {
-                        handleLeftStickMove(x, y)
+                        if (inMenuMode) handleMenuDPadMove(x, y) else handleLeftStickMove(x, y)
                     } else if (id == actionPointerId) {
                         handleActionClusterMove(x, y)
                     }
@@ -78,12 +86,16 @@ class TouchOverlayManager @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
+                val pointerIndex = event.findPointerIndex(pointerId)
+                val x = if (pointerIndex >= 0) event.getX(pointerIndex) else 0f
+                val y = if (pointerIndex >= 0) event.getY(pointerIndex) else 0f
+
                 if (pointerId == leftStickPointerId) {
                     leftStickPointerId = -1
-                    handleLeftStickUp()
+                    if (inMenuMode) handleMenuDPadUp() else handleLeftStickUp()
                 } else if (pointerId == actionPointerId) {
                     actionPointerId = -1
-                    handleActionClusterUp(event.x, event.y)
+                    handleActionClusterUp(x, y)
                 }
             }
         }
@@ -92,23 +104,59 @@ class TouchOverlayManager @JvmOverloads constructor(
     }
 
     private fun handleLeftStickDown(x: Float, y: Float) {
-        // Activate left stick anchoring & evaluate outer-ring sprint threshold
-        isSprinting = true // Trigger RB / 0x0200 latch when pushed to perimeter edge
-        try {
-            nativeSetAxisSlab(0, x, y)
-        } catch (_: UnsatisfiedLinkError) {}
+        isSprinting = true
+        try { nativeSetAxisSlab(0, x, y) } catch (_: UnsatisfiedLinkError) {}
     }
 
     private fun handleLeftStickMove(x: Float, y: Float) {
-        try {
-            nativeSetAxisSlab(0, x, y)
-        } catch (_: UnsatisfiedLinkError) {}
+        try { nativeSetAxisSlab(0, x, y) } catch (_: UnsatisfiedLinkError) {}
     }
 
     private fun handleLeftStickUp() {
         isSprinting = false
+        try { nativeReleaseAxis(0) } catch (_: UnsatisfiedLinkError) {}
+    }
+
+    // --- Menu D-Pad Handlers ---
+    private fun handleMenuDPadDown(x: Float, y: Float) {
+        // Map discrete directional sectors to D-Pad SDL buttons
+        evaluateMenuDirection(x, y)
+    }
+
+    private fun handleMenuDPadMove(x: Float, y: Float) {
+        evaluateMenuDirection(x, y)
+    }
+
+    private fun handleMenuDPadUp() {
         try {
-            nativeReleaseAxis(0)
+            nativeSendButtonRelease("DPAD_UP")
+            nativeSendButtonRelease("DPAD_DOWN")
+            nativeSendButtonRelease("DPAD_LEFT")
+            nativeSendButtonRelease("DPAD_RIGHT")
+        } catch (_: UnsatisfiedLinkError) {}
+    }
+
+    private fun evaluateMenuDirection(x: Float, y: Float) {
+        // Calculate D-pad offsets relative to touch center
+        val centerX = width * 0.225f
+        val centerY = height * 0.75f
+        val dx = x - centerX
+        val dy = y - centerY
+        if (hypot(dx.toDouble(), dy.toDouble()) < 20f) return
+
+        val angle = atan2(dy.toDouble(), dx.toDouble()) * (180.0 / Math.PI)
+        try {
+            nativeSendButtonRelease("DPAD_UP")
+            nativeSendButtonRelease("DPAD_DOWN")
+            nativeSendButtonRelease("DPAD_LEFT")
+            nativeSendButtonRelease("DPAD_RIGHT")
+
+            when {
+                angle >= -135.0 && angle < -45.0 -> nativeSendButtonPress("DPAD_UP")
+                angle >= 45.0 && angle < 135.0 -> nativeSendButtonPress("DPAD_DOWN")
+                angle >= -45.0 && angle < 45.0 -> nativeSendButtonPress("DPAD_RIGHT")
+                else -> nativeSendButtonPress("DPAD_LEFT")
+            }
         } catch (_: UnsatisfiedLinkError) {}
     }
 
@@ -120,9 +168,7 @@ class TouchOverlayManager @JvmOverloads constructor(
         shootTouchStartTime = System.currentTimeMillis()
     }
 
-    private fun handleActionClusterMove(x: Float, y: Float) {
-        // Track live movement for gesture distance checks
-    }
+    private fun handleActionClusterMove(x: Float, y: Float) {}
 
     private fun handleActionClusterUp(x: Float, y: Float) {
         val duration = System.currentTimeMillis() - shootTouchStartTime
@@ -130,22 +176,19 @@ class TouchOverlayManager @JvmOverloads constructor(
         val deltaY = y - shootTouchStartY
         val distance = hypot(deltaX.toDouble(), deltaY.toDouble()).toFloat()
 
-        // 1. Check for Shoot-to-Pass Fake Shot Drag
         if (duration <= fakeShotWindowMs && distance > dragThresholdPx) {
             val angle = atan2(deltaY.toDouble(), deltaX.toDouble()) * (180.0 / Math.PI)
-            // If swiped/dragged towards Pass button zone, trigger Fake Shot macro (Square -> Cross)
-            if (angle in 135.0..225.0 || angle in -45.0..45.0) {
+            // Drag towards Pass button zone (Leftward drag)
+            if (angle in 135.0..225.0) {
                 triggerFakeShotMacro()
                 return
             }
         }
 
-        // 2. Cardinal Snapping Swipe Resolution (4 Distinct Swipes per Action Button)
         if (distance > dragThresholdPx) {
             resolveCardinalSwipe(deltaX, deltaY)
         } else {
-            // Standard Tap Action
-            triggerStandardTapAction(shootTouchStartX, shootTouchStartY)
+            triggerStandardTapAction()
         }
     }
 
@@ -155,58 +198,29 @@ class TouchOverlayManager @JvmOverloads constructor(
             angle >= -45.0 && angle < 45.0 -> "RIGHT"
             angle >= 45.0 && angle < 135.0 -> "DOWN"
             (angle >= 135.0 || angle < -135.0) -> "LEFT"
-            angle >= -135.0 && angle < -45.0 -> "UP"
-            else -> "RIGHT"
+            else -> "UP"
         }
-        try {
-            nativeTriggerActionSwipe(dir)
-        } catch (_: UnsatisfiedLinkError) {}
+        try { nativeTriggerActionSwipe(dir) } catch (_: UnsatisfiedLinkError) {}
     }
 
     private fun triggerFakeShotMacro() {
-        // Native JNI hook execution for Shoot followed instantly by Pass
         try {
             nativeSendButtonPress("SHOOT")
-        } catch (_: UnsatisfiedLinkError) {}
-        postDelayed({
-            try {
+            postDelayed({
                 nativeSendButtonRelease("SHOOT")
                 nativeSendButtonPress("PASS")
-            } catch (_: UnsatisfiedLinkError) {}
-        }, 50)
-        postDelayed({
-            try {
-                nativeSendButtonRelease("PASS")
-            } catch (_: UnsatisfiedLinkError) {}
-        }, 100)
-        showActionToast("Fake Shot!")
+            }, 50)
+            postDelayed({ nativeSendButtonRelease("PASS") }, 100)
+            TouchEventBus.postToast("Fake Shot!")
+        } catch (_: UnsatisfiedLinkError) {}
     }
 
-    private fun triggerStandardTapAction(x: Float, y: Float) {
-        // Standard button tap mapping based on InPossession state
-        if (inPossession) {
-            try {
-                nativeSendButtonPress("SHOOT")
-            } catch (_: UnsatisfiedLinkError) {}
-            postDelayed({
-                try {
-                    nativeSendButtonRelease("SHOOT")
-                } catch (_: UnsatisfiedLinkError) {}
-            }, 50)
-        } else {
-            try {
-                nativeSendButtonPress("TACKLE")
-            } catch (_: UnsatisfiedLinkError) {}
-            postDelayed({
-                try {
-                    nativeSendButtonRelease("TACKLE")
-                } catch (_: UnsatisfiedLinkError) {}
-            }, 50)
-        }
-    }
-
-    private fun showActionToast(message: String) {
-        // Renders top-center universal action toast overlay at Y = 10%
+    private fun triggerStandardTapAction() {
+        val btn = if (inPossession) "SHOOT" else "TACKLE"
+        try {
+            nativeSendButtonPress(btn)
+            postDelayed({ nativeSendButtonRelease(btn) }, 50)
+        } catch (_: UnsatisfiedLinkError) {}
     }
 
     // --- Native JNI Link Stubs ---
