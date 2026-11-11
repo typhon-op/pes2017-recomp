@@ -277,9 +277,9 @@ class Prefs(context: Context) {
         get() = store.getBoolean(KEY_VIBRATION, true)
         set(value) = store.edit().putBoolean(KEY_VIBRATION, value).apply()
 
-    /** On-screen button names: PlayStation (Cross, Circle, L1) by default, or Xbox (A, B, LB). */
+    /** On-screen button names: Xbox (A, B, X, Y) by default for classic eFootball matching Xbox recomp, or PlayStation. */
     var playStationButtons: Boolean
-        get() = store.getString(KEY_BUTTON_STYLE, STYLE_PLAYSTATION) != STYLE_XBOX
+        get() = store.getString(KEY_BUTTON_STYLE, STYLE_XBOX) == STYLE_PLAYSTATION
         set(value) = store.edit().putString(KEY_BUTTON_STYLE, if (value) STYLE_PLAYSTATION else STYLE_XBOX).apply()
 
     var lookSensitivityX: Float

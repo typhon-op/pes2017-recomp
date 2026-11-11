@@ -42,9 +42,9 @@ data class ControlElement(
     /** Tap to hold, tap again to let go. */
     var toggle: Boolean = false,
     /** What it does on the ball (or, for a stick, a short name), drawn on the control. */
-    val sub: String = "",
+    var sub: String = "",
     /** What it does without the ball -- defending -- drawn smaller beneath. */
-    val sub2: String = "",
+    var sub2: String = "",
 )
 
 /**
@@ -56,16 +56,39 @@ data class ControlElement(
 class ControlLayout private constructor(
     val elements: MutableList<ControlElement>,
     /** The window the defaults were laid out for, so a reset puts things back there. */
-    private val widthDp: Float,
-    private val heightDp: Float,
+    val widthDp: Float,
+    val heightDp: Float,
+    var sprintThreshold: Float = 0.85f,
+    var autoSprintEnabled: Boolean = true,
+    var flickGesturesEnabled: Boolean = true,
+    var deadzoneThreshold: Float = 0.15f,
+    var pressedAlpha: Float = 0.85f,
+    var currentProfile: String = PROFILE_DEFAULT,
 ) {
 
     fun find(id: String): ControlElement? = elements.firstOrNull { it.id == id }
 
     fun resetAll() {
-        val fresh = defaults(widthDp, heightDp)
+        val fresh = defaults(widthDp, heightDp, currentProfile)
         elements.clear()
         elements.addAll(fresh.elements)
+        sprintThreshold = fresh.sprintThreshold
+        autoSprintEnabled = fresh.autoSprintEnabled
+        flickGesturesEnabled = fresh.flickGesturesEnabled
+        deadzoneThreshold = fresh.deadzoneThreshold
+        pressedAlpha = fresh.pressedAlpha
+    }
+
+    fun applyProfile(profileName: String) {
+        currentProfile = profileName
+        val fresh = defaults(widthDp, heightDp, profileName)
+        elements.clear()
+        elements.addAll(fresh.elements)
+        sprintThreshold = fresh.sprintThreshold
+        autoSprintEnabled = fresh.autoSprintEnabled
+        flickGesturesEnabled = fresh.flickGesturesEnabled
+        deadzoneThreshold = fresh.deadzoneThreshold
+        pressedAlpha = fresh.pressedAlpha
     }
 
     fun reset(id: String) {
@@ -85,10 +108,18 @@ class ControlLayout private constructor(
             item.put("alpha", element.alpha.toDouble())
             item.put("visible", element.visible)
             item.put("toggle", element.toggle)
+            if (element.sub.isNotEmpty()) item.put("sub", element.sub)
+            if (element.sub2.isNotEmpty()) item.put("sub2", element.sub2)
             array.put(item)
         }
         val root = JSONObject()
         root.put("version", FORMAT_VERSION)
+        root.put("currentProfile", currentProfile)
+        root.put("sprintThreshold", sprintThreshold.toDouble())
+        root.put("autoSprintEnabled", autoSprintEnabled)
+        root.put("flickGesturesEnabled", flickGesturesEnabled)
+        root.put("deadzoneThreshold", deadzoneThreshold.toDouble())
+        root.put("pressedAlpha", pressedAlpha.toDouble())
         root.put("elements", array)
         return root.toString(2)
     }
@@ -113,11 +144,12 @@ class ControlLayout private constructor(
 
     companion object {
         private const val FILE_NAME = "controls.json"
-        private const val FORMAT_VERSION = 6
+        private const val FORMAT_VERSION = 9
+        const val PROFILE_DEFAULT = "Default"
+        const val PROFILE_TIKI_TAKA = "Tiki-Taka"
+        const val PROFILE_DEFENSIVE = "Defensive"
 
         fun load(context: Context): ControlLayout {
-            // The whole screen (the match is full screen, into the cutout), in
-            // landscape whichever way the phone was held when asked.
             val metrics = context.resources.displayMetrics
             var widthPx = metrics.widthPixels
             var heightPx = metrics.heightPixels
@@ -139,16 +171,19 @@ class ControlLayout private constructor(
                 val root = JSONObject(file.readText())
                 val version = root.optInt("version", 1)
                 if (version < FORMAT_VERSION) {
-                    // An older layout (the shooter's look area, the d-pad, the old places): start over.
                     try { file.delete() } catch (_: Throwable) {}
                     return layout
                 }
+                layout.sprintThreshold = root.optDouble("sprintThreshold", 0.85).toFloat().coerceIn(0.70f, 0.95f)
+                layout.autoSprintEnabled = root.optBoolean("autoSprintEnabled", true)
+                layout.flickGesturesEnabled = root.optBoolean("flickGesturesEnabled", true)
+                layout.currentProfile = root.optString("currentProfile", PROFILE_DEFAULT)
+                layout.deadzoneThreshold = root.optDouble("deadzoneThreshold", 0.15).toFloat().coerceIn(0.05f, 0.35f)
+                layout.pressedAlpha = root.optDouble("pressedAlpha", 0.85).toFloat().coerceIn(0.10f, 1.0f)
+
                 val array = root.optJSONArray("elements") ?: return layout
                 for (i in 0 until array.length()) {
                     val item = array.optJSONObject(i) ?: continue
-                    // Only what the app still knows about: an element dropped
-                    // in a later version is ignored rather than resurrected,
-                    // and a new one keeps its default.
                     val element = layout.find(item.optString("id")) ?: continue
                     element.xFrac = item.optDouble("x", element.xFrac.toDouble())
                         .toFloat().coerceIn(0.02f, 0.98f)
@@ -160,6 +195,10 @@ class ControlLayout private constructor(
                         .toFloat().coerceIn(0.05f, 1f)
                     element.visible = item.optBoolean("visible", element.visible)
                     element.toggle = item.optBoolean("toggle", element.toggle)
+                    val s1 = item.optString("sub", "")
+                    if (s1.isNotEmpty()) element.sub = s1
+                    val s2 = item.optString("sub2", "")
+                    if (s2.isNotEmpty()) element.sub2 = s2
                 }
             } catch (_: Throwable) {
                 return defaults(widthDp, heightDp)
@@ -167,73 +206,74 @@ class ControlLayout private constructor(
             return layout
         }
 
-        /**
-         * Where everything starts: a football pad laid out for thumbs, the way
-         * PES is played on a phone. The left thumb has only the move stick. The
-         * right thumb has everything else in an arc around the four actions:
-         *
-         *  - Cross / A (pass) at the bottom, where the thumb rests, with
-         *    Square / X (lob, cross) beside it: close enough to roll between,
-         *    with a gap a thumb does not bridge by accident.
-         *  - R1 / RB (sprint, "run") bigger and left of the actions, so the
-         *    thumb can hold it and slide onto pass or shoot.
-         *  - L1 / LB (change player) above the actions, the next thing the thumb
-         *    reaches for when defending.
-         *  - The skill stick above the sprint button; L2 / R2 small, under the
-         *    HUD and the MENU button at the top; start and select top centre.
-         *
-         * Positions are in dp from the nearest edge, so the thumb distances are
-         * the same on every phone and a wider screen only opens up the middle.
-         * Nothing touches (with the touch slack) from a 592 x 336 dp window up.
-         *
-         * The game's default binding, for reference: Cross pass, Circle shoot,
-         * Square lob / cross, Triangle through pass, R1 sprint, L1 change player.
-         */
-        fun defaults(widthDp: Float = 800f, heightDp: Float = 360f): ControlLayout {
+        fun defaults(widthDp: Float = 800f, heightDp: Float = 360f, profile: String = PROFILE_DEFAULT): ControlLayout {
             val w = max(widthDp, 320f)
             val h = max(heightDp, 240f)
 
-            /** A control at x, y dp: positive from the left / top, negative from the right / bottom. */
             fun place(
                 id: String, kind: ControlKind, value: Int, label: String,
-                x: Float, y: Float, size: Float, alpha: Float = 0.45f, visible: Boolean = true,
+                x: Float, y: Float, size: Float, alpha: Float = 0.50f, visible: Boolean = true,
+                sub: String = "", sub2: String = "",
             ) = ControlElement(
                 id, kind, value, label,
                 (if (x >= 0f) x else w + x) / w, (if (y >= 0f) y else h + y) / h,
                 size, alpha, visible,
+                sub = sub, sub2 = sub2,
             )
 
             val centre = w / 2f
+            val baseList = mutableListOf(
+                // Left thumb: eFootball floating/fixed analogue joystick with auto-sprint
+                place("stick", ControlKind.STICK, 0, "LS", 100f, -100f, 150f, 0.40f),
+
+                // Right thumb: eFootball Classic 4-button action cluster
+                place("y", ControlKind.BUTTON, NativeBridge.Y, "Y", -105f, -170f, 74f, sub = "THROUGH", sub2 = "GK RUSH"),
+                place("x", ControlKind.BUTTON, NativeBridge.X, "X", -170f, -105f, 74f, sub = "SHOOT", sub2 = "TACKLE"),
+                place("b", ControlKind.BUTTON, NativeBridge.B, "B", -40f, -105f, 74f, sub = "CROSS", sub2 = "CLEAR"),
+                place("a", ControlKind.BUTTON, NativeBridge.A, "A", -105f, -40f, 74f, sub = "PASS", sub2 = "PRESSURE"),
+
+                // Dedicated Modular SKILL Button (Feints / Skills)
+                place("skill", ControlKind.BUTTON, 0, "SKILL", -225f, -110f, 66f, alpha = 0.50f, visible = true, sub = "FEINT", sub2 = "FEINT"),
+
+                // Multi-Action Merged Button: Super-Cancel (RB + RT)
+                place("super_cancel", ControlKind.BUTTON, NativeBridge.RB or 0x00010000, "CANCEL", -175f, -175f, 54f, alpha = 0.40f, visible = false, sub = "CANCEL", sub2 = "CANCEL"),
+
+                // Tactical / Shoulder controls along top
+                place("lb", ControlKind.BUTTON, NativeBridge.LB, "LB", -110f, 70f, 56f, sub = "SWITCH", sub2 = "SWITCH"),
+                place("rt", ControlKind.TRIGGER, 1, "RT", -44f, 70f, 56f, sub = "MATCH UP", sub2 = "MATCH UP"),
+                place("lt", ControlKind.TRIGGER, 0, "LT", 44f, 70f, 56f),
+
+                // Standalone DASH (RB) fallback
+                place("rb", ControlKind.BUTTON, NativeBridge.RB, "RB", -240f, -40f, 60f, visible = false, sub = "DASH", sub2 = "DASH"),
+
+                // Skill stick, hidden by default
+                place("right_stick", ControlKind.STICK, 1, "RS", -255f, -170f, 100f, 0.40f, visible = false),
+
+                // Stick clicks
+                place("l3", ControlKind.BUTTON, NativeBridge.L3, "L3", 200f, -40f, 52f, visible = false),
+                place("r3", ControlKind.BUTTON, NativeBridge.R3, "R3", -320f, -45f, 52f, visible = false),
+
+                // Menus
+                place("start", ControlKind.BUTTON, NativeBridge.START, "START", centre + 60f, 37f, 54f, 0.75f),
+                place("back", ControlKind.BUTTON, NativeBridge.BACK, "SELECT", centre - 40f, 37f, 54f, 0.75f),
+            )
+
+            var sprintThresh = 0.85f
+            if (profile == PROFILE_TIKI_TAKA) {
+                sprintThresh = 0.90f
+            } else if (profile == PROFILE_DEFENSIVE) {
+                sprintThresh = 0.80f
+            }
+
             return ControlLayout(
-                mutableListOf(
-                    // Left thumb: movement.
-                    place("stick", ControlKind.STICK, 0, "LS", 95f, -95f, 150f, 0.40f),
-
-                    // Right thumb: the four actions as the pad's diamond.
-                    place("a", ControlKind.BUTTON, NativeBridge.A, "A", -110f, -52f, 68f),
-                    place("b", ControlKind.BUTTON, NativeBridge.B, "B", -52f, -110f, 68f),
-                    place("x", ControlKind.BUTTON, NativeBridge.X, "X", -168f, -110f, 68f),
-                    place("y", ControlKind.BUTTON, NativeBridge.Y, "Y", -110f, -168f, 68f),
-
-                    // The shoulders where a pad has them: L2 / L1 along the top left,
-                    // R1 / R2 along the top right, triggers outermost.
-                    place("lt", ControlKind.TRIGGER, 0, "LT", 44f, 76f, 56f),
-                    place("lb", ControlKind.BUTTON, NativeBridge.LB, "LB", 110f, 76f, 56f),
-                    place("rb", ControlKind.BUTTON, NativeBridge.RB, "RB", -110f, 76f, 56f),
-                    place("rt", ControlKind.TRIGGER, 1, "RT", -44f, 76f, 56f),
-
-                    // The skill stick, left of the actions.
-                    place("right_stick", ControlKind.STICK, 1, "RS", -250f, -170f, 100f, 0.40f),
-
-                    // Stick clicks: kept for the editor, hidden until wanted.
-                    place("l3", ControlKind.BUTTON, NativeBridge.L3, "L3", 200f, -40f, 52f, visible = false),
-                    place("r3", ControlKind.BUTTON, NativeBridge.R3, "R3", -320f, -45f, 52f, visible = false),
-
-                    // Menus have to be found at a glance in a football game.
-                    place("start", ControlKind.BUTTON, NativeBridge.START, "START", centre + 60f, 37f, 54f, 0.75f),
-                    place("back", ControlKind.BUTTON, NativeBridge.BACK, "SELECT", centre - 40f, 37f, 54f, 0.75f),
-                ),
+                baseList,
                 widthDp, heightDp,
+                sprintThreshold = sprintThresh,
+                autoSprintEnabled = true,
+                flickGesturesEnabled = true,
+                deadzoneThreshold = 0.15f,
+                pressedAlpha = 0.85f,
+                currentProfile = profile,
             )
         }
 

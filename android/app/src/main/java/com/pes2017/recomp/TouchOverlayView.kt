@@ -60,10 +60,29 @@ class TouchOverlayView @JvmOverloads constructor(
         private set
 
     /** PlayStation names and symbols (Cross, Circle, L1, OPTIONS) instead of Xbox ones (A, B, LB, START). */
-    var playStation: Boolean = true
+    var playStation: Boolean = false
         set(value) {
             if (field == value) return
             field = value
+            invalidate()
+        }
+
+    /** Defensive mode state: when defending, actions adapt to PRESSURE, TACKLE, CLEAR, GK RUSH. */
+    var isDefending: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            TouchEventBus.postStateChange(value, inMenuMode)
+            invalidate()
+        }
+
+    /** Contextual Menu D-Pad mode: switches analog stick to crisp discrete D-Pad cardinal outputs. */
+    var inMenuMode: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            releaseEverything()
+            TouchEventBus.postStateChange(isDefending, value)
             invalidate()
         }
 
@@ -73,16 +92,37 @@ class TouchOverlayView @JvmOverloads constructor(
     private val density = resources.displayMetrics.density
 
     // ---- what is being touched right now ----------------------------------
-    // A pointer is claimed by one control for as long as it is down, so a
-    // thumb that slides off the fire button keeps firing -- which is what
-    // every phone shooter does, and what a player expects.
     private val claims = HashMap<Int, ControlElement>()
     private val stickPositions = HashMap<String, FloatArray>()   // id -> normalised x, y
+    private val floatingStickCenters = HashMap<String, FloatArray>() // id -> dynamic cx, cy (px)
+    val activeTouchPoints = HashMap<Int, FloatArray>() // pointerId -> [x, y] for HUD tracker
     private val held = HashSet<String>()
     private val toggled = HashSet<String>()
+    private val buttonDownCoords = HashMap<Int, FloatArray>()
+    private val activeFlickMods = HashSet<String>()
+    private val buttonPressStartTimes = HashMap<String, Long>()
+    val activeButtonDirections = HashMap<String, Int>() // id -> 0: none, 1: UP, 2: DOWN, 3: LEFT, 4: RIGHT
+    val flickRipples = ArrayList<FloatArray>() // [x, y, dx, dy, lifetime]
+    val skillFlickVector = FloatArray(4) // [originX, originY, curX, curY]
+    var skillFlickActive = false
+    var actionToastText: String = ""
+    var actionToastTime: Long = 0L
+    var teammateRunActive = false
+    var teammateRunTime: Long = 0L
+    private var autoSprintLatched = false
+    private var lastLeftTapTime = 0L
+    private var lastPassTapTime = 0L
+    private var shotFakeActive = false
     private var lookPointer = -1
     private var lookLastX = 0f
     private var lookLastY = 0f
+
+    fun showActionBadge(badge: String) {
+        actionToastText = badge
+        actionToastTime = System.currentTimeMillis()
+        TouchEventBus.postToast(badge)
+        invalidate()
+    }
 
     // ---- editing -----------------------------------------------------------
     private var dragPointer = -1
@@ -133,8 +173,18 @@ class TouchOverlayView @JvmOverloads constructor(
 
     // ---- geometry ----------------------------------------------------------
 
-    private fun centreX(element: ControlElement) = element.xFrac * width
-    private fun centreY(element: ControlElement) = element.yFrac * height
+    private fun centreX(element: ControlElement): Float {
+        val floating = floatingStickCenters[element.id]
+        if (floating != null && !editing) return floating[0]
+        return element.xFrac * width
+    }
+
+    private fun centreY(element: ControlElement): Float {
+        val floating = floatingStickCenters[element.id]
+        if (floating != null && !editing) return floating[1]
+        return element.yFrac * height
+    }
+
     private fun radius(element: ControlElement) = element.sizeDp * density * 0.5f
 
     /** The look area is a rectangle; everything else is a circle. */
@@ -189,7 +239,13 @@ class TouchOverlayView @JvmOverloads constructor(
             if (!element.visible) continue
             val on = held.contains(element.id) || toggled.contains(element.id)
             when (element.kind) {
-                ControlKind.BUTTON -> if (on) buttons = buttons or element.value
+                ControlKind.BUTTON -> if (on) {
+                    buttons = buttons or (element.value and 0xFFFF)
+                    // Multi-Action Merged Button support (e.g. super_cancel triggering RT)
+                    if (element.id == "super_cancel") {
+                        rightTrigger = 255
+                    }
+                }
                 ControlKind.TRIGGER -> if (on) {
                     if (element.value == 0) leftTrigger = 255 else rightTrigger = 255
                 }
@@ -197,17 +253,45 @@ class TouchOverlayView @JvmOverloads constructor(
                     val position = stickPositions[element.id]
                     if (position != null) {
                         if (element.value == 0) {
-                            leftX += position[0]
-                            leftY += position[1]
+                            if (inMenuMode) {
+                                val px = position[0]
+                                val py = position[1]
+                                val deadzone = 0.35f
+                                if (px > deadzone) buttons = buttons or NativeBridge.RIGHT
+                                else if (px < -deadzone) buttons = buttons or NativeBridge.LEFT
+                                if (py > deadzone) buttons = buttons or NativeBridge.UP
+                                else if (py < -deadzone) buttons = buttons or NativeBridge.DOWN
+                            } else {
+                                leftX += position[0]
+                                leftY += position[1]
+                            }
                         } else {
                             rightX += position[0]
                             rightY += position[1]
                         }
                     }
                 }
-                ControlKind.LOOK -> Unit   // sent as deltas, not as a stick
+                ControlKind.LOOK -> Unit
             }
         }
+
+        // Auto-sprint integration: when outer-ring deflection threshold is reached,
+        // latch Xbox RB (0x0200) sprint bitmask simultaneously
+        if (autoSprintLatched && layout.autoSprintEnabled) {
+            buttons = buttons or NativeBridge.RB
+        }
+
+        for (mod in activeFlickMods) {
+            when (mod) {
+                "lb" -> buttons = buttons or NativeBridge.LB
+                "rt" -> rightTrigger = 255
+                "rs_up" -> rightY = 1.0f
+                "rs_down" -> rightY = -1.0f
+                "rs_right" -> rightX = 1.0f
+                "rs_left" -> rightX = -1.0f
+            }
+        }
+
         // A macro is playing: the fingers are not heard, so a run repeats exactly.
         if (Macro.playing) return
         val lx = leftX.coerceIn(-1f, 1f); val ly = leftY.coerceIn(-1f, 1f)
@@ -220,7 +304,18 @@ class TouchOverlayView @JvmOverloads constructor(
     fun releaseEverything() {
         claims.clear()
         stickPositions.clear()
+        floatingStickCenters.clear()
+        activeTouchPoints.clear()
+        buttonDownCoords.clear()
+        activeFlickMods.clear()
+        buttonPressStartTimes.clear()
+        activeButtonDirections.clear()
+        skillFlickActive = false
+        shotFakeActive = false
+        teammateRunActive = false
+        autoSprintLatched = false
         held.clear()
+        isDefending = false
         // Toggles survive a pause -- a player who was aiming down sights
         // before the phone rang is still aiming when they come back -- but
         // not the editor, which would otherwise leave a bit stuck down.
@@ -254,9 +349,8 @@ class TouchOverlayView @JvmOverloads constructor(
                     val id = event.getPointerId(index)
                     val x = event.getX(index)
                     val y = event.getY(index)
+                    activeTouchPoints[id] = floatArrayOf(x, y)
                     if (id == lookPointer) {
-                        // Every sample between frames matters for a smooth
-                        // turn, so the batched history is used too.
                         for (h in 0 until event.historySize) {
                             sendLook(event.getHistoricalX(index, h), event.getHistoricalY(index, h))
                         }
@@ -266,6 +360,92 @@ class TouchOverlayView @JvmOverloads constructor(
                     val element = claims[id] ?: continue
                     when (element.kind) {
                         ControlKind.STICK -> { moveStick(element, x, y); changed = true }
+                        ControlKind.BUTTON -> {
+                            val down = buttonDownCoords[id]
+                            if (down != null) {
+                                val deltaX = x - down[0]
+                                val deltaY = y - down[1]
+                                val dist = hypot(deltaX, deltaY)
+
+                                // Loose Radial Distance Tolerance (25px <= deltaR <= 70px)
+                                val minThreshold = 25f * density
+                                if (dist >= minThreshold) {
+                                    val absX = kotlin.math.abs(deltaX)
+                                    val absY = kotlin.math.abs(deltaY)
+                                    // Hard 4-Direction Sector Snap
+                                    val dir = when {
+                                        absY > absX && deltaY < 0 -> 1 // UP
+                                        absY > absX && deltaY > 0 -> 2 // DOWN
+                                        absX >= absY && deltaX < 0 -> 3 // LEFT
+                                        absX >= absY && deltaX > 0 -> 4 // RIGHT
+                                        else -> 0
+                                    }
+
+                                    if (dir != 0 && activeButtonDirections[element.id] != dir) {
+                                        activeButtonDirections[element.id] = dir
+                                        triggerHaptic()
+                                        changed = true
+
+                                        if (element.id == "skill") {
+                                            when (dir) {
+                                                1 -> showActionBadge("DOUBLE TOUCH")
+                                                2 -> showActionBadge("MARSEILLE TURN")
+                                                4 -> showActionBadge("STEP-OVER")
+                                                3 -> showActionBadge("DRAG BACK")
+                                            }
+                                        } else if (element.id == "a") {
+                                            when (dir) {
+                                                1 -> {
+                                                    activeFlickMods.add("lb")
+                                                    showActionBadge("LOFTED PASS")
+                                                }
+                                                2 -> {
+                                                    activeFlickMods.add("lb")
+                                                    teammateRunActive = true
+                                                    teammateRunTime = System.currentTimeMillis()
+                                                    showActionBadge("GIVE & GO / MANUAL RUN")
+                                                }
+                                                3, 4 -> {
+                                                    activeFlickMods.add("rt")
+                                                    showActionBadge("DRIVEN PASS")
+                                                }
+                                            }
+                                        } else if (element.id == "x") {
+                                            when (dir) {
+                                                1 -> {
+                                                    activeFlickMods.add("lb")
+                                                    showActionBadge("CHIP SHOT")
+                                                }
+                                                2 -> {
+                                                    activeFlickMods.add("rt")
+                                                    showActionBadge("FINESSE SHOT")
+                                                }
+                                                3, 4 -> {
+                                                    activeFlickMods.add("rt")
+                                                    showActionBadge("STUNNING SHOT")
+                                                }
+                                            }
+                                        } else if (element.id == "b") {
+                                            when (dir) {
+                                                1 -> showActionBadge("WHIPPED CROSS")
+                                                2 -> showActionBadge("LOW CROSS")
+                                                3, 4 -> showActionBadge("EARLY CROSS")
+                                            }
+                                        } else if (element.id == "y") {
+                                            when (dir) {
+                                                1 -> {
+                                                    activeFlickMods.add("lb")
+                                                    showActionBadge("LOFTED THROUGH PASS")
+                                                }
+                                                2, 3, 4 -> showActionBadge("THROUGH PASS")
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    activeButtonDirections[element.id] = 0
+                                }
+                            }
+                        }
                         else -> Unit
                     }
                 }
@@ -299,7 +479,31 @@ class TouchOverlayView @JvmOverloads constructor(
     }
 
     private fun press(pointerId: Int, x: Float, y: Float): Boolean {
-        val element = elementAt(x, y) ?: return false
+        activeTouchPoints[pointerId] = floatArrayOf(x, y)
+        var element = elementAt(x, y)
+        if (element == null && x < width * 0.45f) {
+            val stick = layout.find("stick")
+            if (stick != null && stick.visible && !claims.values.contains(stick)) {
+                floatingStickCenters[stick.id] = floatArrayOf(x, y)
+                element = stick
+
+                val now = System.currentTimeMillis()
+                if (now - lastLeftTapTime < 300) {
+                    triggerHaptic()
+                    TouchEventBus.postGesture(TouchEventBus.GestureType.QUICK_STOP, "Face Goal")
+                    showActionBadge("QUICK STOP")
+                    held.add("lb")
+                    postDelayed({
+                        held.remove("lb")
+                        pushState()
+                        invalidate()
+                    }, 120)
+                }
+                lastLeftTapTime = now
+            }
+        }
+        if (element == null) return false
+
         if (element.kind == ControlKind.LOOK) {
             lookPointer = pointerId
             lookLastX = x
@@ -311,10 +515,56 @@ class TouchOverlayView @JvmOverloads constructor(
         when (element.kind) {
             ControlKind.STICK -> moveStick(element, x, y)
             ControlKind.BUTTON, ControlKind.TRIGGER -> {
+                buttonDownCoords[pointerId] = floatArrayOf(x, y)
+                buttonPressStartTimes[element.id] = System.currentTimeMillis()
                 if (element.toggle) {
                     if (!toggled.remove(element.id)) toggled.add(element.id)
                 } else {
                     held.add(element.id)
+                }
+
+                when (element.id) {
+                    "a" -> {
+                        val now = System.currentTimeMillis()
+                        if (now - lastPassTapTime < 280) {
+                            triggerHaptic()
+                            if (isDefending) {
+                                TouchEventBus.postGesture(TouchEventBus.GestureType.TEAMMATE_PRESS, "Teammate Press")
+                                showActionBadge("TEAMMATE PRESS LOCK")
+                                held.add("x")
+                                postDelayed({
+                                    held.remove("x")
+                                    pushState()
+                                    invalidate()
+                                }, 350)
+                            } else {
+                                TouchEventBus.postGesture(TouchEventBus.GestureType.GIVE_AND_GO, "Give & Go")
+                                showActionBadge("GIVE & GO / MANUAL RUN")
+                                teammateRunActive = true
+                                teammateRunTime = System.currentTimeMillis()
+                                held.add("lb")
+                                postDelayed({
+                                    held.remove("lb")
+                                    pushState()
+                                    invalidate()
+                                }, 250)
+                                postDelayed({
+                                    teammateRunActive = false
+                                    invalidate()
+                                }, 1200)
+                            }
+                        } else {
+                            showActionBadge(if (isDefending) "PRESS" else "PASS")
+                        }
+                        lastPassTapTime = now
+                    }
+                    "x" -> showActionBadge(if (isDefending) "SLIDING TACKLE" else "SHOOT")
+                    "b" -> showActionBadge(if (isDefending) "CLEAR" else "CROSS")
+                    "y" -> showActionBadge(if (isDefending) "GK RUSH" else "THROUGH PASS")
+                }
+
+                if (element.id.equals("rt", ignoreCase = true) || element.id.equals("lb", ignoreCase = true)) {
+                    isDefending = true
                 }
             }
             ControlKind.LOOK -> Unit
@@ -323,6 +573,7 @@ class TouchOverlayView @JvmOverloads constructor(
     }
 
     private fun release(pointerId: Int): Boolean {
+        val lastTouchPt = activeTouchPoints.remove(pointerId)
         if (pointerId == lookPointer) {
             lookPointer = -1
             NativeBridge.nativeLookEnd()
@@ -330,8 +581,69 @@ class TouchOverlayView @JvmOverloads constructor(
         }
         val element = claims.remove(pointerId) ?: return false
         when (element.kind) {
-            ControlKind.STICK -> stickPositions.remove(element.id)
-            else -> held.remove(element.id)
+            ControlKind.STICK -> {
+                stickPositions.remove(element.id)
+                floatingStickCenters.remove(element.id)
+                if (element.value == 0) autoSprintLatched = false
+            }
+            else -> {
+                val down = buttonDownCoords.remove(pointerId)
+                // Execute Isolated 4-Way Skill Flick upon ACTION_UP with distance gating
+                if (element.id == "skill" && down != null) {
+                    val lastPt = lastTouchPt ?: down
+                    val deltaX = lastPt[0] - down[0]
+                    val deltaY = lastPt[1] - down[1]
+                    val dist = hypot(deltaX, deltaY)
+                    if (dist >= 30f * density) {
+                        triggerHaptic()
+                        val absX = kotlin.math.abs(deltaX)
+                        val absY = kotlin.math.abs(deltaY)
+                        if (absY > absX) {
+                            if (deltaY < 0) {
+                                // Flick Up: Double Touch (RS Up)
+                                activeFlickMods.add("rs_up")
+                                showActionBadge("STEP 1: SETUP ➔ DOUBLE TOUCH")
+                            } else {
+                                // Flick Down: Marseille Turn (RS Down)
+                                activeFlickMods.add("rs_down")
+                                showActionBadge("STEP 1: SETUP ➔ MARSEILLE TURN")
+                            }
+                        } else {
+                            if (deltaX > 0) {
+                                // Flick Forward / Right: Step-Over / Scissors (RS Right)
+                                activeFlickMods.add("rs_right")
+                                showActionBadge("STEP 1: SETUP ➔ STEP-OVER")
+                            } else {
+                                // Flick Back / Left: Drag Back / L-Feint (RS Left)
+                                activeFlickMods.add("rs_left")
+                                showActionBadge("STEP 1: SETUP ➔ DRAG BACK")
+                            }
+                        }
+                        postDelayed({
+                            activeFlickMods.remove("rs_up")
+                            activeFlickMods.remove("rs_down")
+                            activeFlickMods.remove("rs_right")
+                            activeFlickMods.remove("rs_left")
+                            skillFlickActive = false
+                            pushState()
+                            invalidate()
+                        }, 250)
+                    }
+                    skillFlickActive = false
+                }
+
+                held.remove(element.id)
+                buttonPressStartTimes.remove(element.id)
+                activeButtonDirections.remove(element.id)
+                if (element.id.equals("rt", ignoreCase = true) || element.id.equals("lb", ignoreCase = true)) {
+                    val defStillHeld = held.contains("rt") || held.contains("lb")
+                    if (!defStillHeld) isDefending = false
+                }
+                if (held.isEmpty()) {
+                    activeFlickMods.clear()
+                    shotFakeActive = false
+                }
+            }
         }
         return true
     }
@@ -350,8 +662,24 @@ class TouchOverlayView @JvmOverloads constructor(
         // The guest's Y points up; the screen's points down.
         var dy = -(y - centreY(element)) / r
         val length = hypot(dx, dy)
-        if (length > 1f) { dx /= length; dy /= length }
-        stickPositions[element.id] = floatArrayOf(dx, dy)
+        if (length < layout.deadzoneThreshold) {
+            stickPositions.remove(element.id)
+            if (element.value == 0) autoSprintLatched = false
+            return
+        }
+        val clampedLength = if (length > 1f) 1f else length
+        val normX = if (length > 1f) dx / length else dx
+        val normY = if (length > 1f) dy / length else dy
+        stickPositions[element.id] = floatArrayOf(normX * clampedLength, normY * clampedLength)
+
+        // eFootball Outer-Ring Auto-Sprint: compare magnitude with user sprint threshold
+        if (element.value == 0 && layout.autoSprintEnabled) {
+            val wasSprint = autoSprintLatched
+            autoSprintLatched = clampedLength >= layout.sprintThreshold
+            if (!wasSprint && autoSprintLatched) {
+                triggerHaptic()
+            }
+        }
     }
 
     // ---- editing ----------------------------------------------------------------
@@ -506,6 +834,102 @@ class TouchOverlayView @JvmOverloads constructor(
             }
             if (editing && element === selected) drawSelection(canvas, element)
         }
+
+        // 1. Draw touch feedback tracker overlay (glow rings under active fingers with micro-expansion)
+        if (!editing) {
+            val pulseRadius = (28f + (kotlin.math.sin(System.currentTimeMillis() * 0.008) * 3f).toFloat()) * density
+            for (entry in activeTouchPoints.values) {
+                val tx = entry[0]
+                val ty = entry[1]
+                fill.color = Color.argb(40, 56, 189, 248)
+                canvas.drawCircle(tx, ty, pulseRadius, fill)
+                stroke.color = Color.argb(130, 56, 189, 248)
+                stroke.strokeWidth = 1.5f * density
+                canvas.drawCircle(tx, ty, pulseRadius, stroke)
+            }
+        }
+
+        // 1c. Draw Teammate Run Target Indicator (On-Pitch Layer) during Give-and-Go
+        if (teammateRunActive) {
+            val runAge = (System.currentTimeMillis() - teammateRunTime).toFloat() / 1200f
+            if (runAge < 1f) {
+                val chevAlpha = ((1f - runAge) * 230).toInt().coerceIn(0, 255)
+                val chevX = width * 0.65f + (runAge * 50f * density)
+                val chevY = height * 0.42f
+                val chevSize = 16f * density
+
+                stroke.color = Color.argb(chevAlpha, 34, 197, 94)
+                stroke.strokeWidth = 3f * density
+                canvas.drawLine(chevX - chevSize, chevY - chevSize * 0.8f, chevX, chevY, stroke)
+                canvas.drawLine(chevX - chevSize, chevY + chevSize * 0.8f, chevX, chevY, stroke)
+
+                text.textSize = 10f * density
+                text.color = Color.argb(chevAlpha, 34, 197, 94)
+                canvas.drawText("RUN", chevX - chevSize * 0.5f, chevY - chevSize * 1.2f, text)
+                invalidate()
+            }
+        }
+
+        // 1b. Draw localized vector glow trail on the SKILL button face
+        if (skillFlickActive) {
+            stroke.color = Color.argb(220, 245, 158, 11)
+            stroke.strokeWidth = 3f * density
+            canvas.drawLine(skillFlickVector[0], skillFlickVector[1], skillFlickVector[2], skillFlickVector[3], stroke)
+            fill.color = Color.argb(255, 251, 191, 36)
+            canvas.drawCircle(skillFlickVector[2], skillFlickVector[3], 5f * density, fill)
+        }
+
+        // 2. Draw directional micro-flick ripples & trails
+        val iterator = flickRipples.iterator()
+        while (iterator.hasNext()) {
+            val rip = iterator.next()
+            val startX = rip[0]
+            val startY = rip[1]
+            val dx = rip[2]
+            val dy = rip[3]
+            var life = rip[4]
+
+            if (life <= 0f) {
+                iterator.remove()
+                continue
+            }
+
+            val alpha = (life * 220).toInt().coerceIn(0, 255)
+            notchPaint.color = Color.argb(alpha, 56, 189, 248)
+            notchPaint.strokeWidth = max(2f, 3.5f * density)
+            canvas.drawLine(startX, startY, startX + dx, startY + dy, notchPaint)
+
+            fill.color = Color.argb(alpha, 255, 255, 255)
+            canvas.drawCircle(startX + dx, startY + dy, 4.5f * density, fill)
+
+            rip[4] -= 0.12f
+            invalidate()
+        }
+
+        // 3. Universal Action Toast Overlay (Top-Center HUD at Y = 10% screen height, 600ms animated fade)
+        val now = System.currentTimeMillis()
+        if (actionToastText.isNotEmpty() && now - actionToastTime < 600) {
+            val age = (now - actionToastTime).toFloat() / 600f
+            val toastAlpha = ((1f - age) * 255).toInt().coerceIn(0, 255)
+
+            val badgeX = width * 0.5f
+            val badgeY = height * 0.10f
+            val badgeW = max(130f * density, (actionToastText.length * 9.5f + 28f) * density)
+            val badgeH = 26f * density
+
+            tempRect.set(badgeX - badgeW * 0.5f, badgeY - badgeH * 0.5f, badgeX + badgeW * 0.5f, badgeY + badgeH * 0.5f)
+            fill.color = Color.argb((toastAlpha * 0.85f).toInt(), 15, 23, 42)
+            canvas.drawRoundRect(tempRect, 14f * density, 14f * density, fill)
+
+            stroke.color = Color.argb((toastAlpha * 0.90f).toInt(), 56, 189, 248)
+            stroke.strokeWidth = 1.2f * density
+            canvas.drawRoundRect(tempRect, 14f * density, 14f * density, stroke)
+
+            text.textSize = 12f * density
+            text.color = Color.argb(toastAlpha, 241, 245, 249)
+            canvas.drawText(actionToastText, badgeX, badgeY - (text.descent() + text.ascent()) * 0.5f, text)
+            invalidate()
+        }
     }
 
     private fun shade(alpha: Float, pressed: Boolean, faded: Boolean): Int {
@@ -612,6 +1036,30 @@ class TouchOverlayView @JvmOverloads constructor(
             stroke.strokeWidth = max(1.5f, r * 0.045f)
             canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
 
+            // Perimeter Power Fill Arc: circular charge bar filling based on hold duration (0 to 800ms)
+            val startTime = buttonPressStartTimes[element.id]
+            if (pressed && startTime != null) {
+                val holdDuration = System.currentTimeMillis() - startTime
+                val chargeRatio = (holdDuration / 800f).coerceIn(0f, 1f)
+                if (chargeRatio > 0.05f) {
+                    val sweepAngle = chargeRatio * 360f
+                    val arcPaint = stroke
+                    val origColor = arcPaint.color
+                    val origWidth = arcPaint.strokeWidth
+                    arcPaint.strokeWidth = max(2.5f, r * 0.08f)
+                    arcPaint.color = when {
+                        chargeRatio < 0.5f -> Color.argb(240, 34, 197, 94)    // Green
+                        chargeRatio < 0.85f -> Color.argb(240, 234, 179, 8)   // Yellow
+                        else -> Color.argb(240, 239, 68, 68)                  // Red
+                    }
+                    tempRect.set(cx - r + arcPaint.strokeWidth * 0.5f, cy - r + arcPaint.strokeWidth * 0.5f, cx + r - arcPaint.strokeWidth * 0.5f, cy + r - arcPaint.strokeWidth * 0.5f)
+                    canvas.drawArc(tempRect, -90f, sweepAngle, false, arcPaint)
+                    arcPaint.color = origColor
+                    arcPaint.strokeWidth = origWidth
+                    invalidate()
+                }
+            }
+
             // 3. Modern dark translucent core tinted with accent color
             val coreR = r * 0.90f
             val tintAlpha = if (pressed) 140 else 55
@@ -635,11 +1083,13 @@ class TouchOverlayView @JvmOverloads constructor(
             //    PlayStation symbol, or the Xbox letter.
             val ink = Color.argb((alpha * fadeFactor * 255).toInt().coerceIn(0, 255), 255, 255, 255)
             val shadow = Color.argb((alpha * fadeFactor * 140).toInt().coerceIn(0, 255), 0, 0, 0)
-            val actionSubtitle = when (id) {
-                "a" -> "PASS"
-                "x" -> "SHOOT"
-                "b" -> "CROSS"
-                "y" -> "THROUGH"
+            val actionSubtitle = when {
+                isDefending && element.sub2.isNotEmpty() -> element.sub2
+                element.sub.isNotEmpty() -> element.sub
+                id == "a" -> if (isDefending) "PRESSURE" else "PASS"
+                id == "x" -> if (isDefending) "TACKLE" else "SHOOT"
+                id == "b" -> if (isDefending) "CLEAR" else "CROSS"
+                id == "y" -> if (isDefending) "GK RUSH" else "THROUGH"
                 else -> ""
             }
 
@@ -667,48 +1117,82 @@ class TouchOverlayView @JvmOverloads constructor(
                 subText.color = Color.argb((alpha * fadeFactor * 220).toInt().coerceIn(0, 255), 241, 245, 249)
                 canvas.drawText(actionSubtitle, cx, subY, subText)
             }
-        } else if (isRT || isLT) {
-            // Xbox Ergonomic Trigger (RT / LT)
-            val fillA = (alpha * fadeFactor * (if (pressed) 190 else 95)).toInt().coerceIn(0, 255)
-            fill.color = Color.argb(fillA, Color.red(coreColor), Color.green(coreColor), Color.blue(coreColor))
-            canvas.drawCircle(cx, cy, r, fill)
 
-            stroke.color = Color.argb(
-                (alpha * fadeFactor * (if (pressed) 255 else 170)).toInt().coerceIn(0, 255),
-                Color.red(glowColor), Color.green(glowColor), Color.blue(glowColor),
-            )
-            stroke.strokeWidth = max(2f, r * 0.065f)
-            canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+            // Directional Arrow Feedback: 4 clean directional arrows (UP, DOWN, LEFT, RIGHT)
+            val activeDir = activeButtonDirections[element.id] ?: 0
+            val arrowDist = r * 0.82f
+            val arrowLen = 6f * density
 
-            text.textSize = r * 0.58f
-            text.color = Color.WHITE
-            canvas.drawText(label, cx, cy - (text.descent() + text.ascent()) * 0.5f, text)
-
-            if (element.toggle && toggled.contains(element.id)) {
-                fill.color = Color.argb(255, 56, 189, 248)
-                canvas.drawCircle(cx, cy - r * 0.55f, 3.5f * density, fill)
+            fun drawArrow(arrowDir: Int, ax: Float, ay: Float, ddx: Float, ddy: Float) {
+                val isActive = activeDir == arrowDir
+                val arrowAlpha = if (isActive) 255 else (alpha * fadeFactor * 70).toInt().coerceIn(0, 255)
+                notchPaint.color = if (isActive) Color.argb(arrowAlpha, 56, 189, 248) else Color.argb(arrowAlpha, 148, 163, 184)
+                notchPaint.strokeWidth = if (isActive) 2.5f * density else 1.2f * density
+                canvas.drawLine(ax - ddy * arrowLen * 0.6f, ay - ddx * arrowLen * 0.6f, ax + ddx * arrowLen, ay + ddy * arrowLen, notchPaint)
+                canvas.drawLine(ax + ddy * arrowLen * 0.6f, ay + ddx * arrowLen * 0.6f, ax + ddx * arrowLen, ay + ddy * arrowLen, notchPaint)
             }
-        } else if (isBumper) {
-            // Xbox Bumper (LB / RB)
-            val fillA = (alpha * fadeFactor * (if (pressed) 180 else 85)).toInt().coerceIn(0, 255)
-            fill.color = Color.argb(fillA, 30, 38, 48)
+
+            // UP (1)
+            drawArrow(1, cx, cy - arrowDist, 0f, -1f)
+            // DOWN (2)
+            drawArrow(2, cx, cy + arrowDist, 0f, 1f)
+            // LEFT (3)
+            drawArrow(3, cx - arrowDist, cy, -1f, 0f)
+            // RIGHT (4)
+            drawArrow(4, cx + arrowDist, cy, 1f, 0f)
+        } else if (isRT || isLT || isBumper) {
+            // eFootball Frosted Shoulder & Dash Buttons (RB DASH / RT MATCH UP / LB SWITCH / LT)
+            fill.color = Color.argb((alpha * fadeFactor * 180).toInt().coerceIn(0, 255), 12, 16, 24)
             canvas.drawCircle(cx, cy, r, fill)
 
             stroke.color = Color.argb(
-                (alpha * fadeFactor * (if (pressed) 240 else 140)).toInt().coerceIn(0, 255),
+                (alpha * fadeFactor * (if (pressed) 255 else 175)).toInt().coerceIn(0, 255),
                 Color.red(glowColor), Color.green(glowColor), Color.blue(glowColor),
             )
-            stroke.strokeWidth = max(1.5f, r * 0.055f)
+            stroke.strokeWidth = max(1.5f, r * 0.045f)
             canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
 
-            text.textSize = r * (if (element.sub.isEmpty()) 0.52f else 0.46f)
-            text.color = Color.WHITE
-            val labelY = if (element.sub.isEmpty()) cy - (text.descent() + text.ascent()) * 0.5f else cy - r * 0.06f
-            canvas.drawText(label, cx, labelY, text)
-            if (element.sub.isNotEmpty()) {
-                subText.textSize = r * 0.27f
-                subText.color = Color.argb((alpha * fadeFactor * 220).toInt().coerceIn(0, 255), 226, 232, 240)
-                canvas.drawText(element.sub, cx, cy + r * 0.44f, subText)
+            val coreR = r * 0.90f
+            val tintAlpha = if (pressed) 140 else 55
+            fill.color = Color.argb(
+                (alpha * fadeFactor * tintAlpha).toInt().coerceIn(0, 255),
+                Color.red(coreColor), Color.green(coreColor), Color.blue(coreColor),
+            )
+            canvas.drawCircle(cx, cy, coreR, fill)
+
+            // Specular top crest
+            highlightPaint.color = Color.argb((alpha * fadeFactor * (if (pressed) 90 else 50)).toInt().coerceIn(0, 255), 255, 255, 255)
+            highlightPaint.strokeWidth = max(1.0f, coreR * 0.04f)
+            val arcInset = coreR * 0.10f
+            tempRect.set(cx - coreR + arcInset, cy - coreR + arcInset * 0.4f, cx + coreR - arcInset, cy + coreR - arcInset * 1.6f)
+            canvas.drawArc(tempRect, -150f, 120f, false, highlightPaint)
+
+            val actionSubtitle = when {
+                isDefending && element.sub2.isNotEmpty() -> element.sub2
+                element.sub.isNotEmpty() -> element.sub
+                id == "rb" -> "DASH"
+                id == "rt" -> "MATCH UP"
+                id == "lb" -> "SWITCH"
+                else -> ""
+            }
+
+            val ink = Color.argb((alpha * fadeFactor * 255).toInt().coerceIn(0, 255), 255, 255, 255)
+            val shadow = Color.argb((alpha * fadeFactor * 140).toInt().coerceIn(0, 255), 0, 0, 0)
+            text.textSize = coreR * (if (actionSubtitle.isNotEmpty()) 0.65f else 0.82f)
+            val baseLetterY = if (actionSubtitle.isNotEmpty()) cy - coreR * 0.10f else cy
+            val letterY = baseLetterY - (text.descent() + text.ascent()) * 0.5f
+            text.color = shadow
+            canvas.drawText(label, cx, letterY + 1.2f * density, text)
+            text.color = ink
+            canvas.drawText(label, cx, letterY, text)
+
+            if (actionSubtitle.isNotEmpty()) {
+                subText.textSize = max(7.5f, coreR * 0.25f)
+                val subY = cy + coreR * 0.58f
+                subText.color = Color.argb((alpha * fadeFactor * 140).toInt().coerceIn(0, 255), 0, 0, 0)
+                canvas.drawText(actionSubtitle, cx, subY + 1f * density, subText)
+                subText.color = Color.argb((alpha * fadeFactor * 220).toInt().coerceIn(0, 255), 241, 245, 249)
+                canvas.drawText(actionSubtitle, cx, subY, subText)
             }
         } else if (isThumbClick) {
             // Thumbstick Click (L3 / R3)
@@ -796,10 +1280,19 @@ class TouchOverlayView @JvmOverloads constructor(
         fill.color = Color.argb((alpha * fadeFactor * 75).toInt().coerceIn(0, 255), 16, 20, 26)
         canvas.drawCircle(cx, cy, r, fill)
 
-        // Outer socket rim stroke
-        stroke.color = Color.argb((alpha * fadeFactor * 130).toInt().coerceIn(0, 255), 45, 55, 70)
-        stroke.strokeWidth = max(1.5f, r * 0.035f)
-        canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+        // Outer socket rim stroke & Left Stick Sprint Edge-Glow
+        if (autoSprintLatched && element.value == 0) {
+            val pulse = (kotlin.math.sin(System.currentTimeMillis() * 0.015) * 40).toInt()
+            val glowA = (215 + pulse).coerceIn(160, 255)
+            stroke.color = Color.argb(glowA, 245, 158, 11) // Vibrant amber sprint glow
+            stroke.strokeWidth = max(3f, r * 0.07f)
+            canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+            invalidate()
+        } else {
+            stroke.color = Color.argb((alpha * fadeFactor * 130).toInt().coerceIn(0, 255), 45, 55, 70)
+            stroke.strokeWidth = max(1.5f, r * 0.035f)
+            canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+        }
 
         // 4 Cardinal Guide Notches on the outer socket perimeter (Xbox stick housing style)
         val notchLen = r * 0.10f

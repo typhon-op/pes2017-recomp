@@ -1,0 +1,46 @@
+name: Build PES2017 Android Recomp
+
+on:
+  push:
+    branches: [ "main", "master", "*" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | sdkmanager --licenses || true
+
+      - name: Fetch Prebuilt Native Engine
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a"
+          curl -sL --retry 3 -o /tmp/upstream.apk "https://github.com/dzakyraf/pes2017-recomp/releases/download/0.2.0/pes2017-recomp-0.2.0.apk"
+          echo "843e276c2f86adc6057c0ed5288ab64110195342ac6bbeec1e6ce663b83ce1d6  /tmp/upstream.apk" | sha256sum -c -
+          unzip -j /tmp/upstream.apk "lib/arm64-v8a/*" -d "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/"
+          echo "PES17_PREBUILT=$GITHUB_WORKSPACE/libpes17_prebuilt" >> $GITHUB_ENV
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew android/gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug -PprebuiltNative="$PES17_PREBUILT"
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pes2017-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
