@@ -319,11 +319,16 @@ class ControlLayout private constructor(
                     // move means anything. `value` is an index into
                     // runtime/skill_moves.h, so the order here is the table's and
                     // must not be shuffled.
-                    place("skill_double_touch", ControlKind.SKILL, 0, "D.TOUCH", -330f, -250f, 48f, 0.40f, visible = false, shownWhen = PhaseMask.MATCH),
-                    place("skill_roulette", ControlKind.SKILL, 1, "ROULETTE", -330f, -196f, 48f, 0.40f, visible = false, shownWhen = PhaseMask.MATCH),
-                    place("skill_rainbow", ControlKind.SKILL, 2, "RAINBOW", -330f, -142f, 48f, 0.40f, visible = false, shownWhen = PhaseMask.MATCH),
-                    place("skill_drag_back", ControlKind.SKILL, 3, "DRAG BK", -330f, -88f, 48f, 0.40f, visible = false, shownWhen = PhaseMask.MATCH),
-                    place("skill_body_feint", ControlKind.SKILL, 4, "BODY FNT", -330f, -34f, 48f, 0.40f, visible = false, shownWhen = PhaseMask.MATCH),
+                    // 60 dp apart so no two of their touch areas meet: a button
+                    // 48 dp across is a 24 dp circle plus 6 dp of slack, so
+                    // anything closer is a thumb that means one and gets the
+                    // other. The column stops 40 dp above the bottom edge, clear
+                    // of the gesture bar.
+                    place("skill_double_touch", ControlKind.SKILL, 0, "D.TOUCH", -330f, -280f, 48f, 0.40f, visible = false, shownWhen = PhaseMask.MATCH),
+                    place("skill_roulette", ControlKind.SKILL, 1, "ROULETTE", -330f, -220f, 48f, 0.40f, visible = false, shownWhen = PhaseMask.MATCH),
+                    place("skill_rainbow", ControlKind.SKILL, 2, "RAINBOW", -330f, -160f, 48f, 0.40f, visible = false, shownWhen = PhaseMask.MATCH),
+                    place("skill_drag_back", ControlKind.SKILL, 3, "DRAG BK", -330f, -100f, 48f, 0.40f, visible = false, shownWhen = PhaseMask.MATCH),
+                    place("skill_body_feint", ControlKind.SKILL, 4, "BODY FNT", -330f, -40f, 48f, 0.40f, visible = false, shownWhen = PhaseMask.MATCH),
 
                     // Four-way swipes, hidden until the player binds a direction:
                     // an unbound swipe stays out of the way rather than
