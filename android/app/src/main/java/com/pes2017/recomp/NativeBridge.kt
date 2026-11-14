@@ -1,5 +1,7 @@
 package com.pes2017.recomp
 
+import android.util.Log
+
 /**
  * Everything the app says to the runtime and everything the runtime says
  * back. The other side is runtime/android/jni.cpp; the names here and the
@@ -190,7 +192,16 @@ object NativeBridge {
             nativeSkillEnd()
             nativeSkillPlay(-1)
             true
-        } catch (_: UnsatisfiedLinkError) {
+        } catch (missing: Throwable) {
+            // Throwable, not UnsatisfiedLinkError alone: an entry point the
+            // runtime does not export can surface as another LinkageError on a
+            // different ART version, and a missing one must never reach the
+            // launcher. The answer is cached, so this is asked once.
+            Log.i(
+                "PES17",
+                "skill stick: this runtime has no such entry points " +
+                    "(${missing.javaClass.simpleName}); the stick stays absolute",
+            )
             false
         }
     }

@@ -837,9 +837,16 @@ class GameActivity : AppCompatActivity(), NativeListener {
         )
         // The skill stick's flick reading (runtime/skill_stick.h): on glass the
         // finger is not a stick, so its directions come from travel from where
-        // it landed rather than from its position in the socket. A runtime built
-        // before the call existed says so once, and the stick stays absolute.
-        if (NativeBridge.skillStick) NativeBridge.nativeSkillStick(prefs.flickSkillStick)
+        // it landed rather than from its position in the socket.
+        //
+        // The runtime already defaults to it, so there is nothing to say on the
+        // usual path and start-up never touches the new entry points at all:
+        // only a player who turned the reading off has a setting to send. The
+        // flick is what the app chooses to send, not what the runtime is told,
+        // so a runtime that never hears this is still driven correctly.
+        if (!prefs.flickSkillStick && NativeBridge.skillStick) {
+            NativeBridge.nativeSkillStick(false)
+        }
         NativeBridge.nativePadEnabled(prefs.gamepadEnabled)
     }
 

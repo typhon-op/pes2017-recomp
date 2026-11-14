@@ -441,7 +441,7 @@ class TouchOverlayView @JvmOverloads constructor(
                     skillPointer = pointerId
                     skillOriginX = x
                     skillOriginY = y
-                    NativeBridge.nativeSkillTouch(0f, 0f)
+                    if (NativeBridge.skillStick) NativeBridge.nativeSkillTouch(0f, 0f)
                 } else {
                     moveStick(element, x, y)
                 }
@@ -583,6 +583,7 @@ class TouchOverlayView @JvmOverloads constructor(
         if (length > 1.5f) { dx = dx / length * 1.5f; dy = dy / length * 1.5f }
         // The knob follows the flick, so the hand can see what it is doing.
         stickPositions[element.id] = floatArrayOf(dx.coerceIn(-1f, 1f), dy.coerceIn(-1f, 1f))
+        if (!NativeBridge.skillStick) return
         NativeBridge.nativeSkillTouch(dx, dy)
         invalidate()
     }
