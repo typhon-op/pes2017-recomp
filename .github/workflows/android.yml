@@ -7,6 +7,14 @@ on:
       - 'v*'
   workflow_dispatch:
 
+# Engine as in debug-apk.yml: the recompiled title needs the player's own disc
+# and is not built here. A fork that built one from these sources points
+# PES17_ENGINE_URL / PES17_ENGINE_SHA256 at its own release asset and every entry
+# point the app calls is in the apk again.
+env:
+  ENGINE_URL: "${{ vars.PES17_ENGINE_URL || 'https://github.com/dzakyraf/pes2017-recomp/releases/download/0.2.0/pes2017-recomp-0.2.0.apk' }}"
+  ENGINE_SHA256: "${{ vars.PES17_ENGINE_SHA256 || '843e276c2f86adc6057c0ed5288ab64110195342ac6bbeec1e6ce663b83ce1d6' }}"
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,16 +36,18 @@ jobs:
           yes | sdkmanager --licenses || true
           mkdir -p "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a"
           echo "Downloading official release native engine components..."
-          curl -sL --retry 3 -o /tmp/upstream.apk "https://github.com/dzakyraf/pes2017-recomp/releases/download/0.2.0/pes2017-recomp-0.2.0.apk"
+          echo "engine: $ENGINE_URL"
+          curl -sL --retry 3 -o /tmp/upstream.apk "$ENGINE_URL"
           if [ -f /tmp/upstream.apk ]; then
-            echo "Verifying upstream APK SHA-256 checksum..."
-            echo "843e276c2f86adc6057c0ed5288ab64110195342ac6bbeec1e6ce663b83ce1d6  /tmp/upstream.apk" | sha256sum -c - || {
-              echo "ERROR: Upstream APK SHA-256 checksum verification failed!"
+            echo "Verifying engine APK SHA-256 checksum..."
+            echo "$ENGINE_SHA256  /tmp/upstream.apk" | sha256sum -c - || {
+              echo "ERROR: Engine APK SHA-256 checksum verification failed!"
               exit 1
             }
             unzip -j /tmp/upstream.apk "lib/arm64-v8a/*" -d "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/"
             echo "Successfully unpacked full native engine into $GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/:"
             ls -lh "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/"
+            ./tools/engine_symbols.sh "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/libpes17.so"
           else
             echo "ERROR: Failed to download upstream reference APK!"
             exit 1

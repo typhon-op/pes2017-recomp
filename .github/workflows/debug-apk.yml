@@ -32,6 +32,18 @@ on:
 permissions:
   contents: read
 
+# The engine this apk is packaged with. It cannot be built from this tree: the
+# recompiled title is made from the disc's executables, which are in no
+# repository, so the build packages a libpes17.so built elsewhere.
+#
+# A fork that HAS built one from these sources can point these two at its own
+# release asset (Settings > Secrets and variables > Actions > Variables, named
+# PES17_ENGINE_URL and PES17_ENGINE_SHA256) and every entry point the app calls
+# is in the apk again. The audit step below prints which ones are, either way.
+env:
+  ENGINE_URL: "${{ vars.PES17_ENGINE_URL || 'https://github.com/dzakyraf/pes2017-recomp/releases/download/0.2.0/pes2017-recomp-0.2.0.apk' }}"
+  ENGINE_SHA256: "${{ vars.PES17_ENGINE_SHA256 || '843e276c2f86adc6057c0ed5288ab64110195342ac6bbeec1e6ce663b83ce1d6' }}"
+
 jobs:
   debug:
     runs-on: ubuntu-latest
@@ -60,22 +72,32 @@ jobs:
       # nothing here to compile libpes17.so from. The release workflow packages
       # the published engine for the same reason, and this one does exactly the
       # same thing -- which also means an apk built here carries that engine, not
-      # one built from these sources. The Kotlin still compiles against it, and
-      # the skill calls are probed at run time (NativeBridge.skillStick), so the
-      # app starts and simply offers no palette rather than crashing.
-      - name: Fetch the published native engine
+      # one built from these sources.
+      #
+      # ENGINE_URL / ENGINE_SHA256 come from the variables at the top of this
+      # file: the published engine unless a fork has built a matching one.
+      - name: Fetch the native engine
         run: |
+          echo "engine: $ENGINE_URL"
           mkdir -p "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a"
-          curl -sL --retry 3 -o /tmp/upstream.apk \
-            "https://github.com/dzakyraf/pes2017-recomp/releases/download/0.2.0/pes2017-recomp-0.2.0.apk"
+          curl -sL --retry 3 -o /tmp/upstream.apk "$ENGINE_URL"
           if [ ! -f /tmp/upstream.apk ]; then
-            echo "ERROR: could not download the reference apk with the native engine."
+            echo "ERROR: could not download the apk with the native engine."
             exit 1
           fi
-          echo "843e276c2f86adc6057c0ed5288ab64110195342ac6bbeec1e6ce663b83ce1d6  /tmp/upstream.apk" \
-            | sha256sum -c - || { echo "ERROR: reference apk checksum mismatch!"; exit 1; }
+          echo "$ENGINE_SHA256  /tmp/upstream.apk" \
+            | sha256sum -c - || { echo "ERROR: engine checksum mismatch!"; exit 1; }
           unzip -j /tmp/upstream.apk "lib/arm64-v8a/*" -d "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/"
           ls -lh "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/"
+
+      # Which of the app's entry points this engine has. An engine from before
+      # one existed does not export it, and the app asks before calling it, so
+      # the cost is that feature and not the whole app -- but which features
+      # those are belongs in the log, not in how the controls feel.
+      - name: Audit the engine's entry points
+        run: |
+          ./tools/engine_symbols.sh \
+            "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/libpes17.so"
 
       - name: Build debug APK
         run: |

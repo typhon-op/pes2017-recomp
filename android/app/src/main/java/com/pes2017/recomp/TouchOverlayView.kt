@@ -123,6 +123,26 @@ class TouchOverlayView @JvmOverloads constructor(
     // A swipe is read when the finger lifts and sent as one pulse: it has no bit
     // to hold, and a flick is over before the title's next poll anyway.
     private val swipeClassifier = SwipeClassifier(minTravelPx = 18f * density)
+
+    // The left stick standing in for the d-pad, for an engine that cannot do it
+    // itself (TouchMath.kt). Carried across pushes, because its hysteresis is
+    // what stops a thumb on a threshold chattering the four bits.
+    private val stickArrows = StickArrows()
+
+    // A press that goes down and up between two of the title's polls. An engine
+    // with nativeTouchPulse carries it on the next poll; one built before that
+    // is given the bit held for a frame instead, and let go by a callback so the
+    // hold cannot outlive the tap it belongs to.
+    private var pulseBits = 0
+    private var pulseUntil = 0L
+    // One guest frame at the 30 fps the title runs at: long enough for a poll
+    // to land on the held bit, short enough that a tap is not a press.
+    private val pulseFrameMs = 34L
+    private val pulseClear = Runnable {
+        pulseBits = 0
+        pulseUntil = 0L
+        if (isAttachedToWindow) pushState()
+    }
     private var pendingSwipes = 0
 
     /**
@@ -296,11 +316,53 @@ class TouchOverlayView @JvmOverloads constructor(
             if (NativeBridge.skillStick) NativeBridge.nativeSkillEnd()
             return
         }
-        val lx = leftX.coerceIn(-1f, 1f); val ly = leftY.coerceIn(-1f, 1f)
-        val rx = rightX.coerceIn(-1f, 1f); val ry = rightY.coerceIn(-1f, 1f)
+        val rawLx = leftX.coerceIn(-1f, 1f); val rawLy = leftY.coerceIn(-1f, 1f)
+        var lx = rawLx; var ly = rawLy
+        var rx = rightX.coerceIn(-1f, 1f); var ry = rightY.coerceIn(-1f, 1f)
+
+        // Two things the runtime does for itself when it was built with them:
+        // shaping the throw (runtime/stick_curve.h) and standing the left stick
+        // in for the d-pad (runtime/input_stick_arrows.h). The engine this apk
+        // is packaged with predates both, so the app does them here and the
+        // runtime's copies are never asked. Whichever side has it, it is done
+        // once -- the check is the same one that keeps those calls from being
+        // made at all.
+        if (!NativeBridge.stickSettings) {
+            val left = StickShape.apply(lx, ly, prefs.stickDeadzone, prefs.stickCurve)
+            lx = left[0]; ly = left[1]
+            val right = StickShape.apply(rx, ry, prefs.rightStickDeadzone, prefs.rightStickCurve)
+            rx = right[0]; ry = right[1]
+        }
+        if (!NativeBridge.dpadSynthesis) {
+            if (dpadOnScreen()) {
+                // The player's own d-pad is on screen: the same four bits from
+                // two places is how a menu scrolls twice per press.
+                stickArrows.clear()
+            } else {
+                // The raw throw, not the shaped one: the press point is 0.60 of
+                // the socket as the engine measures it, and a menu reached at
+                // three-quarters of the way out is a menu with a thumb through
+                // it.
+                buttons = buttons or stickArrows.bits(rawLx, rawLy)
+            }
+        }
+
+        // A tap that began and ended between two polls has no other way to be
+        // seen.
+        if (pressed != 0) {
+            if (NativeBridge.touchPulse) {
+                NativeBridge.nativeTouchPulse(pressed)
+            } else {
+                pulseBits = pulseBits or pressed
+                pulseUntil = now + pulseFrameMs
+                removeCallbacks(pulseClear)
+                postDelayed(pulseClear, pulseFrameMs)
+            }
+        }
+        if (now < pulseUntil) buttons = buttons or pulseBits
+
         Macro.record(Macro.TOUCH, buttons, leftTrigger, rightTrigger, lx, ly, rx, ry)
         NativeBridge.nativeTouchState(buttons, leftTrigger, rightTrigger, lx, ly, rx, ry)
-        if (pressed != 0 && NativeBridge.touchPulse) NativeBridge.nativeTouchPulse(pressed)
     }
 
     /** Everything up: called when the pad is hidden, edited, or paused. */
@@ -315,8 +377,14 @@ class TouchOverlayView @JvmOverloads constructor(
         pendingSwipes = 0
         lookPointers.clear()
         skillPointer = -1
-        // Everything up means everything: a trigger does not outlive the pad.
+        // Everything up means everything: a trigger does not outlive the pad,
+        // and neither does a tap still riding out its frame or an arm the stick
+        // was holding down.
         triggerReleaseAt.clear()
+        stickArrows.clear()
+        pulseBits = 0
+        pulseUntil = 0L
+        removeCallbacks(pulseClear)
         if (NativeBridge.isLoaded()) {
             NativeBridge.nativeLookEnd()
             if (NativeBridge.skillStick) NativeBridge.nativeSkillEnd()
@@ -334,11 +402,15 @@ class TouchOverlayView @JvmOverloads constructor(
     private fun syncDpadSynthesis() {
         if (!NativeBridge.isLoaded()) return
         // A runtime built before the d-pad existed has no such entry point, and
-        // calling it is the app closing: it is asked once, then left alone.
+        // calling it is the app closing: it is asked once, then left alone. The
+        // stand-in is done in pushState instead when this is false.
         if (!NativeBridge.dpadSynthesis) return
-        val onScreen = layout.elements.any { it.kind == ControlKind.DPAD && it.shownIn(gamePhase) }
-        NativeBridge.nativeDpadSynthesis(!onScreen)
+        NativeBridge.nativeDpadSynthesis(!dpadOnScreen())
     }
+
+    /** Whether a d-pad of the player's own is on screen in this phase. */
+    private fun dpadOnScreen(): Boolean =
+        layout.elements.any { it.kind == ControlKind.DPAD && it.shownIn(gamePhase) }
 
     // ---- touches --------------------------------------------------------------
 
