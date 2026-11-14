@@ -16,6 +16,7 @@
 
 #include "android.h"
 #include "../log.h"
+#include "../input_merge.h"
 #include "../look_scale.h"
 
 #include <algorithm>
@@ -127,16 +128,31 @@ namespace
         out.rightY = int16_t(std::clamp<int32_t>(mergedY, -32768, 32767));
     }
 
+    // The touch controls and a physical pad can both drive player 1. A press is
+    // a press whoever makes it (buttons OR'd, triggers at the larger value); a
+    // stick belongs to one hand at a time, so the whole vector of whichever
+    // source is pushing harder wins. Taking each axis separately would let a
+    // thumb at full right and a pad at full down add up to a diagonal neither
+    // of them is pushing.
     void Merge(android::input::Pad& into, const android::input::Pad& from)
     {
         into.buttons |= from.buttons;
         into.leftTrigger = std::max(into.leftTrigger, from.leftTrigger);
         into.rightTrigger = std::max(into.rightTrigger, from.rightTrigger);
-        auto stronger = [](int16_t a, int16_t b) { return std::abs(int(a)) >= std::abs(int(b)) ? a : b; };
-        into.leftX = stronger(into.leftX, from.leftX);
-        into.leftY = stronger(into.leftY, from.leftY);
-        into.rightX = stronger(into.rightX, from.rightX);
-        into.rightY = stronger(into.rightY, from.rightY);
+
+        static bool toldBothHands = false;
+        if (!toldBothHands && ::input::Magnitude(from.leftX, from.leftY) > 0 &&
+            ::input::Magnitude(into.leftX, into.leftY) > 0)
+        {
+            toldBothHands = true;
+            LOGI("input: a pad and the touch stick are both driving player 1; the stronger one wins");
+        }
+
+        int16_t x = 0, y = 0;
+        ::input::MergeStickPair(into.leftX, into.leftY, from.leftX, from.leftY, x, y);
+        into.leftX = x; into.leftY = y;
+        ::input::MergeStickPair(into.rightX, into.rightY, from.rightX, from.rightY, x, y);
+        into.rightX = x; into.rightY = y;
     }
 
     // Set by jni.cpp so a motor can reach the app.

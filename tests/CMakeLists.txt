@@ -150,3 +150,12 @@ add_executable(stick-arrows-test
     "${CMAKE_CURRENT_SOURCE_DIR}/stick_arrows_test.cpp")
 target_include_directories(stick-arrows-test PRIVATE "${PES17_RUNTIME}")
 add_test(NAME stick-arrows COMMAND stick-arrows-test)
+
+# ---- mixing the pad with the touch controls --------------------------------
+# Which source a stick's frame comes from when both drive player 1
+# (runtime/input_merge.h): one vector whole, a dead heat to the pad, and never
+# one axis from each. Header-only.
+add_executable(input-merge-test
+    "${CMAKE_CURRENT_SOURCE_DIR}/input_merge_test.cpp")
+target_include_directories(input-merge-test PRIVATE "${PES17_RUNTIME}")
+add_test(NAME input-merge COMMAND input-merge-test)

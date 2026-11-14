@@ -1035,7 +1035,14 @@ class GameActivity : AppCompatActivity(), NativeListener {
     }
 
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
-        if (started && !overlay.editing && pads.onMotion(event)) return true
+        if (started && !overlay.editing && pads.onMotion(event)) {
+            // A pad that only moves its sticks takes the screen over the same
+            // way one with buttons does; otherwise the overlay sits on top of a
+            // match already being played with a controller, and both drive
+            // player 1.
+            hideTouchForPad()
+            return true
+        }
         return super.onGenericMotionEvent(event)
     }
 
