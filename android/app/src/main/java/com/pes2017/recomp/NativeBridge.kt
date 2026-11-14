@@ -178,32 +178,71 @@ object NativeBridge {
     external fun nativeSkillPlay(index: Int): Boolean
 
     /**
-     * Whether the runtime beside this app answers the skill-stick calls.
+     * Whether the runtime this app is packaged with answers an entry point.
      *
-     * The Android build packages libpes17.so built elsewhere, and an older one
-     * will not have these symbols: calling one of them is an
-     * UnsatisfiedLinkError, which would take the whole touch pad -- and the app
-     * with it -- down at start-up. So the surface is asked once, and the skill
-     * stick and the palette are offered only when the answer is yes.
+     * The Android build ships a libpes17.so built elsewhere, and one built
+     * before a call existed does not export it. Calling it is not a feature
+     * that quietly does nothing: it is an UnsatisfiedLinkError, and an
+     * uncaught one is the app closing on the first screen. So an entry point is
+     * asked once, the answer is kept, and whatever it drives is offered only
+     * when the answer is yes.
+     *
+     * Throwable rather than UnsatisfiedLinkError alone, because the same
+     * missing symbol surfaces as other linkage errors on other ART versions,
+     * and this must never reach the crash screen.
      */
-    val skillStick: Boolean by lazy {
+    private inline fun answered(name: String, call: () -> Unit): Boolean =
         try {
-            nativeSkillStick(false)
-            nativeSkillEnd()
-            nativeSkillPlay(-1)
+            call()
             true
         } catch (missing: Throwable) {
-            // Throwable, not UnsatisfiedLinkError alone: an entry point the
-            // runtime does not export can surface as another LinkageError on a
-            // different ART version, and a missing one must never reach the
-            // launcher. The answer is cached, so this is asked once.
             Log.i(
                 "PES17",
-                "skill stick: this runtime has no such entry points " +
-                    "(${missing.javaClass.simpleName}); the stick stays absolute",
+                "runtime has no $name (${missing.javaClass.simpleName}): that control stays off",
             )
             false
         }
+
+    /**
+     * The skill-stick entry points (runtime/skill_stick.h, runtime/skill_moves.h).
+     *
+     * The stream is asked with a no-op set, end and an impossible move index, so
+     * a runtime that has them is left exactly as it was found.
+     */
+    val skillStick: Boolean by lazy {
+        answered("nativeSkill*") {
+            nativeSkillStick(false)
+            nativeSkillEnd()
+            nativeSkillPlay(-1)
+        }
+    }
+
+    /**
+     * The left stick standing in for the d-pad (runtime/kernel/input.cpp).
+     *
+     * Absent from a runtime built before the d-pad existed, where a pad of the
+     * player's own was the only way to work a menu: nothing is lost, the
+     * setting simply has no effect.
+     */
+    val dpadSynthesis: Boolean by lazy {
+        answered("nativeDpadSynthesis") { nativeDpadSynthesis(true) }
+    }
+
+    /**
+     * A tap carried to the next poll instead of lost between two
+     * (runtime/stick_pulses.h). A runtime without it still reads the held
+     * state, so a press shorter than the frame gap is dropped, not a crash.
+     */
+    val touchPulse: Boolean by lazy {
+        answered("nativeTouchPulse") { nativeTouchPulse(0) }
+    }
+
+    /**
+     * The stick's deadzone and curve (runtime/stick_curve.h). A runtime without
+     * them keeps the deadzone and shape it was built with.
+     */
+    val stickSettings: Boolean by lazy {
+        answered("nativeStickSettings") { nativeStickSettings(0.25f, 1f, 0.25f, 1f) }
     }
 
     external fun nativePadState(

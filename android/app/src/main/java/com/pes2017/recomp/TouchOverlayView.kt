@@ -300,7 +300,7 @@ class TouchOverlayView @JvmOverloads constructor(
         val rx = rightX.coerceIn(-1f, 1f); val ry = rightY.coerceIn(-1f, 1f)
         Macro.record(Macro.TOUCH, buttons, leftTrigger, rightTrigger, lx, ly, rx, ry)
         NativeBridge.nativeTouchState(buttons, leftTrigger, rightTrigger, lx, ly, rx, ry)
-        if (pressed != 0) NativeBridge.nativeTouchPulse(pressed)
+        if (pressed != 0 && NativeBridge.touchPulse) NativeBridge.nativeTouchPulse(pressed)
     }
 
     /** Everything up: called when the pad is hidden, edited, or paused. */
@@ -333,6 +333,9 @@ class TouchOverlayView @JvmOverloads constructor(
      */
     private fun syncDpadSynthesis() {
         if (!NativeBridge.isLoaded()) return
+        // A runtime built before the d-pad existed has no such entry point, and
+        // calling it is the app closing: it is asked once, then left alone.
+        if (!NativeBridge.dpadSynthesis) return
         val onScreen = layout.elements.any { it.kind == ControlKind.DPAD && it.shownIn(gamePhase) }
         NativeBridge.nativeDpadSynthesis(!onScreen)
     }

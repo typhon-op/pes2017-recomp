@@ -831,10 +831,12 @@ class GameActivity : AppCompatActivity(), NativeListener {
         )
         // runtime/stick_curve.h shapes the whole vector, so the deadzone is the
         // circle the socket is drawn as and a diagonal stays a diagonal.
-        NativeBridge.nativeStickSettings(
-            prefs.stickDeadzone, prefs.stickCurve,
-            prefs.rightStickDeadzone, prefs.rightStickCurve,
-        )
+        if (NativeBridge.stickSettings) {
+            NativeBridge.nativeStickSettings(
+                prefs.stickDeadzone, prefs.stickCurve,
+                prefs.rightStickDeadzone, prefs.rightStickCurve,
+            )
+        }
         // The skill stick's flick reading (runtime/skill_stick.h): on glass the
         // finger is not a stick, so its directions come from travel from where
         // it landed rather than from its position in the socket.
