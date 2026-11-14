@@ -10,6 +10,7 @@
 #include "../guest.h"
 #include "../log.h"
 #include "../diagnostics.h"
+#include "../input_stick_arrows.h"
 #include "../console.h"
 #include "../online/service.h"
 #include "../player.h"
@@ -476,6 +477,27 @@ PPC_FUNC(__imp__XamInputGetState)
         uint8_t triggers[2] = { pad.leftTrigger, pad.rightTrigger };
         if (user == 0)
         {
+            // The left stick stands in for the d-pad, as it does in the desktop
+            // build: a screen that only accepts the d-pad can be driven with a
+            // thumb, which matters because the on-screen pad has no d-pad
+            // control of its own. The hysteresis in input_stick_arrows.h keeps
+            // a thumb resting near the threshold from chattering the bits, and
+            // PES17_NO_TOUCH_DPAD turns the whole thing off for an A/B.
+            static_assert(::input::kDpadUp == android::input::kDpadUp &&
+                              ::input::kDpadDown == android::input::kDpadDown &&
+                              ::input::kDpadLeft == android::input::kDpadLeft &&
+                              ::input::kDpadRight == android::input::kDpadRight,
+                          "input_stick_arrows.h must use XInput's d-pad bits");
+            static const bool noArrows = diag::Flag("PES17_NO_TOUCH_DPAD");
+            if (!noArrows)
+            {
+                static ::input::ArrowLatch arrows;
+                const bool hadAny = arrows.Any();
+                pad.buttons = uint16_t(pad.buttons | ::input::StickArrows(axes[0], axes[1], arrows));
+                if (!hadAny && arrows.Any())
+                    LOGI("input: the left stick is standing in for the d-pad");
+            }
+
             // The same hand-off the desktop build makes: what the player did
             // is seen first, then the autopilot may add to it.
             player::SawPad(pad.buttons, triggers[1]);

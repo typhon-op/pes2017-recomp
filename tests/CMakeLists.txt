@@ -141,3 +141,12 @@ add_executable(look-scale-test
     "${CMAKE_CURRENT_SOURCE_DIR}/look_scale_test.cpp")
 target_include_directories(look-scale-test PRIVATE "${PES17_RUNTIME}")
 add_test(NAME look-scale COMMAND look-scale-test)
+
+# ---- the left stick standing in for the d-pad ------------------------------
+# The rule both guest paths use (runtime/input_stick_arrows.h): press at 0.60,
+# release at 0.42, diagonals press two bits, and a stick swung through the
+# middle lets the old direction go. Header-only; nothing platform-specific.
+add_executable(stick-arrows-test
+    "${CMAKE_CURRENT_SOURCE_DIR}/stick_arrows_test.cpp")
+target_include_directories(stick-arrows-test PRIVATE "${PES17_RUNTIME}")
+add_test(NAME stick-arrows COMMAND stick-arrows-test)
