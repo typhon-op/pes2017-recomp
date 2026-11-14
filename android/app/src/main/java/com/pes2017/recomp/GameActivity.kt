@@ -814,11 +814,26 @@ class GameActivity : AppCompatActivity(), NativeListener {
         // under 500 MB/s, which made a texture as slow to read as to convert.
         NativeBridge.nativeSetOption("PES17_TEXTURE_STORE", "${filesDir.absolutePath}/texture_store.bin")
 
+        applyInputSettings()
+    }
+
+    /**
+     * The feel settings, sent at start-up and again on resume: a player can
+     * change them in Settings and come back to a run that is already going, and
+     * a value read only at start-up would need a new process to be believed.
+     */
+    private fun applyInputSettings() {
         // lookSaturation is a feel multiplier, not a pixel speed: 1.0 is the
         // default, and runtime/look_scale.h does the conversion.
         NativeBridge.nativeLookSettings(
             prefs.lookSensitivityX, prefs.lookSensitivityY,
             prefs.lookSmoothing, prefs.invertLook, prefs.lookSaturation,
+        )
+        // runtime/stick_curve.h shapes the whole vector, so the deadzone is the
+        // circle the socket is drawn as and a diagonal stays a diagonal.
+        NativeBridge.nativeStickSettings(
+            prefs.stickDeadzone, prefs.stickCurve,
+            prefs.rightStickDeadzone, prefs.rightStickCurve,
         )
         NativeBridge.nativePadEnabled(prefs.gamepadEnabled)
     }
@@ -1061,6 +1076,8 @@ class GameActivity : AppCompatActivity(), NativeListener {
         NativeBridge.nativeRestoreMemory()
         pads.firstSlot = if (prefs.padAsPlayer2 && prefs.developerTools) 1 else 0
         pads.setEnabled(prefs.gamepadEnabled)
+        // Feel settings may have been changed in Settings while the run was away.
+        applyInputSettings()
         pads.refreshDevices()
         // The pad may have been arranged in Settings meanwhile (ControlsEditorActivity,
         // another process): this run saved its own copy on the way out, so read it back.

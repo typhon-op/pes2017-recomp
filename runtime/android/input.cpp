@@ -19,6 +19,7 @@
 #include "../input_merge.h"
 #include "../input_pulses.h"
 #include "../look_scale.h"
+#include "../stick_curve.h"
 
 #include <algorithm>
 #include <atomic>
@@ -59,6 +60,16 @@ namespace
     // app's slider scales it (look_scale.h).
     float g_saturationPixelsPerSecond = look::kBasePixelsPerSecond;
 
+    // ---- the sticks -------------------------------------------------------
+    // Movement used to be linear from the first pixel, so a 75 dp stick jumped
+    // from standing to a jog. The shape is radial: a diagonal stays one, and the
+    // deadzone is a circle like the socket it is drawn as.
+    std::mutex g_stickLock;
+    // The right stick is passed through untouched until a player asks for a
+    // shape -- tricks are muscle memory, and this must not quietly retune them.
+    stick::Shape g_leftStick{ 0.08f, 1.45f, 1.0f };
+    stick::Shape g_rightStick{ 0.0f, 1.0f, 1.0f };
+
     int16_t ToAxis(float value)
     {
         value = std::clamp(value, -1.0f, 1.0f);
@@ -76,6 +87,19 @@ namespace
         const float normalized = (absVal - kMinThreshold) / (1.0f - kMinThreshold);
         const float boosted = sign * (kDeadzone + normalized * (1.0f - kDeadzone));
         return int16_t(std::lround(boosted * (boosted < 0 ? 32768.0f : 32767.0f)));
+    }
+
+    // The pad carries the sticks as int16, as the console does. The curve works
+    // in -1..1 and comes back to the same scale.
+    float ToUnit(int16_t value)
+    {
+        return value < 0 ? float(value) / 32768.0f : float(value) / 32767.0f;
+    }
+
+    int16_t ToStick(float value)
+    {
+        value = std::clamp(value, -1.0f, 1.0f);
+        return int16_t(std::lround(value * (value < 0 ? 32768.0f : 32767.0f)));
     }
 
     // Converts what the finger did since the last call into a stick value.
@@ -169,14 +193,41 @@ namespace android::input::detail
 
 void android::input::SetTouchPad(const Pad& pad)
 {
+    // Shaped here, at the single point every touch state arrives by, so a
+    // recorded macro replays exactly the deflection it was recorded with.
+    Pad shaped = pad;
+    {
+        std::lock_guard lock(g_stickLock);
+        float x = ToUnit(shaped.leftX), y = ToUnit(shaped.leftY);
+        if (stick::Apply(x, y, g_leftStick)) { shaped.leftX = ToStick(x); shaped.leftY = ToStick(y); }
+        else { shaped.leftX = shaped.leftY = 0; }
+        x = ToUnit(shaped.rightX); y = ToUnit(shaped.rightY);
+        if (stick::Apply(x, y, g_rightStick)) { shaped.rightX = ToStick(x); shaped.rightY = ToStick(y); }
+        else { shaped.rightX = shaped.rightY = 0; }
+    }
     std::lock_guard lock(g_touch.lock);
-    g_touch.pad = pad;
+    g_touch.pad = shaped;
     g_touch.connected = true;
 }
 
 void android::input::AddTouchPulse(uint16_t bits)
 {
     g_touchPulses.Add(bits);
+}
+
+void android::input::SetStickSettings(float leftDeadzone, float leftCurve,
+                                      float rightDeadzone, float rightCurve)
+{
+    // Sanitised once, so the log below and the stick above are the same shape.
+    const stick::Shape left = stick::Sanitize({ leftDeadzone, leftCurve, 1.0f });
+    const stick::Shape right = stick::Sanitize({ rightDeadzone, rightCurve, 1.0f });
+    {
+        std::lock_guard lock(g_stickLock);
+        g_leftStick = left;
+        g_rightStick = right;
+    }
+    LOGI("touch sticks: left deadzone %.2f curve %.2f, right deadzone %.2f curve %.2f",
+         left.deadzone, left.exponent, right.deadzone, right.exponent);
 }
 
 void android::input::AddLook(float dx, float dy)

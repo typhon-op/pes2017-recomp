@@ -147,6 +147,9 @@ class TouchOverlayView @JvmOverloads constructor(
     private fun centreY(element: ControlElement) = element.yFrac * height
     private fun radius(element: ControlElement) = element.sizeDp * density * 0.5f
 
+    /** How far the knob travels inside its socket, as a fraction of the radius. */
+    private val stickTravel = 0.62f
+
     /** The look area is a rectangle; everything else is a circle. */
     private fun rectOf(element: ControlElement, into: RectF) {
         val halfWidth = element.sizeDp * density * 0.5f
@@ -376,7 +379,10 @@ class TouchOverlayView @JvmOverloads constructor(
     }
 
     private fun moveStick(element: ControlElement, x: Float, y: Float) {
-        val r = radius(element)
+        // The knob's own travel is the throw: pushing it to its rim is full
+        // speed, which is the travel the hand can see. The longer throw is kept
+        // for players who learned on it (Prefs.travelMatchesKnob).
+        val r = radius(element) * if (prefs.travelMatchesKnob) stickTravel else 1f
         var dx = (x - centreX(element)) / r
         // The guest's Y points up; the screen's points down.
         var dy = -(y - centreY(element)) / r
@@ -845,8 +851,8 @@ class TouchOverlayView @JvmOverloads constructor(
         canvas.drawLine(cx + r - notchLen, cy, cx + r, cy, notchPaint)
 
         // 2. Knob position
-        val knobX = cx + (position?.get(0) ?: 0f) * r * 0.62f
-        val knobY = cy - (position?.get(1) ?: 0f) * r * 0.62f
+        val knobX = cx + (position?.get(0) ?: 0f) * r * stickTravel
+        val knobY = cy - (position?.get(1) ?: 0f) * r * stickTravel
 
         // Directional deflection vector glow
         if (isDeflected) {

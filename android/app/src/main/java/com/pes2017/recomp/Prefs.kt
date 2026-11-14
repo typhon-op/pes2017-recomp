@@ -304,6 +304,43 @@ class Prefs(context: Context) {
         get() = store.getFloat(KEY_LOOK_SATURATION, 1.0f)
         set(value) = store.edit().putFloat(KEY_LOOK_SATURATION, value.coerceIn(0.3f, 3.0f)).apply()
 
+    // ---- the touch sticks ---------------------------------------------------
+
+    /**
+     * The share of the movement stick's throw that sends nothing, so a resting
+     * thumb cannot nudge the player off the spot. The title has a deadzone of
+     * its own on top, which is why this stays small.
+     */
+    var stickDeadzone: Float
+        get() = store.getFloat(KEY_STICK_DEADZONE, 0.08f)
+        set(value) = store.edit().putFloat(KEY_STICK_DEADZONE, value.coerceIn(0f, 0.20f)).apply()
+
+    /**
+     * The curve on the rest of the throw: below 1 reaches the edge sooner, above
+     * 1 is finer around the middle, where a walking pace lives.
+     */
+    var stickCurve: Float
+        get() = store.getFloat(KEY_STICK_CURVE, 1.45f)
+        set(value) = store.edit().putFloat(KEY_STICK_CURVE, value.coerceIn(0.7f, 2.5f)).apply()
+
+    /** The skill stick is left unshaped by default: tricks are muscle memory. */
+    var rightStickDeadzone: Float
+        get() = store.getFloat(KEY_RIGHT_STICK_DEADZONE, 0f)
+        set(value) = store.edit().putFloat(KEY_RIGHT_STICK_DEADZONE, value.coerceIn(0f, 0.20f)).apply()
+
+    var rightStickCurve: Float
+        get() = store.getFloat(KEY_RIGHT_STICK_CURVE, 1f)
+        set(value) = store.edit().putFloat(KEY_RIGHT_STICK_CURVE, value.coerceIn(0.7f, 2.5f)).apply()
+
+    /**
+     * Pushing the knob to the rim of its socket is full deflection, which is the
+     * throw the hand can judge from the drawing. Off keeps the older, longer
+     * throw, where the rim was only about two thirds of the stick's range.
+     */
+    var travelMatchesKnob: Boolean
+        get() = store.getBoolean(KEY_STICK_TRAVEL_KNOB, true)
+        set(value) = store.edit().putBoolean(KEY_STICK_TRAVEL_KNOB, value).apply()
+
     // ---- the graphics driver ------------------------------------------------
 
     /** The folder of the driver the player picked, or "" for the system's. */
@@ -408,6 +445,11 @@ class Prefs(context: Context) {
         private const val KEY_LOOK_SMOOTH = "lookSmoothing"
         private const val KEY_LOOK_INVERT = "lookInvert"
         private const val KEY_LOOK_SATURATION = "lookSaturation"
+        private const val KEY_STICK_DEADZONE = "stickDeadzone"
+        private const val KEY_STICK_CURVE = "stickCurve"
+        private const val KEY_RIGHT_STICK_DEADZONE = "rightStickDeadzone"
+        private const val KEY_RIGHT_STICK_CURVE = "rightStickCurve"
+        private const val KEY_STICK_TRAVEL_KNOB = "stickTravelMatchesKnob"
         private const val KEY_DRIVER_DIR = "driverDirectory"
         private const val KEY_DRIVER_LIB = "driverLibrary"
         private const val KEY_GAME_DIR = "gameDirectory"

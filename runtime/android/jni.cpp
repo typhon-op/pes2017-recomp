@@ -513,6 +513,12 @@ PES17_NATIVE(void, nativeLookSettings)(JNIEnv*, jobject, jfloat sensitivityX, jf
                                     saturationScale);
 }
 
+PES17_NATIVE(void, nativeStickSettings)(JNIEnv*, jobject, jfloat leftDeadzone, jfloat leftCurve,
+                                        jfloat rightDeadzone, jfloat rightCurve)
+{
+    android::input::SetStickSettings(leftDeadzone, leftCurve, rightDeadzone, rightCurve);
+}
+
 PES17_NATIVE(void, nativePadState)(JNIEnv*, jobject, jint user, jint buttons, jint leftTrigger,
                                  jint rightTrigger, jfloat leftX, jfloat leftY, jfloat rightX,
                                  jfloat rightY)

@@ -136,6 +136,15 @@ namespace android::input
     void SetLookSettings(float sensitivityX, float sensitivityY, float smoothing,
                          bool invertY, float saturationScale);
 
+    // The touch sticks' throw (runtime/stick_curve.h). `deadzone` is the share of
+    // the throw that sends nothing; `curve` shapes what is left, so below 1 the
+    // stick reaches the edge sooner and above 1 it is finer around the middle.
+    // Applied to the whole vector, so a diagonal stays a diagonal, and only to
+    // the touch sticks -- a physical pad is the player's own and is not shaped.
+    // The title's own ~14% deadzone sits on top of this one, so the two add up.
+    void SetStickSettings(float leftDeadzone, float leftCurve,
+                          float rightDeadzone, float rightCurve);
+
     // From a physical pad. `user` is 0..3, as the console numbers them.
     // A state push is not a connection: only SetHardwarePadConnected says a pad
     // is there, so a slot the app has just disconnected cannot come back to

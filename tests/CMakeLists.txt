@@ -164,6 +164,14 @@ add_test(NAME input-merge COMMAND input-merge-test)
 # A tap that begins and ends between two polls (runtime/input_pulses.h): the
 # bits are held, delivered once, and never lost against a poll on the guest
 # thread. Header-only.
+# ---- the touch stick's throw -----------------------------------------------
+# A radial deadzone and a curve on what is left (runtime/stick_curve.h), with
+# the direction of the push preserved. Header-only, no platform.
+add_executable(stick-curve-test
+    "${CMAKE_CURRENT_SOURCE_DIR}/stick_curve_test.cpp")
+target_include_directories(stick-curve-test PRIVATE "${PES17_RUNTIME}")
+add_test(NAME stick-curve COMMAND stick-curve-test)
+
 add_executable(input-pulses-test
     "${CMAKE_CURRENT_SOURCE_DIR}/input_pulses_test.cpp")
 target_include_directories(input-pulses-test PRIVATE "${PES17_RUNTIME}")

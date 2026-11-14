@@ -134,6 +134,18 @@ object NativeBridge {
         saturationScale: Float,
     )
 
+    /**
+     * The touch sticks' throw: the share of it that sends nothing, and the curve
+     * on what is left (below 1 reaches the edge sooner, above 1 is finer around
+     * the middle). Radial, so a diagonal stays a diagonal.
+     */
+    external fun nativeStickSettings(
+        leftDeadzone: Float,
+        leftCurve: Float,
+        rightDeadzone: Float,
+        rightCurve: Float,
+    )
+
     external fun nativePadState(
         user: Int,
         buttons: Int,
