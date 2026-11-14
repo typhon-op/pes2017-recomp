@@ -19,7 +19,10 @@
 #include "../input_merge.h"
 #include "../input_pulses.h"
 #include "../look_scale.h"
+#include "../skill_moves.h"
+#include "../skill_stick.h"
 #include "../stick_curve.h"
+#include "../stick_pulses.h"
 
 #include <algorithm>
 #include <atomic>
@@ -72,6 +75,17 @@ namespace
     // shape -- tricks are muscle memory, and this must not quietly retune them.
     stick::Shape g_leftStick{ 0.08f, 1.45f, 1.0f };
     stick::Shape g_rightStick{ 0.0f, 1.0f, 1.0f };
+
+    // ---- the skill stick --------------------------------------------------
+    // The right stick's directions, in whole guest frames. In flick mode the
+    // overlay reports travel from where the thumb landed rather than a position
+    // in the socket, and only the sequencer writes the stick: skill_stick.h is
+    // why a position cannot say "left, then right", stick_pulses.h is why the
+    // frames are counted rather than timed.
+    std::atomic<bool> g_skillFlick{ true };
+    std::mutex g_skillLock;
+    skill::Flick g_skill;
+    ::input::StickPulses g_skillPulses;
 
     int16_t ToAxis(float value)
     {
@@ -255,6 +269,77 @@ void android::input::SetStickSettings(float leftDeadzone, float leftCurve,
          left.deadzone, left.exponent, right.deadzone, right.exponent);
 }
 
+void android::input::SetSkillStick(bool flick)
+{
+    const bool was = g_skillFlick.exchange(flick, std::memory_order_relaxed);
+    if (!flick)
+    {
+        // Nothing of the flick may outlive the mode: a sequence left mid-way
+        // would keep writing the stick after the player went back to the
+        // absolute one.
+        std::lock_guard lock(g_skillLock);
+        g_skill.End();
+        g_skillPulses.Clear();
+    }
+    if (was != flick) LOGI("touch: the skill stick is %s", flick ? "a flick" : "the finger's position");
+}
+
+void android::input::SetSkillTravel(float dx, float dy)
+{
+    if (!g_skillFlick.load(std::memory_order_relaxed)) return;
+    // A played-back move owns the stick until its last frame. A thumb resting on
+    // the glass, or a stray touch, must not cancel it half way -- so the travel
+    // is not read at all, and the classifier is kept at "nothing engaged" so the
+    // gesture is taken from scratch once the move is over.
+    if (g_skillPulses.Playing())
+    {
+        std::lock_guard lock(g_skillLock);
+        g_skill.End();
+        return;
+    }
+    float x = 0.0f, y = 0.0f;
+    bool changed = false;
+    {
+        std::lock_guard lock(g_skillLock);
+        changed = g_skill.Feed(dx, dy, x, y, {});
+    }
+    // Only a new direction goes to the pad. Re-sending the one already showing
+    // would restart its dwell on every touch report, and a held direction would
+    // never settle.
+    if (changed) g_skillPulses.Set(ToStick(x), ToStick(y));
+}
+
+void android::input::EndSkillTouch()
+{
+    {
+        std::lock_guard lock(g_skillLock);
+        g_skill.End();
+    }
+    // Lifting the thumb ends the flick, but it does not end a move being played
+    // back: that runs to its last frame whatever the hand does.
+    if (g_skillPulses.Playing()) return;
+    // A direction that is still draining keeps its dwell; one that was never
+    // engaged leaves the sequencer idle and this does nothing.
+    g_skillPulses.Set(0, 0);
+}
+
+bool android::input::PlaySkill(int index)
+{
+    const skill::Move* move = skill::At(index);
+    if (!move)
+    {
+        // An index below zero is the app asking whether this runtime knows the
+        // palette at all, which is a yes/no rather than a mistake.
+        if (index >= 0)
+            LOGW("touch: no skill move %d; the palette and the runtime disagree", index);
+        return false;
+    }
+    const int taken = g_skillPulses.Play(move->steps, move->count);
+    LOGI("touch: skill '%s', %d steps,%s", move->id, taken,
+         move->leavesExitToPlayer ? " the left stick is the player's" : " right stick only");
+    return taken > 0;
+}
+
 void android::input::AddLook(float dx, float dy)
 {
     std::lock_guard lock(g_lookLock);
@@ -346,8 +431,17 @@ bool android::input::Poll(uint32_t user, Pad& out)
     bool any = false;
     if (user == 0)
     {
+        // One frame of the skill stick's directions, taken whether or not a
+        // physical pad also drives this player: the sequence has to advance at
+        // the title's rate, not at the rate of whichever hand moved last.
+        // `flick` is true only while there is something to impose, so a macro
+        // replaying the touch slot keeps the deflection it was recorded with.
+        std::int16_t skillX = 0, skillY = 0;
+        const bool flick = g_skillPulses.Sample(skillX, skillY);
+
         std::lock_guard lock(g_touch.lock);
         if (g_touch.connected) { out = g_touch.pad; any = true; }
+        if (flick) { out.rightX = skillX; out.rightY = skillY; }
     }
     if (HardwarePadEnabled())
     {

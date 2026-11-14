@@ -153,6 +153,48 @@ object NativeBridge {
         rightCurve: Float,
     )
 
+    /**
+     * The skill stick read as a flick: the direction is the thumb's travel from
+     * where it landed, quantised to eight, and written to the pad one guest
+     * frame at a time (runtime/skill_stick.h, runtime/stick_pulses.h). Off is
+     * the older stick that follows the finger's position exactly.
+     */
+    external fun nativeSkillStick(flick: Boolean)
+
+    /** The travel since the touch-down point, in throws; Y points up. */
+    external fun nativeSkillTouch(dx: Float, dy: Float)
+
+    /** The thumb lifted: the direction is let go after its dwell. */
+    external fun nativeSkillEnd()
+
+    /**
+     * One tap of the skill palette: play the move at [index] on the skill
+     * stick, to its last frame (runtime/skill_moves.h). The move owns the stick
+     * until then, so nothing the thumb does interrupts it. False when there is
+     * no such move.
+     */
+    external fun nativeSkillPlay(index: Int): Boolean
+
+    /**
+     * Whether the runtime beside this app answers the skill-stick calls.
+     *
+     * The Android build packages libpes17.so built elsewhere, and an older one
+     * will not have these symbols: calling one of them is an
+     * UnsatisfiedLinkError, which would take the whole touch pad -- and the app
+     * with it -- down at start-up. So the surface is asked once, and the skill
+     * stick and the palette are offered only when the answer is yes.
+     */
+    val skillStick: Boolean by lazy {
+        try {
+            nativeSkillStick(false)
+            nativeSkillEnd()
+            nativeSkillPlay(-1)
+            true
+        } catch (_: UnsatisfiedLinkError) {
+            false
+        }
+    }
+
     external fun nativePadState(
         user: Int,
         buttons: Int,

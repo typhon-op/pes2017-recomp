@@ -51,9 +51,14 @@ internal class TouchClaims {
         // A pointer cannot press twice without lifting; drop whatever it had,
         // so a lost ACTION_UP cannot leave a count that never comes back down.
         release(pointerId)
-        if (element.kind == ControlKind.STICK) {
+        // A stick deflects instead of holding a bit, and a skill palette button
+        // fires its move on the press and holds nothing either: its `value` is a
+        // move index, not a button mask, so it must never reach newPresses.
+        if (element.kind == ControlKind.STICK || element.kind == ControlKind.SKILL) {
             byPointer[pointerId] = Claim(element, holds = false)
-            stickOwners[element.id] = (stickOwners[element.id] ?: 0) + 1
+            if (element.kind == ControlKind.STICK) {
+                stickOwners[element.id] = (stickOwners[element.id] ?: 0) + 1
+            }
             return false
         }
         byPointer[pointerId] = Claim(element, holds = !element.toggle)

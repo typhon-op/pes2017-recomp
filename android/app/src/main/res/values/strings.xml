@@ -310,6 +310,8 @@
     <string name="gamepad_p2_hint">Touch controls stay player 1; the first physical controller drives player 2. Takes effect when a match is started.</string>
     <string name="gamepad_hint">Turn off to ignore controllers entirely. Some phones report an accessory as a gamepad with a stick that is not centred, which makes a player run on his own.</string>
     <string name="vibration">Vibration</string>
+    <string name="flick_skill_stick">Flick the skill stick</string>
+    <string name="flick_skill_stick_hint">Read feints from the flick of your thumb instead of its position on the stick. Eight directions, with a moment of nothing between them, so \"left, then right\" is two moves rather than one circle. Turn off for the older stick that follows the thumb exactly.</string>
     <string name="edit_controls_where">The on-screen pad is edited in the match: pause and choose \u201cEdit controls\u201d.</string>
     <string name="forget_install">Forget the game folder</string>
     <string name="forget_explained">The files stay on the phone; the app simply stops using them, and a new folder can be chosen. If the files are still in a place the app searches, it will find them again on its own.</string>

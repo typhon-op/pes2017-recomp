@@ -541,6 +541,31 @@ PES17_NATIVE(void, nativeStickSettings)(JNIEnv*, jobject, jfloat leftDeadzone, j
     android::input::SetStickSettings(leftDeadzone, leftCurve, rightDeadzone, rightCurve);
 }
 
+// The skill stick read as a flick (runtime/skill_stick.h): the travel from
+// where the thumb landed, quantised to eight directions and written to the pad
+// a guest frame at a time (runtime/stick_pulses.h).
+PES17_NATIVE(void, nativeSkillStick)(JNIEnv*, jobject, jboolean flick)
+{
+    android::input::SetSkillStick(flick == JNI_TRUE);
+}
+
+PES17_NATIVE(void, nativeSkillTouch)(JNIEnv*, jobject, jfloat dx, jfloat dy)
+{
+    android::input::SetSkillTravel(float(dx), float(dy));
+}
+
+PES17_NATIVE(void, nativeSkillEnd)(JNIEnv*, jobject)
+{
+    android::input::EndSkillTouch();
+}
+
+// One tap of the skill palette: the move at `index` is played on the skill
+// stick to its last frame, and nothing the thumb does interrupts it.
+PES17_NATIVE(jboolean, nativeSkillPlay)(JNIEnv*, jobject, jint index)
+{
+    return android::input::PlaySkill(int(index)) ? JNI_TRUE : JNI_FALSE;
+}
+
 PES17_NATIVE(void, nativePadState)(JNIEnv*, jobject, jint user, jint buttons, jint leftTrigger,
                                  jint rightTrigger, jfloat leftX, jfloat leftY, jfloat rightX,
                                  jfloat rightY)

@@ -155,6 +155,26 @@ namespace android::input
     void SetStickSettings(float leftDeadzone, float leftCurve,
                           float rightDeadzone, float rightCurve);
 
+    // The skill stick read as a flick (runtime/skill_stick.h): the direction is
+    // the thumb's travel from where it landed, quantised to eight, and written
+    // to the pad one guest frame at a time (runtime/stick_pulses.h) so an edge
+    // cannot fall between two polls. With `flick` off the older absolute stick
+    // is used and the two calls below do nothing.
+    void SetSkillStick(bool flick);
+    // The travel since the touch-down point, in throws: 1.0 is the edge of the
+    // socket, Y pointing up as the guest's does. Only a change of direction
+    // reaches the pad.
+    void SetSkillTravel(float dx, float dy);
+    // The thumb lifted: the direction is let go after its dwell.
+    void EndSkillTouch();
+
+    // One tap of the skill palette: play the move at `index` (runtime/skill_moves.h)
+    // on the skill stick, from its first frame to its last. The move owns the
+    // stick until then -- live travel is not read, and lifting the thumb does not
+    // end it -- so a stray touch cannot cancel it. False when there is no such
+    // move, which is what a build whose app and runtime disagree will say.
+    bool PlaySkill(int index);
+
     // From a physical pad. `user` is 0..3, as the console numbers them.
     // A state push is not a connection: only SetHardwarePadConnected says a pad
     // is there, so a slot the app has just disconnected cannot come back to

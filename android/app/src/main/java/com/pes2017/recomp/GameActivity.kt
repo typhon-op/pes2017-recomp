@@ -835,6 +835,11 @@ class GameActivity : AppCompatActivity(), NativeListener {
             prefs.stickDeadzone, prefs.stickCurve,
             prefs.rightStickDeadzone, prefs.rightStickCurve,
         )
+        // The skill stick's flick reading (runtime/skill_stick.h): on glass the
+        // finger is not a stick, so its directions come from travel from where
+        // it landed rather than from its position in the socket. A runtime built
+        // before the call existed says so once, and the stick stays absolute.
+        if (NativeBridge.skillStick) NativeBridge.nativeSkillStick(prefs.flickSkillStick)
         NativeBridge.nativePadEnabled(prefs.gamepadEnabled)
     }
 

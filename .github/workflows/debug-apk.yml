@@ -1,0 +1,78 @@
+name: Debug APK
+
+# A plain debug apk, signed with the debug key, for putting on a phone.
+#
+# Separate from android.yml on purpose: that one builds a *release* apk, insists
+# on the four production signing secrets, and verifies the permanent certificate
+# -- none of which a build for testing should need. Nothing here touches a
+# release, a tag or the store.
+#
+# `freebuff/**` is in the branch list because work on a feature branch is
+# exactly what wants an apk to try; `workflow_dispatch` is there for anything
+# else, including this branch after a rebase.
+on:
+  push:
+    branches:
+      - 'freebuff/**'
+  workflow_dispatch:
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # The app cannot be built from this tree alone: the recompiled guest code
+      # is made from the disc's executables and is in no repository, so there is
+      # nothing here to compile libpes17.so from. The release workflow packages
+      # the published engine for the same reason, and this one does exactly the
+      # same thing -- which also means an apk built here carries that engine, not
+      # one built from these sources. Say so in the artifact description rather
+      # than let it be discovered on a phone.
+      - name: Fetch the published native engine
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a"
+          curl -sL --retry 3 -o /tmp/upstream.apk \
+            "https://github.com/dzakyraf/pes2017-recomp/releases/download/0.2.0/pes2017-recomp-0.2.0.apk"
+          if [ ! -f /tmp/upstream.apk ]; then
+            echo "ERROR: could not download the reference apk with the native engine."
+            exit 1
+          fi
+          echo "843e276c2f86adc6057c0ed5288ab64110195342ac6bbeec1e6ce663b83ce1d6  /tmp/upstream.apk" \
+            | sha256sum -c - || { echo "ERROR: reference apk checksum mismatch!"; exit 1; }
+          unzip -j /tmp/upstream.apk "lib/arm64-v8a/*" -d "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/"
+          ls -lh "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/"
+
+      - name: Build debug APK
+        run: |
+          chmod +x android/gradlew
+          cd android
+          PREBUILT="$GITHUB_WORKSPACE/libpes17_prebuilt"
+          echo "Building debug apk with prebuiltNative=$PREBUILT"
+          ./gradlew :app:assembleDebug -PprebuiltNative="$PREBUILT" --stacktrace
+
+      - name: Check the APK carries the engine
+        run: |
+          APK=$(ls "$GITHUB_WORKSPACE"/android/app/build/outputs/apk/debug/*.apk | head -1)
+          echo "APK: $APK"
+          ls -lh "$APK"
+          unzip -l "$APK" | grep "lib/arm64-v8a/libpes17.so" \
+            || { echo "ERROR: libpes17.so missing from the apk -- it would install and die on launch."; exit 1; }
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: pes2017-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14

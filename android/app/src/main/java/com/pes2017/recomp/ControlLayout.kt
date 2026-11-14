@@ -35,6 +35,15 @@ enum class ControlKind {
      * travel as well.
      */
     SWIPE,
+
+    /**
+     * One tap, one skill: pressing it plays the move its `value` names
+     * (runtime/skill_moves.h) on the skill stick, so a feint that needs a
+     * two-part stick gesture is a thumb on a button. It holds no bit of its own
+     * and fires once, on the press; the runtime owns the stick until the move's
+     * last frame, so a second thumb cannot interrupt it.
+     */
+    SKILL,
 }
 
 /** When a control belongs on screen. */
@@ -304,6 +313,18 @@ class ControlLayout private constructor(
                     // The skill stick, left of the actions.
                     place("right_stick", ControlKind.STICK, 1, "RS", -250f, -170f, 100f, 0.40f),
 
+                    // The skill palette: one button per move, played on the skill
+                    // stick by the runtime. Hidden until the player turns it on,
+                    // as the swipe pad is, and shown only over the pitch, where a
+                    // move means anything. `value` is an index into
+                    // runtime/skill_moves.h, so the order here is the table's and
+                    // must not be shuffled.
+                    place("skill_double_touch", ControlKind.SKILL, 0, "D.TOUCH", -330f, -250f, 48f, 0.40f, visible = false, shownWhen = PhaseMask.MATCH),
+                    place("skill_roulette", ControlKind.SKILL, 1, "ROULETTE", -330f, -196f, 48f, 0.40f, visible = false, shownWhen = PhaseMask.MATCH),
+                    place("skill_rainbow", ControlKind.SKILL, 2, "RAINBOW", -330f, -142f, 48f, 0.40f, visible = false, shownWhen = PhaseMask.MATCH),
+                    place("skill_drag_back", ControlKind.SKILL, 3, "DRAG BK", -330f, -88f, 48f, 0.40f, visible = false, shownWhen = PhaseMask.MATCH),
+                    place("skill_body_feint", ControlKind.SKILL, 4, "BODY FNT", -330f, -34f, 48f, 0.40f, visible = false, shownWhen = PhaseMask.MATCH),
+
                     // Four-way swipes, hidden until the player binds a direction:
                     // an unbound swipe stays out of the way rather than
                     // duplicating an action button.
@@ -316,9 +337,12 @@ class ControlLayout private constructor(
                     place("dpad", ControlKind.DPAD, 0, "D-PAD", 90f, -215f, 110f, 0.40f,
                         shownWhen = PhaseMask.MENUS),
 
-                    // Stick clicks: kept for the editor, hidden until wanted.
+                    // Stick clicks: kept for the editor, hidden until wanted. R3
+                    // sits out of the skill palette's column, which it used to
+                    // share: two controls on one spot is a thumb that means one
+                    // and gets the other.
                     place("l3", ControlKind.BUTTON, NativeBridge.L3, "L3", 200f, -40f, 52f, visible = false),
-                    place("r3", ControlKind.BUTTON, NativeBridge.R3, "R3", -320f, -45f, 52f, visible = false),
+                    place("r3", ControlKind.BUTTON, NativeBridge.R3, "R3", -430f, -45f, 52f, visible = false),
 
                     // Menus have to be found at a glance in a football game.
                     place("start", ControlKind.BUTTON, NativeBridge.START, "START", centre + 60f, 37f, 54f, 0.75f),

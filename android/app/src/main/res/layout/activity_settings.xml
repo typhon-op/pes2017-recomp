@@ -501,6 +501,19 @@
                         android:layout_height="wrap_content"
                         android:text="@string/vibration" />
 
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/flick_skill_stick"
+                        style="@style/SettingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/flick_skill_stick" />
+
+                    <TextView
+                        style="@style/SettingHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/flick_skill_stick_hint" />
+
                     <TextView
                         style="@style/SettingLabel"
                         android:layout_width="match_parent"

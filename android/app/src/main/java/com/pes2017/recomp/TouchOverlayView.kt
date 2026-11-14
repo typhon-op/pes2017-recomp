@@ -88,6 +88,27 @@ class TouchOverlayView @JvmOverloads constructor(
     // the look area re-based the first one and the view jumped.
     private val lookPointers = HashMap<Int, FloatArray>()        // id -> last x, y
 
+    // The skill stick, read as a flick: the direction is the thumb's travel from
+    // where it landed, not its distance from the socket's centre. On glass the
+    // centre is only a point on a path, so a stick placed there can never say
+    // "left, then right" -- it says "round", and a Double Touch resolves as a
+    // Roulette. runtime/skill_stick.h has the whole argument.
+    private var skillPointer = -1
+    private var skillOriginX = 0f
+    private var skillOriginY = 0f
+
+    /**
+     * The flick reading, and only when this build's runtime has it. The apk
+     * packages a libpes17.so built elsewhere, and an older one has no
+     * skill-stick calls at all -- handing it the right stick would be a dead
+     * stick rather than a fix.
+     */
+    private val flicking get() = prefs.flickSkillStick && NativeBridge.skillStick
+
+    /** A palette button needs the runtime that plays moves; without it, it is not there. */
+    private fun available(element: ControlElement) =
+        element.kind != ControlKind.SKILL || NativeBridge.skillStick
+
     // A trigger stays down for a moment after the finger leaves. Lifting RT for
     // the beat it takes to tap a button used to drop the sprint on exactly the
     // frame the tap landed; 80 ms is longer than a tap and shorter than the
@@ -202,6 +223,7 @@ class TouchOverlayView @JvmOverloads constructor(
         val showAll = includeHidden || editing
         for (element in layout.elements) {
             if (element.kind == ControlKind.LOOK) continue
+            if (!available(element)) continue
             if (!showAll && !element.shownIn(gamePhase)) continue
             if (hit(element, x, y)) return element
         }
@@ -243,7 +265,11 @@ class TouchOverlayView @JvmOverloads constructor(
                 }
                 ControlKind.STICK -> {
                     val position = stickPositions[element.id]
-                    if (position != null) {
+                    // A flicked skill stick is written by the runtime, one guest
+                    // frame at a time (runtime/stick_pulses.h); an absolute
+                    // position beside it would fight the sequence.
+                    val flicked = element.value != 0 && flicking
+                    if (position != null && !flicked) {
                         if (element.value == 0) {
                             leftX += position[0]
                             leftY += position[1]
@@ -254,6 +280,7 @@ class TouchOverlayView @JvmOverloads constructor(
                     }
                 }
                 ControlKind.SWIPE -> Unit   // sent when the finger lifts, as a pulse
+                ControlKind.SKILL -> Unit   // fires once on the press, not as state
                 ControlKind.LOOK -> Unit    // sent as deltas, not as a stick
             }
         }
@@ -264,7 +291,11 @@ class TouchOverlayView @JvmOverloads constructor(
         val pressed = claims.takeNewPresses() or pendingSwipes
         pendingSwipes = 0
         // A macro is playing: the fingers are not heard, so a run repeats exactly.
-        if (Macro.playing) return
+        // A flick left over from before it started is let go for the same reason.
+        if (Macro.playing) {
+            if (NativeBridge.skillStick) NativeBridge.nativeSkillEnd()
+            return
+        }
         val lx = leftX.coerceIn(-1f, 1f); val ly = leftY.coerceIn(-1f, 1f)
         val rx = rightX.coerceIn(-1f, 1f); val ry = rightY.coerceIn(-1f, 1f)
         Macro.record(Macro.TOUCH, buttons, leftTrigger, rightTrigger, lx, ly, rx, ry)
@@ -283,10 +314,12 @@ class TouchOverlayView @JvmOverloads constructor(
         swipeClassifier.clear()
         pendingSwipes = 0
         lookPointers.clear()
+        skillPointer = -1
         // Everything up means everything: a trigger does not outlive the pad.
         triggerReleaseAt.clear()
         if (NativeBridge.isLoaded()) {
             NativeBridge.nativeLookEnd()
+            if (NativeBridge.skillStick) NativeBridge.nativeSkillEnd()
             pushState()
         }
         syncDpadSynthesis()
@@ -336,7 +369,20 @@ class TouchOverlayView @JvmOverloads constructor(
                     }
                     val element = claims.elementFor(id) ?: continue
                     when (element.kind) {
-                        ControlKind.STICK -> { moveStick(element, x, y); changed = true }
+                        ControlKind.STICK -> {
+                            if (id == skillPointer) {
+                                // Every sample between frames matters here too:
+                                // a flick that turns inside one batched event is
+                                // two directions to the title, not one.
+                                for (h in 0 until event.historySize) {
+                                    sendSkill(event.getHistoricalX(index, h), event.getHistoricalY(index, h))
+                                }
+                                sendSkill(x, y)
+                            } else {
+                                moveStick(element, x, y)
+                                changed = true
+                            }
+                        }
                         ControlKind.DPAD -> {
                             val arm = dpadArm(element, x, y)
                             if (dpadBits[id] != arm) { dpadBits[id] = arm; changed = true }
@@ -387,9 +433,24 @@ class TouchOverlayView @JvmOverloads constructor(
         // take it from the first, and the control stays down until both lift.
         claims.press(pointerId, element)
         when (element.kind) {
-            ControlKind.STICK -> moveStick(element, x, y)
+            ControlKind.STICK -> {
+                if (element.value != 0 && flicking) {
+                    // The flick is measured from here: wherever the thumb found
+                    // the glass is the origin, so there is no centre to hunt for
+                    // between one move and the next.
+                    skillPointer = pointerId
+                    skillOriginX = x
+                    skillOriginY = y
+                    NativeBridge.nativeSkillTouch(0f, 0f)
+                } else {
+                    moveStick(element, x, y)
+                }
+            }
             ControlKind.DPAD -> dpadBits[pointerId] = dpadArm(element, x, y)
             ControlKind.SWIPE -> swipeClassifier.begin(pointerId, x, y, SystemClock.uptimeMillis())
+            // One tap, one move: the runtime plays it on the skill stick and
+            // holds the stick until its last frame, so nothing here has to.
+            ControlKind.SKILL -> if (NativeBridge.skillStick) NativeBridge.nativeSkillPlay(element.value)
             else -> Unit
         }
         return true
@@ -417,8 +478,14 @@ class TouchOverlayView @JvmOverloads constructor(
         }
         // Another finger still on the stick keeps its deflection; the last one
         // to lift centres it.
-        if (released.element.kind == ControlKind.STICK && released.lastClaim) {
-            stickPositions.remove(released.element.id)
+        if (released.element.kind == ControlKind.STICK) {
+            if (released.lastClaim) stickPositions.remove(released.element.id)
+            // A flick belongs to the finger that made it, not to the control: a
+            // second thumb left on the stick must not inherit the gesture.
+            if (pointerId == skillPointer) {
+                skillPointer = -1
+                if (NativeBridge.skillStick) NativeBridge.nativeSkillEnd()
+            }
         }
         if (released.element.kind == ControlKind.TRIGGER && released.lastClaim) {
             val id = released.element.id
@@ -480,17 +547,44 @@ class TouchOverlayView @JvmOverloads constructor(
         if (dx != 0f || dy != 0f) NativeBridge.nativeLookDelta(dx, dy)
     }
 
+    /** The throw a stick is measured against: the travel the hand can see. */
+    private fun throwRadius(element: ControlElement) =
+        radius(element) * if (prefs.travelMatchesKnob) stickTravel else 1f
+
     private fun moveStick(element: ControlElement, x: Float, y: Float) {
         // The knob's own travel is the throw: pushing it to its rim is full
         // speed, which is the travel the hand can see. The longer throw is kept
         // for players who learned on it (Prefs.travelMatchesKnob).
-        val r = radius(element) * if (prefs.travelMatchesKnob) stickTravel else 1f
+        val r = throwRadius(element)
         var dx = (x - centreX(element)) / r
         // The guest's Y points up; the screen's points down.
         var dy = -(y - centreY(element)) / r
         val length = hypot(dx, dy)
         if (length > 1f) { dx /= length; dy /= length }
         stickPositions[element.id] = floatArrayOf(dx, dy)
+    }
+
+    /**
+     * One sample of a flicked skill stick: the travel from where the thumb
+     * landed, in throws. The direction is the runtime's to quantise, so that a
+     * finger, a macro and a test are all read the same way.
+     */
+    private fun sendSkill(x: Float, y: Float) {
+        if (!flicking) return
+        val element = claims.elementFor(skillPointer) ?: return
+        if (element.kind != ControlKind.STICK) return
+        val r = throwRadius(element)
+        var dx = (x - skillOriginX) / r
+        // The guest's Y points up; the screen's points down.
+        var dy = -(y - skillOriginY) / r
+        // A thumb can travel further than the socket is wide; the cap keeps the
+        // knob on its rim and the classifier's travel in range.
+        val length = hypot(dx, dy)
+        if (length > 1.5f) { dx = dx / length * 1.5f; dy = dy / length * 1.5f }
+        // The knob follows the flick, so the hand can see what it is doing.
+        stickPositions[element.id] = floatArrayOf(dx.coerceIn(-1f, 1f), dy.coerceIn(-1f, 1f))
+        NativeBridge.nativeSkillTouch(dx, dy)
+        invalidate()
     }
 
     // ---- editing ----------------------------------------------------------------
@@ -635,6 +729,9 @@ class TouchOverlayView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         for (element in layout.elements) {
+            // A palette button the runtime cannot play is not drawn at all: a
+            // control that does nothing is worse than one that is not there.
+            if (!available(element)) continue
             // In the editor everything is drawn, faded when it is not on screen
             // in play -- a control that belongs to the menus has to be findable
             // over the pitch.
@@ -646,7 +743,8 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.STICK -> drawStick(canvas, element, alpha, faded)
                 ControlKind.DPAD -> drawDpad(canvas, element, alpha, faded)
                 ControlKind.SWIPE -> drawSwipe(canvas, element, alpha, faded)
-                ControlKind.BUTTON, ControlKind.TRIGGER -> drawButton(canvas, element, alpha, faded)
+                ControlKind.BUTTON, ControlKind.TRIGGER, ControlKind.SKILL ->
+                    drawButton(canvas, element, alpha, faded)
             }
             if (editing && element === selected) drawSelection(canvas, element)
         }

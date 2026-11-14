@@ -333,6 +333,17 @@ class Prefs(context: Context) {
         set(value) = store.edit().putFloat(KEY_RIGHT_STICK_CURVE, value.coerceIn(0.7f, 2.5f)).apply()
 
     /**
+     * Read the skill stick as a flick: the direction is the thumb's travel from
+     * where it landed, quantised to eight, with a real neutral between flicks
+     * (runtime/skill_stick.h). A finger is not a stick, so the alternative -- the
+     * older absolute reading, where the finger's position in the socket is the
+     * deflection -- is the one that turns "left, then right" into a circle.
+     */
+    var flickSkillStick: Boolean
+        get() = store.getBoolean(KEY_FLICK_SKILL_STICK, true)
+        set(value) = store.edit().putBoolean(KEY_FLICK_SKILL_STICK, value).apply()
+
+    /**
      * Pushing the knob to the rim of its socket is full deflection, which is the
      * throw the hand can judge from the drawing. Off keeps the older, longer
      * throw, where the rim was only about two thirds of the stick's range.
@@ -449,6 +460,7 @@ class Prefs(context: Context) {
         private const val KEY_STICK_CURVE = "stickCurve"
         private const val KEY_RIGHT_STICK_DEADZONE = "rightStickDeadzone"
         private const val KEY_RIGHT_STICK_CURVE = "rightStickCurve"
+        private const val KEY_FLICK_SKILL_STICK = "flickSkillStick"
         private const val KEY_STICK_TRAVEL_KNOB = "stickTravelMatchesKnob"
         private const val KEY_DRIVER_DIR = "driverDirectory"
         private const val KEY_DRIVER_LIB = "driverLibrary"

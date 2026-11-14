@@ -103,6 +103,7 @@ class SettingsActivity : AppCompatActivity() {
         switch(R.id.touch, prefs.touchControls) { prefs.touchControls = it }
         switch(R.id.gamepad, prefs.gamepadEnabled) { prefs.gamepadEnabled = it }
         switch(R.id.vibration, prefs.vibration) { prefs.vibration = it }
+        switch(R.id.flick_skill_stick, prefs.flickSkillStick) { prefs.flickSkillStick = it }
         val buttonStyle: android.widget.RadioGroup = findViewById(R.id.button_style)
         buttonStyle.check(if (prefs.playStationButtons) R.id.button_style_playstation else R.id.button_style_xbox)
         buttonStyle.setOnCheckedChangeListener { _, id -> prefs.playStationButtons = id == R.id.button_style_playstation }

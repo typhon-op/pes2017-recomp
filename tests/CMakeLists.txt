@@ -185,3 +185,35 @@ target_include_directories(input-pulses-test PRIVATE "${PES17_RUNTIME}")
 find_package(Threads REQUIRED)
 target_link_libraries(input-pulses-test PRIVATE Threads::Threads)
 add_test(NAME input-pulses COMMAND input-pulses-test)
+
+# ---- the skill stick read as a flick ---------------------------------------
+# Directions taken from the travel from where the thumb landed, eight of them,
+# with a real neutral between (runtime/skill_stick.h). The last section drives
+# it and the sequencer together, because "left, then right" reaching the title
+# as two directions is a property of the pair. Header-only, no platform.
+add_executable(skill-stick-test
+    "${CMAKE_CURRENT_SOURCE_DIR}/skill_stick_test.cpp")
+target_include_directories(skill-stick-test PRIVATE "${PES17_RUNTIME}")
+add_test(NAME skill-stick COMMAND skill-stick-test)
+
+# ---- the skill stick's frame timing ----------------------------------------
+# A direction held for whole guest frames, two directions separated by a frame
+# of nothing, and a sequence that stops speaking once it has drained
+# (runtime/stick_pulses.h). Header-only; two threads do the reading and the
+# writing.
+add_executable(stick-pulses-test
+    "${CMAKE_CURRENT_SOURCE_DIR}/stick_pulses_test.cpp")
+target_include_directories(stick-pulses-test PRIVATE "${PES17_RUNTIME}")
+find_package(Threads REQUIRED)
+target_link_libraries(stick-pulses-test PRIVATE Threads::Threads)
+add_test(NAME stick-pulses COMMAND stick-pulses-test)
+
+# ---- the one-tap skill moves -----------------------------------------------
+# The palette's table (runtime/skill_moves.h) played through the real sequencer:
+# every move ends, a rotation stays continuous, a two-part feint keeps its gap,
+# a hold is held, and an index the app gets wrong is refused rather than read
+# past the end. Header-only.
+add_executable(skill-moves-test
+    "${CMAKE_CURRENT_SOURCE_DIR}/skill_moves_test.cpp")
+target_include_directories(skill-moves-test PRIVATE "${PES17_RUNTIME}")
+add_test(NAME skill-moves COMMAND skill-moves-test)
