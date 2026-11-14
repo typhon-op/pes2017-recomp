@@ -7,20 +7,43 @@ name: Debug APK
 # -- none of which a build for testing should need. Nothing here touches a
 # release, a tag or the store.
 #
-# `freebuff/**` is in the branch list because work on a feature branch is
-# exactly what wants an apk to try; `workflow_dispatch` is there for anything
-# else, including this branch after a rebase.
+# Triggers, and why they look like this:
+#
+#   * the feature branch is named first and exactly, then the pattern covers the
+#     rest of them. A branch filter is fnmatch-like: `*` stops at a slash and
+#     `**` crosses it, so `freebuff/**` does match `freebuff/<anything>`, but an
+#     exact entry costs nothing and removes the question.
+#   * `workflow_dispatch` is listed for running it by hand. Note that GitHub's
+#     "Run workflow" picker lists the workflows defined on the repository's
+#     *default* branch: until this file is also on that branch it can still be
+#     started by a push (as here) but it will not be offered in the picker.
+#   * nothing in this file can make a push start a run if the push itself was
+#     made with a token GitHub suppresses runs for, or if Actions are turned off
+#     for the repository. Both are repository settings, not workflow settings;
+#     the first step below prints the ref and sha so a missing run on the
+#     Actions tab can be told apart from a forgotten push.
 on:
   push:
     branches:
+      - 'freebuff/938b1b2d294d57d7251b2bb3'
       - 'freebuff/**'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   debug:
     runs-on: ubuntu-latest
 
     steps:
+      - name: What is being built
+        run: |
+          echo "ref:  $GITHUB_REF"
+          echo "sha:  $GITHUB_SHA"
+          echo "actor: $GITHUB_ACTOR"
+          echo "event: $GITHUB_EVENT_NAME"
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -37,8 +60,9 @@ jobs:
       # nothing here to compile libpes17.so from. The release workflow packages
       # the published engine for the same reason, and this one does exactly the
       # same thing -- which also means an apk built here carries that engine, not
-      # one built from these sources. Say so in the artifact description rather
-      # than let it be discovered on a phone.
+      # one built from these sources. The Kotlin still compiles against it, and
+      # the skill calls are probed at run time (NativeBridge.skillStick), so the
+      # app starts and simply offers no palette rather than crashing.
       - name: Fetch the published native engine
         run: |
           mkdir -p "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a"
