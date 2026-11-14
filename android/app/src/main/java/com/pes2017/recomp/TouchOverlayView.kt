@@ -208,12 +208,18 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.LOOK -> Unit   // sent as deltas, not as a stick
             }
         }
+        // A press that went down and up between two of the title's polls has no
+        // other way to be seen, so its bits wait in the bridge for the next
+        // poll. Taken before the macro check: a macro run drops the fingers,
+        // and with them the taps they made while it played.
+        val pressed = claims.takeNewPresses()
         // A macro is playing: the fingers are not heard, so a run repeats exactly.
         if (Macro.playing) return
         val lx = leftX.coerceIn(-1f, 1f); val ly = leftY.coerceIn(-1f, 1f)
         val rx = rightX.coerceIn(-1f, 1f); val ry = rightY.coerceIn(-1f, 1f)
         Macro.record(Macro.TOUCH, buttons, leftTrigger, rightTrigger, lx, ly, rx, ry)
         NativeBridge.nativeTouchState(buttons, leftTrigger, rightTrigger, lx, ly, rx, ry)
+        if (pressed != 0) NativeBridge.nativeTouchPulse(pressed)
     }
 
     /** Everything up: called when the pad is hidden, edited, or paused. */

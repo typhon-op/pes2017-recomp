@@ -159,3 +159,14 @@ add_executable(input-merge-test
     "${CMAKE_CURRENT_SOURCE_DIR}/input_merge_test.cpp")
 target_include_directories(input-merge-test PRIVATE "${PES17_RUNTIME}")
 add_test(NAME input-merge COMMAND input-merge-test)
+
+# ---- presses waiting for the title's poll ---------------------------------
+# A tap that begins and ends between two polls (runtime/input_pulses.h): the
+# bits are held, delivered once, and never lost against a poll on the guest
+# thread. Header-only.
+add_executable(input-pulses-test
+    "${CMAKE_CURRENT_SOURCE_DIR}/input_pulses_test.cpp")
+target_include_directories(input-pulses-test PRIVATE "${PES17_RUNTIME}")
+find_package(Threads REQUIRED)
+target_link_libraries(input-pulses-test PRIVATE Threads::Threads)
+add_test(NAME input-pulses COMMAND input-pulses-test)

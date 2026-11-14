@@ -489,6 +489,13 @@ PES17_NATIVE(void, nativeTouchState)(JNIEnv*, jobject, jint buttons, jint leftTr
     android::input::SetTouchPad(pad);
 }
 
+// A button that went down since the last state, from the overlay's press bits.
+// The poll carries it once; see AddTouchPulse.
+PES17_NATIVE(void, nativeTouchPulse)(JNIEnv*, jobject, jint buttons)
+{
+    android::input::AddTouchPulse(uint16_t(std::clamp(int(buttons), 0, 0xFFFF)));
+}
+
 PES17_NATIVE(void, nativeLookDelta)(JNIEnv*, jobject, jfloat dx, jfloat dy)
 {
     android::input::AddLook(float(dx), float(dy));

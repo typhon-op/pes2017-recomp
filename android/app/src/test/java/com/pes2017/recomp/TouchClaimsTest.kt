@@ -10,14 +10,26 @@ import org.junit.Test
  * The pointer bookkeeping behind the on-screen pad: a control is held while any
  * finger is on it, a stick keeps its deflection until the last finger lifts,
  * and a toggle is a tap rather than a hold.
+ *
+ * The press bits are the other half of it: holds are what the guest samples,
+ * presses are what it can miss, so every new press leaves a bit for the overlay
+ * to send as a pulse.
  */
 class TouchClaimsTest {
+
+    private companion object {
+        // The XInput bits these elements carry, as NativeBridge names them.
+        const val A = 0x1000
+        const val B = 0x2000
+        const val X = 0x4000
+    }
 
     private fun control(
         id: String = "a",
         kind: ControlKind = ControlKind.BUTTON,
+        value: Int = A,
         toggle: Boolean = false,
-    ) = ControlElement(id, kind, 0x1000, "A", 0.5f, 0.5f, 68f, toggle = toggle)
+    ) = ControlElement(id, kind, value, "A", 0.5f, 0.5f, 68f, toggle = toggle)
 
     @Test
     fun twoFingersOnOneButtonStayDownUntilBothLift() {
@@ -65,7 +77,7 @@ class TouchClaimsTest {
     @Test
     fun aToggleIsATapAndNotAHold() {
         val claims = TouchClaims()
-        val sprint = control("rb", toggle = true)
+        val sprint = control("rb", value = 0x0100, toggle = true)
 
         assertTrue(claims.press(1, sprint))
         assertTrue("a tap latches it", claims.isOn("rb"))
@@ -80,7 +92,7 @@ class TouchClaimsTest {
     @Test
     fun togglesSurviveClearMomentaryButNotClearAll() {
         val claims = TouchClaims()
-        claims.press(1, control("rb", toggle = true))
+        claims.press(1, control("rb", value = 0x0100, toggle = true))
         claims.release(1)
         claims.press(2, control())
 
@@ -95,7 +107,7 @@ class TouchClaimsTest {
     @Test
     fun twoFingersOnOneStickKeepItHeld() {
         val claims = TouchClaims()
-        val stick = control("stick", ControlKind.STICK)
+        val stick = control("stick", ControlKind.STICK, value = 0)
 
         claims.press(1, stick)
         claims.press(2, stick)
@@ -126,7 +138,7 @@ class TouchClaimsTest {
     fun elementForFollowsThePointer() {
         val claims = TouchClaims()
         val a = control("a")
-        val b = control("b")
+        val b = control("b", value = B)
 
         claims.press(4, a)
         claims.press(5, b)
@@ -136,5 +148,69 @@ class TouchClaimsTest {
 
         claims.release(4)
         assertNull(claims.elementFor(4))
+    }
+
+    // ---- the press bits the guest may otherwise miss ------------------------
+
+    @Test
+    fun everyPressLeavesItsBitForOneTake() {
+        val claims = TouchClaims()
+        val b = control("b", value = B)
+
+        claims.press(1, b)
+        assertEquals(B, claims.takeNewPresses())
+        assertEquals("a take forgets", 0, claims.takeNewPresses())
+
+        claims.release(1)
+        claims.press(2, b)
+        assertEquals(B, claims.takeNewPresses())
+    }
+
+    @Test
+    fun aSecondFingerOnAHeldButtonIsStillATap() {
+        val claims = TouchClaims()
+        val b = control("b", value = B)
+
+        claims.press(1, b)
+        assertEquals(B, claims.takeNewPresses())
+
+        // The thumb stays down; another finger taps the same button. The hold
+        // does not change, but the guest must still see a second press.
+        claims.press(2, b)
+        assertTrue(claims.isOn("b"))
+        assertEquals(B, claims.takeNewPresses())
+
+        claims.release(2)
+        assertTrue("the first finger still holds it", claims.isOn("b"))
+        assertEquals("letting go is not a press", 0, claims.takeNewPresses())
+    }
+
+    @Test
+    fun differentButtonsPulseTogether() {
+        val claims = TouchClaims()
+
+        claims.press(1, control("b", value = B))
+        claims.press(2, control("x", value = X))
+
+        assertEquals(B or X, claims.takeNewPresses())
+    }
+
+    @Test
+    fun sticksAndTogglesDoNotPulse() {
+        val claims = TouchClaims()
+
+        claims.press(1, control("stick", ControlKind.STICK, value = 0))
+        claims.press(2, control("rb", value = 0x0100, toggle = true))
+
+        assertEquals("neither a stick nor a latch is a button press", 0, claims.takeNewPresses())
+    }
+
+    @Test
+    fun clearMomentaryDropsAPressThatWasOnItsWay() {
+        val claims = TouchClaims()
+        claims.press(1, control("b", value = B))
+
+        claims.clearMomentary()
+        assertEquals(0, claims.takeNewPresses())
     }
 }

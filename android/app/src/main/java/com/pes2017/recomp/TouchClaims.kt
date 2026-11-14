@@ -10,6 +10,11 @@ package com.pes2017.recomp
  * the last finger on it lifts. Toggles are latched instead: a tap flips them
  * and no finger has to stay down.
  *
+ * A press is also counted separately from what is held: the guest samples the
+ * pad once a frame, so a tap that begins and ends between two samples would
+ * otherwise not exist. Every new press leaves its bit for [takeNewPresses],
+ * which the overlay sends as a pulse on top of the held state.
+ *
  * Kept out of [TouchOverlayView] and free of Android types, so the state
  * machine can be read and tested on its own (TouchClaimsTest) rather than only
  * by playing with two thumbs.
@@ -25,6 +30,7 @@ internal class TouchClaims {
     private val holds = HashMap<String, Int>()        // momentary buttons: element id -> fingers
     private val stickOwners = HashMap<String, Int>()  // sticks: element id -> fingers
     private val toggled = HashSet<String>()
+    private var newPresses = 0                       // button bits that went down since the last take
 
     fun elementFor(pointerId: Int): ControlElement? = byPointer[pointerId]?.element
 
@@ -55,8 +61,24 @@ internal class TouchClaims {
             if (!toggled.remove(element.id)) toggled.add(element.id)
         } else {
             holds[element.id] = (holds[element.id] ?: 0) + 1
+            // A press on a control another finger already holds is still a
+            // press: the holds merge, the tap must not. Triggers are left out
+            // -- they are held by their release grace instead, and their value
+            // is not a button bit.
+            if (element.kind == ControlKind.BUTTON) newPresses = newPresses or element.value
         }
         return true
+    }
+
+    /**
+     * The button bits that have gone down since the last call, and forgot them.
+     * The overlay sends these as a pulse beside the held state, so a tap shorter
+     * than the title's poll interval is still seen.
+     */
+    fun takeNewPresses(): Int {
+        val pressed = newPresses
+        newPresses = 0
+        return pressed
     }
 
     /** A finger lifted. Null when no finger was on that pointer id. */
@@ -84,6 +106,9 @@ internal class TouchClaims {
         byPointer.clear()
         holds.clear()
         stickOwners.clear()
+        // A press that was on its way to the guest is dropped with the holds:
+        // it belonged to a gesture the pad has just let go of.
+        newPresses = 0
     }
 
     /** Every finger up and every toggle let go: the editor uses this. */

@@ -107,6 +107,14 @@ object NativeBridge {
         rightY: Float,
     )
 
+    /**
+     * Buttons that went down since the last state. The title samples the pad
+     * once a frame, so a tap that begins and ends between two samples would
+     * otherwise not exist; the runtime holds these bits until the next poll can
+     * carry them, then forgets them.
+     */
+    external fun nativeTouchPulse(buttons: Int)
+
     /** A flick of the look area, in pixels; the runtime turns it into a stick. */
     external fun nativeLookDelta(dx: Float, dy: Float)
     external fun nativeLookEnd()

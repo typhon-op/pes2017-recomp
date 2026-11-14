@@ -17,6 +17,7 @@
 #include "android.h"
 #include "../log.h"
 #include "../input_merge.h"
+#include "../input_pulses.h"
 #include "../look_scale.h"
 
 #include <algorithm>
@@ -38,6 +39,8 @@ namespace
     };
 
     Source g_touch;                     // the on-screen controls
+    // Presses from the on-screen controls that no poll has carried yet.
+    ::input::PressPulses g_touchPulses;
     Source g_hardware[4];               // physical pads, as the app numbers them
     std::atomic<bool> g_hardwareEnabled{ true };
 
@@ -171,6 +174,11 @@ void android::input::SetTouchPad(const Pad& pad)
     g_touch.connected = true;
 }
 
+void android::input::AddTouchPulse(uint16_t bits)
+{
+    g_touchPulses.Add(bits);
+}
+
 void android::input::AddLook(float dx, float dy)
 {
     std::lock_guard lock(g_lookLock);
@@ -281,6 +289,9 @@ bool android::input::Poll(uint32_t user, Pad& out)
     if (user == 0)
     {
         UpdateLook(out);
+        // A tap that began and ended between two polls rides on this state,
+        // once: what is held is the state, what was tapped is the pulse.
+        out.buttons = uint16_t(out.buttons | g_touchPulses.Take());
         any = true;
     }
     return any;

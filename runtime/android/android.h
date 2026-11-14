@@ -119,6 +119,12 @@ namespace android::input
     // From the touch controls: an absolute state, recomputed by the overlay
     // on every touch event, so a lost event cannot leave a button held.
     void SetTouchPad(const Pad& pad);
+    // From the touch controls: the buttons that went down since the last state,
+    // for a tap shorter than the title's poll interval. Poll takes them once and
+    // clears them, so a press that is over before the next poll is still seen
+    // exactly once. Triggers are not carried this way: their release grace keeps
+    // them up long enough instead.
+    void AddTouchPulse(uint16_t bits);
     // The look area's movement since the last call, in view pixels.
     void AddLook(float dx, float dy);
     // The finger left the look area: the stick centres at once.
