@@ -123,8 +123,12 @@ namespace android::input
     void AddLook(float dx, float dy);
     // The finger left the look area: the stick centres at once.
     void ClearLook();
+    // `saturationScale` is a feel multiplier: 1.0 is the default (a brisk flick
+    // across a 1080p phone), below it turns slower and above it faster.
+    // runtime/look_scale.h is what turns it into the pixels a second the look
+    // stick integrates, so a caller never passes a pixel figure.
     void SetLookSettings(float sensitivityX, float sensitivityY, float smoothing,
-                         bool invertY, float saturationPixelsPerSecond);
+                         bool invertY, float saturationScale);
 
     // From a physical pad. `user` is 0..3, as the console numbers them.
     void SetHardwarePad(uint32_t user, const Pad& pad);

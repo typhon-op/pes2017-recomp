@@ -16,6 +16,7 @@
 
 #include "android.h"
 #include "../log.h"
+#include "../look_scale.h"
 
 #include <algorithm>
 #include <atomic>
@@ -50,8 +51,9 @@ namespace
     float g_smoothing = 0.35f;                      // 0 raw, 0.9 very smooth
     bool g_invertY = false;
     // The speed, in pixels a second, at which the stick reaches full tilt.
-    // 2200 px/s is a brisk flick across a 1080p phone held in landscape.
-    float g_saturation = 2200.0f;
+    // The base is a brisk flick across a 1080p phone held in landscape; the
+    // app's slider scales it (look_scale.h).
+    float g_saturationPixelsPerSecond = look::kBasePixelsPerSecond;
 
     int16_t ToAxis(float value)
     {
@@ -101,7 +103,7 @@ namespace
             }
             else
             {
-                const float saturation = std::max(g_saturation, 100.0f);
+                const float saturation = std::max(g_saturationPixelsPerSecond, 100.0f);
                 float x = float(speedX) * g_sensitivityX / saturation;
                 float y = float(speedY) * g_sensitivityY / saturation;
                 // Smoothing takes the stairs out of a finger reported at 120 Hz
@@ -174,14 +176,21 @@ void android::input::ClearLook()
 }
 
 void android::input::SetLookSettings(float sensitivityX, float sensitivityY, float smoothing,
-                                     bool invertY, float saturationPixelsPerSecond)
+                                     bool invertY, float saturationScale)
 {
     std::lock_guard lock(g_lookLock);
     g_sensitivityX = std::clamp(sensitivityX, 0.05f, 10.0f);
     g_sensitivityY = std::clamp(sensitivityY, 0.05f, 10.0f);
     g_smoothing = std::clamp(smoothing, 0.0f, 0.9f);
     g_invertY = invertY;
-    if (saturationPixelsPerSecond > 100.0f) g_saturation = saturationPixelsPerSecond;
+    // The app's slider is a multiplier. It used to arrive here as if it were a
+    // speed in pixels a second and was dropped below 100, so the setting never
+    // did anything; look_scale.h is the one place that converts it now.
+    g_saturationPixelsPerSecond = look::SaturationPixelsPerSecond(saturationScale);
+    if (saturationScale > look::kMaxScale)
+        LOGW("input: look saturation %.1f looks like pixels/second, not a %.1f..%.1f multiplier",
+             saturationScale, look::kMinScale, look::kMaxScale);
+    LOGI("input: look saturation %.2f -> %.0f px/s", saturationScale, g_saturationPixelsPerSecond);
 }
 
 void android::input::SetHardwarePad(uint32_t user, const Pad& pad)

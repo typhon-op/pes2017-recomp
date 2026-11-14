@@ -814,6 +814,8 @@ class GameActivity : AppCompatActivity(), NativeListener {
         // under 500 MB/s, which made a texture as slow to read as to convert.
         NativeBridge.nativeSetOption("PES17_TEXTURE_STORE", "${filesDir.absolutePath}/texture_store.bin")
 
+        // lookSaturation is a feel multiplier, not a pixel speed: 1.0 is the
+        // default, and runtime/look_scale.h does the conversion.
         NativeBridge.nativeLookSettings(
             prefs.lookSensitivityX, prefs.lookSensitivityY,
             prefs.lookSmoothing, prefs.invertLook, prefs.lookSaturation,

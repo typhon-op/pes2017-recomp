@@ -131,3 +131,13 @@ add_executable(dynamic-scale-test
     "${CMAKE_CURRENT_SOURCE_DIR}/dynamic_scale_test.cpp")
 target_include_directories(dynamic-scale-test PRIVATE "${PES17_RUNTIME}")
 add_test(NAME dynamic-scale COMMAND dynamic-scale-test)
+
+# ---- the look area's saturation --------------------------------------------
+# The app's slider is a feel multiplier while the input layer integrates pixels
+# a second (runtime/look_scale.h): 1.0 has to stay the value the touch pad was
+# tuned with, the range has to be monotonic, and what it is handed has to be
+# clamped. Header-only, so it needs nothing from the platform.
+add_executable(look-scale-test
+    "${CMAKE_CURRENT_SOURCE_DIR}/look_scale_test.cpp")
+target_include_directories(look-scale-test PRIVATE "${PES17_RUNTIME}")
+add_test(NAME look-scale COMMAND look-scale-test)

@@ -500,10 +500,10 @@ PES17_NATIVE(void, nativeLookEnd)(JNIEnv*, jobject)
 }
 
 PES17_NATIVE(void, nativeLookSettings)(JNIEnv*, jobject, jfloat sensitivityX, jfloat sensitivityY,
-                                     jfloat smoothing, jboolean invertY, jfloat saturation)
+                                     jfloat smoothing, jboolean invertY, jfloat saturationScale)
 {
     android::input::SetLookSettings(sensitivityX, sensitivityY, smoothing, invertY == JNI_TRUE,
-                                    saturation);
+                                    saturationScale);
 }
 
 PES17_NATIVE(void, nativePadState)(JNIEnv*, jobject, jint user, jint buttons, jint leftTrigger,

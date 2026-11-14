@@ -110,12 +110,20 @@ object NativeBridge {
     /** A flick of the look area, in pixels; the runtime turns it into a stick. */
     external fun nativeLookDelta(dx: Float, dy: Float)
     external fun nativeLookEnd()
+
+    /**
+     * How far a flick has to travel before the look stick reaches its edge.
+     * [saturationScale] is a feel multiplier (0.3..3.0): 1.0 is the default,
+     * below it turns slower and above it faster. The runtime converts it to
+     * pixels a second (runtime/look_scale.h), so no caller passes a pixel
+     * figure here.
+     */
     external fun nativeLookSettings(
         sensitivityX: Float,
         sensitivityY: Float,
         smoothing: Float,
         invertY: Boolean,
-        saturation: Float,
+        saturationScale: Float,
     )
 
     external fun nativePadState(
