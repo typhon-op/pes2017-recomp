@@ -75,11 +75,11 @@ class TouchOverlayView @JvmOverloads constructor(
     // ---- what is being touched right now ----------------------------------
     // A pointer is claimed by one control for as long as it is down, so a
     // thumb that slides off the fire button keeps firing -- which is what
-    // every phone shooter does, and what a player expects.
-    private val claims = HashMap<Int, ControlElement>()
+    // every phone shooter does, and what a player expects. The claims are
+    // counted (TouchClaims): two fingers on one button hold it between them,
+    // and it is only let go when the last of them lifts.
+    private val claims = TouchClaims()
     private val stickPositions = HashMap<String, FloatArray>()   // id -> normalised x, y
-    private val held = HashSet<String>()
-    private val toggled = HashSet<String>()
     private var lookPointer = -1
     private var lookLastX = 0f
     private var lookLastY = 0f
@@ -187,7 +187,7 @@ class TouchOverlayView @JvmOverloads constructor(
 
         for (element in layout.elements) {
             if (!element.visible) continue
-            val on = held.contains(element.id) || toggled.contains(element.id)
+            val on = claims.isOn(element.id)
             when (element.kind) {
                 ControlKind.BUTTON -> if (on) buttons = buttons or element.value
                 ControlKind.TRIGGER -> if (on) {
@@ -218,13 +218,11 @@ class TouchOverlayView @JvmOverloads constructor(
 
     /** Everything up: called when the pad is hidden, edited, or paused. */
     fun releaseEverything() {
-        claims.clear()
         stickPositions.clear()
-        held.clear()
         // Toggles survive a pause -- a player who was aiming down sights
         // before the phone rang is still aiming when they come back -- but
         // not the editor, which would otherwise leave a bit stuck down.
-        if (editing) toggled.clear()
+        if (editing) claims.clearAll() else claims.clearMomentary()
         lookPointer = -1
         if (NativeBridge.isLoaded()) {
             NativeBridge.nativeLookEnd()
@@ -263,7 +261,7 @@ class TouchOverlayView @JvmOverloads constructor(
                         sendLook(x, y)
                         continue
                     }
-                    val element = claims[id] ?: continue
+                    val element = claims.elementFor(id) ?: continue
                     when (element.kind) {
                         ControlKind.STICK -> { moveStick(element, x, y); changed = true }
                         else -> Unit
@@ -307,18 +305,10 @@ class TouchOverlayView @JvmOverloads constructor(
             return false
         }
         triggerHaptic()
-        claims[pointerId] = element
-        when (element.kind) {
-            ControlKind.STICK -> moveStick(element, x, y)
-            ControlKind.BUTTON, ControlKind.TRIGGER -> {
-                if (element.toggle) {
-                    if (!toggled.remove(element.id)) toggled.add(element.id)
-                } else {
-                    held.add(element.id)
-                }
-            }
-            ControlKind.LOOK -> Unit
-        }
+        // Recorded, not assigned: a second finger on the same control must not
+        // take it from the first, and the control stays down until both lift.
+        claims.press(pointerId, element)
+        if (element.kind == ControlKind.STICK) moveStick(element, x, y)
         return true
     }
 
@@ -328,10 +318,11 @@ class TouchOverlayView @JvmOverloads constructor(
             NativeBridge.nativeLookEnd()
             return false
         }
-        val element = claims.remove(pointerId) ?: return false
-        when (element.kind) {
-            ControlKind.STICK -> stickPositions.remove(element.id)
-            else -> held.remove(element.id)
+        val released = claims.release(pointerId) ?: return false
+        // Another finger still on the stick keeps its deflection; the last one
+        // to lift centres it.
+        if (released.element.kind == ControlKind.STICK && released.lastClaim) {
+            stickPositions.remove(released.element.id)
         }
         return true
     }
@@ -514,8 +505,7 @@ class TouchOverlayView @JvmOverloads constructor(
         else Color.argb(a, 235, 238, 242)
     }
 
-    private fun isOn(element: ControlElement): Boolean =
-        held.contains(element.id) || toggled.contains(element.id)
+    private fun isOn(element: ControlElement): Boolean = claims.isOn(element.id)
 
     companion object {
         // The Xbox 360 pad colours, because the game's own prompts use them
@@ -684,7 +674,7 @@ class TouchOverlayView @JvmOverloads constructor(
             text.color = Color.WHITE
             canvas.drawText(label, cx, cy - (text.descent() + text.ascent()) * 0.5f, text)
 
-            if (element.toggle && toggled.contains(element.id)) {
+            if (element.toggle && claims.isToggled(element.id)) {
                 fill.color = Color.argb(255, 56, 189, 248)
                 canvas.drawCircle(cx, cy - r * 0.55f, 3.5f * density, fill)
             }
