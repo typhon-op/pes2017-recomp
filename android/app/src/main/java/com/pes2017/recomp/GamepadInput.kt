@@ -1,5 +1,6 @@
 package com.pes2017.recomp
 
+import android.util.Log
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -22,17 +23,27 @@ class GamepadInput {
 
     private var enabled = true
 
+    /** Said in the log when the count changes, so a slot that should not be
+     *  connected shows up there rather than as a mystery second player. */
+    private var reportedPads = 0
+
     /** First player slot a physical pad takes; 1 leaves slot 0 to the touch controls. */
     var firstSlot = 0
         set(value) {
             val v = value.coerceIn(0, 1)
             if (field == v) return
             field = v
-            // Every pad is let go and numbered again from the new base.
+            // Every pad is let go and numbered again from the new base. A state
+            // push does not make a slot connected (runtime/android/input.cpp),
+            // so the last state goes out before the disconnect, and only for
+            // slots that really have a device on them.
             for (slot in 0 until 4) {
-                if (slots.containsValue(slot)) NativeBridge.nativePadConnected(slot, false)
+                val had = slots.containsValue(slot)
                 buttons[slot] = 0; axes[slot].fill(0f); triggers[slot].fill(0)
-                push(slot)
+                if (had) {
+                    push(slot)
+                    NativeBridge.nativePadConnected(slot, false)
+                }
             }
             slots.clear()
             if (enabled) refreshDevices()
@@ -47,19 +58,21 @@ class GamepadInput {
     fun setEnabled(value: Boolean) {
         if (enabled == value) return
         enabled = value
-        NativeBridge.nativePadEnabled(value)
         if (!value) {
-            // Everything let go, or whatever was held stays held forever.
+            // Everything let go, or whatever was held stays held forever. Only
+            // the slots with a device on them: a state push is not what makes
+            // a slot connected.
             for (slot in 0 until 4) {
+                if (!slots.containsValue(slot)) continue
                 buttons[slot] = 0
                 axes[slot].fill(0f)
                 triggers[slot][0] = 0
                 triggers[slot][1] = 0
                 push(slot)
             }
-        } else {
-            refreshDevices()
         }
+        NativeBridge.nativePadEnabled(value)
+        if (value) refreshDevices()
     }
 
     fun isEnabled(): Boolean = enabled
@@ -100,6 +113,15 @@ class GamepadInput {
             triggers[slot][1] = 0
             NativeBridge.nativePadConnected(slot, false)
         }
+        reportPads()
+    }
+
+    /** The number of pads the app believes in, said once whenever it changes. */
+    private fun reportPads() {
+        val count = slots.size
+        if (count == reportedPads) return
+        reportedPads = count
+        Log.i(TAG, "input: $count pad(s) connected")
     }
 
     fun hasAnyPad(): Boolean = slots.isNotEmpty()
@@ -221,6 +243,10 @@ class GamepadInput {
             slot, buttons[slot], triggers[slot][0], triggers[slot][1],
             axes[slot][0], axes[slot][1], axes[slot][2], axes[slot][3],
         )
+    }
+
+    private companion object {
+        const val TAG = "PES17.Input"
     }
 
     private fun bitFor(keyCode: Int): Int = when (keyCode) {

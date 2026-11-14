@@ -197,8 +197,11 @@ void android::input::SetHardwarePad(uint32_t user, const Pad& pad)
 {
     if (user >= 4) return;
     std::lock_guard lock(g_hardware[user].lock);
+    // State only. Only SetHardwarePadConnected says a pad is there; letting a
+    // push imply it made a slot the app had just disconnected come straight
+    // back with the all-zero state it was let go with, and the title could then
+    // see four controllers where there was one.
     g_hardware[user].pad = pad;
-    g_hardware[user].connected = true;
 }
 
 void android::input::SetHardwarePadConnected(uint32_t user, bool connected)

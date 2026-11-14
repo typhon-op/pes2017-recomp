@@ -131,6 +131,9 @@ namespace android::input
                          bool invertY, float saturationScale);
 
     // From a physical pad. `user` is 0..3, as the console numbers them.
+    // A state push is not a connection: only SetHardwarePadConnected says a pad
+    // is there, so a slot the app has just disconnected cannot come back to
+    // life with the zero state it was let go with.
     void SetHardwarePad(uint32_t user, const Pad& pad);
     void SetHardwarePadConnected(uint32_t user, bool connected);
     // The player can switch physical pads off entirely (a pad left plugged in
