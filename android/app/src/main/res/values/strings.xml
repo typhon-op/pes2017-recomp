@@ -358,4 +358,13 @@
     <string name="capture_share">Share</string>
     <string name="capture_saved">Saved: captures/%1$s. Tell Claude its name.</string>
     <string name="capture_failed">Capture failed: %1$s</string>
+
+    <!-- Swipe control bindings -->
+    <string name="swipe_bindings">Swipe directions</string>
+    <string name="swipe_direction">What should this swipe send?</string>
+    <string name="swipe_up">Up</string>
+    <string name="swipe_down">Down</string>
+    <string name="swipe_left">Left</string>
+    <string name="swipe_right">Right</string>
+    <string name="button_none">Nothing</string>
 </resources>

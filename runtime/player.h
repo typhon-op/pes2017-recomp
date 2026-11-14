@@ -19,6 +19,13 @@ namespace player
         float yaw = 0, pitch = 0;
     };
 
+    // Whether the title has a match running: Unknown when this build has no
+    // addresses for the title's client states (title.h still holds its
+    // placeholders), because then there is nothing to read and a guess would be
+    // worse than saying so. The app's phase listener follows this.
+    enum class Presence { Unknown, Menus, Match };
+    Presence NowRunning();
+
     // What the autopilot wants pressed this poll: A, and Up only when asked for
     // on the team selection (PES17_TEAM_UP); see DismissMenus. Left and Fire (the
     // right trigger) only where a recorded route says the player did so.

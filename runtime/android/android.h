@@ -119,6 +119,16 @@ namespace android::input
     // From the touch controls: an absolute state, recomputed by the overlay
     // on every touch event, so a lost event cannot leave a button held.
     void SetTouchPad(const Pad& pad);
+    // What the title is doing, as the runtime can tell (0 unknown, 1 menus,
+    // 2 match). The app shows the controls that belong to each: a d-pad over the
+    // menus, nothing extra over the pitch. Sent only when it changes.
+    void SetGamePhase(uint8_t phase);
+    // Set by the app while its layout has a d-pad on screen. The left stick then
+    // stops standing in for one, so the guest is not given the same four bits
+    // from two places at once.
+    void SetDpadSynthesis(bool enabled);
+    bool DpadSynthesis();
+
     // From the touch controls: the buttons that went down since the last state,
     // for a tap shorter than the title's poll interval. Poll takes them once and
     // clears them, so a press that is over before the next poll is still seen

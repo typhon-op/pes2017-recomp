@@ -20,6 +20,50 @@ enum class ControlKind {
 
     /** The look area: a region where dragging turns the view. */
     LOOK,
+
+    /**
+     * Four directions from one socket, as a cross: the arm nearest the thumb is
+     * held while it stays there. The menus are navigated with it, and the stick
+     * stands in for it in a match, so this is off the pitch by default.
+     */
+    DPAD,
+
+    /**
+     * A flick in one of four directions, read when the finger lifts. It holds no
+     * bit of its own, so a swipe sends exactly one command -- putting the
+     * gesture on an action button would send that button's bit for the whole
+     * travel as well.
+     */
+    SWIPE,
+}
+
+/** When a control belongs on screen. */
+enum class PhaseMask {
+    ALWAYS,
+    /** The title's menus, including while it loads. */
+    MENUS,
+    /** A match in progress. */
+    MATCH,
+}
+
+/**
+ * What the title is doing, as the runtime reports it. [STARTING] and [UNKNOWN]
+ * keep the menus' controls: a build that cannot tell says nothing, and hiding a
+ * d-pad because of a guess would be worse than leaving it where the player put
+ * it.
+ */
+enum class GamePhase {
+    UNKNOWN,
+    MENUS,
+    MATCH,
+    ;
+
+    /** Whether a control marked [mask] is on screen in this phase. */
+    fun shows(mask: PhaseMask): Boolean = when (mask) {
+        PhaseMask.ALWAYS -> true
+        PhaseMask.MENUS -> this != GamePhase.MATCH
+        PhaseMask.MATCH -> this == GamePhase.MATCH
+    }
 }
 
 /**
@@ -45,7 +89,21 @@ data class ControlElement(
     val sub: String = "",
     /** What it does without the ball -- defending -- drawn smaller beneath. */
     val sub2: String = "",
-)
+    /** Which of the title's screens it belongs to. */
+    var shownWhen: PhaseMask = PhaseMask.ALWAYS,
+    // What a SWIPE sends for each direction. 0 is "nothing", which is how a
+    // fresh pad starts: a swipe that fired something unasked would be a
+    // surprise, and every bit is one tap away in the editor.
+    var swipeUp: Int = 0,
+    var swipeDown: Int = 0,
+    var swipeLeft: Int = 0,
+    var swipeRight: Int = 0,
+    /** What a touch on it sends when it was not a swipe at all. */
+    var swipeTap: Int = 0,
+) {
+    /** Whether it is on screen at all: the player's switch and the phase, both. */
+    fun shownIn(phase: GamePhase): Boolean = visible && phase.shows(shownWhen)
+}
 
 /**
  * The whole on-screen pad: what it is, where it came from, and how it is
@@ -85,6 +143,13 @@ class ControlLayout private constructor(
             item.put("alpha", element.alpha.toDouble())
             item.put("visible", element.visible)
             item.put("toggle", element.toggle)
+            item.put("when", element.shownWhen.name)
+            if (element.swipeUp != 0 || element.swipeDown != 0 ||
+                element.swipeLeft != 0 || element.swipeRight != 0 || element.swipeTap != 0
+            ) {
+                item.put("swipes", JSONArray(listOf(element.swipeUp, element.swipeDown,
+                    element.swipeLeft, element.swipeRight, element.swipeTap)))
+            }
             array.put(item)
         }
         val root = JSONObject()
@@ -160,6 +225,19 @@ class ControlLayout private constructor(
                         .toFloat().coerceIn(0.05f, 1f)
                     element.visible = item.optBoolean("visible", element.visible)
                     element.toggle = item.optBoolean("toggle", element.toggle)
+                    // Optional: a layout written before phases existed leaves the
+                    // element where it always was, and the version stays put so
+                    // nobody loses their pad over one new field.
+                    element.shownWhen = runCatching {
+                        PhaseMask.valueOf(item.optString("when", element.shownWhen.name))
+                    }.getOrDefault(element.shownWhen)
+                    item.optJSONArray("swipes")?.let { swipes ->
+                        element.swipeUp = swipes.optInt(0, element.swipeUp)
+                        element.swipeDown = swipes.optInt(1, element.swipeDown)
+                        element.swipeLeft = swipes.optInt(2, element.swipeLeft)
+                        element.swipeRight = swipes.optInt(3, element.swipeRight)
+                        element.swipeTap = swipes.optInt(4, element.swipeTap)
+                    }
                 }
             } catch (_: Throwable) {
                 return defaults(widthDp, heightDp)
@@ -197,10 +275,11 @@ class ControlLayout private constructor(
             fun place(
                 id: String, kind: ControlKind, value: Int, label: String,
                 x: Float, y: Float, size: Float, alpha: Float = 0.45f, visible: Boolean = true,
+                shownWhen: PhaseMask = PhaseMask.ALWAYS,
             ) = ControlElement(
                 id, kind, value, label,
                 (if (x >= 0f) x else w + x) / w, (if (y >= 0f) y else h + y) / h,
-                size, alpha, visible,
+                size, alpha, visible, shownWhen = shownWhen,
             )
 
             val centre = w / 2f
@@ -224,6 +303,18 @@ class ControlLayout private constructor(
 
                     // The skill stick, left of the actions.
                     place("right_stick", ControlKind.STICK, 1, "RS", -250f, -170f, 100f, 0.40f),
+
+                    // Four-way swipes, hidden until the player binds a direction:
+                    // an unbound swipe stays out of the way rather than
+                    // duplicating an action button.
+                    place("swipe", ControlKind.SWIPE, 0, "SWIPE", -215f, -52f, 96f, 0.40f, visible = false),
+
+                    // The menus' d-pad, above where the left thumb rests. It is
+                    // on screen only while the title is in its menus (the app's
+                    // phase listener), because over the pitch the stick already
+                    // stands in for it.
+                    place("dpad", ControlKind.DPAD, 0, "D-PAD", 90f, -215f, 110f, 0.40f,
+                        shownWhen = PhaseMask.MENUS),
 
                     // Stick clicks: kept for the editor, hidden until wanted.
                     place("l3", ControlKind.BUTTON, NativeBridge.L3, "L3", 200f, -40f, 52f, visible = false),

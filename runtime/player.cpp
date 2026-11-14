@@ -857,3 +857,23 @@ void player::Report()
          g.escapes, g.arrived ? " (arrived)" : "");
 }
 #endif
+
+// Outside the diagnostics gate: the app's phase listener asks this in a release
+// build too, because which controls are on screen follows it. One read of the
+// guest's player state, sampled by the caller (game_phase.h) -- not a per-frame
+// question.
+player::Presence player::NowRunning()
+{
+#if T_DATA_ClientStates != 0 && T_CLIENT_VALID != 0
+    const uint32_t client = *GuestPtr<be32>(T_DATA_ClientStates);
+    if (!client) return Presence::Menus;
+    // The field the title's own viewpos checks before printing anything: zero
+    // until there is a player.
+    return *GuestPtr<be32>(client + T_CLIENT_VALID) ? Presence::Match : Presence::Menus;
+#else
+    // title.h still holds placeholders for the client states (docs/PORTING.md),
+    // so there is nothing to read. Saying "unknown" keeps the app's own layout
+    // rules rather than calling every screen a menu.
+    return Presence::Unknown;
+#endif
+}

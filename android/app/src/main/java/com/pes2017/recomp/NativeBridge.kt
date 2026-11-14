@@ -115,6 +115,13 @@ object NativeBridge {
      */
     external fun nativeTouchPulse(buttons: Int)
 
+    /**
+     * Whether the runtime may let the left stick stand in for the d-pad. The app
+     * turns it off while its own d-pad is on screen, so the guest is not given the
+     * same four bits from two places at once.
+     */
+    external fun nativeDpadSynthesis(enabled: Boolean)
+
     /** A flick of the look area, in pixels; the runtime turns it into a stick. */
     external fun nativeLookDelta(dx: Float, dy: Float)
     external fun nativeLookEnd()
@@ -224,4 +231,10 @@ interface NativeListener {
 
     /** The title wants text (a name): show a dialog with the keyboard, answer with nativeKeyboardResult. */
     fun onKeyboard(title: String, description: String, initial: String, maxLength: Int)
+
+    /**
+     * What the title is doing, only when it changes: one of [GamePhase]. The
+     * controls marked for a phase come and go with it.
+     */
+    fun onGamePhase(phase: Int)
 }

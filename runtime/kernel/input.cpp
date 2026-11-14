@@ -20,7 +20,9 @@
 
 #ifdef PES17_ANDROID
 #include "../android/android.h"
+#include "../game_phase.h"
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #endif
 
@@ -488,8 +490,35 @@ PPC_FUNC(__imp__XamInputGetState)
                               ::input::kDpadLeft == android::input::kDpadLeft &&
                               ::input::kDpadRight == android::input::kDpadRight,
                           "input_stick_arrows.h must use XInput's d-pad bits");
+            // What the title is doing, for the app's phase listener. Whether
+            // the player entity exists is the one signal this build has, and it
+            // is a guest read, so it is sampled (game_phase.h) rather than asked
+            // every frame. A set piece reads as a match: telling those apart
+            // needs a hook into the title's state machine, which this build does
+            // not have.
+            static ::phase::Tracker phaseTracker;
+            static ::phase::Phase reportedPhase = ::phase::Phase::Unknown;
+            const double nowSeconds = std::chrono::duration<double>(
+                std::chrono::steady_clock::now().time_since_epoch()).count();
+            if (phaseTracker.Due(nowSeconds))
+            {
+                const ::player::Presence presence = ::player::NowRunning();
+                const ::phase::Phase observed = phaseTracker.Observe(
+                    presence != ::player::Presence::Unknown,
+                    presence == ::player::Presence::Match, nowSeconds);
+                if (observed != reportedPhase)
+                {
+                    reportedPhase = observed;
+                    LOGI("input: the title is %s",
+                         observed == ::phase::Phase::Match ? "in a match" : "in its menus");
+                    android::input::SetGamePhase(uint8_t(observed));
+                }
+            }
+
             static const bool noArrows = diag::Flag("PES17_NO_TOUCH_DPAD");
-            if (!noArrows)
+            // The app turns the stand-in off while its own d-pad is on screen,
+            // so the guest is not handed two sources for the same four bits.
+            if (!noArrows && android::input::DpadSynthesis())
             {
                 static ::input::ArrowLatch arrows;
                 const bool hadAny = arrows.Any();

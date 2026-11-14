@@ -164,6 +164,13 @@ add_test(NAME input-merge COMMAND input-merge-test)
 # A tap that begins and ends between two polls (runtime/input_pulses.h): the
 # bits are held, delivered once, and never lost against a poll on the guest
 # thread. Header-only.
+# ---- what the title is doing -----------------------------------------------
+# Menus or a match, sampled (runtime/game_phase.h). Header-only.
+add_executable(game-phase-test
+    "${CMAKE_CURRENT_SOURCE_DIR}/game_phase_test.cpp")
+target_include_directories(game-phase-test PRIVATE "${PES17_RUNTIME}")
+add_test(NAME game-phase COMMAND game-phase-test)
+
 # ---- the touch stick's throw -----------------------------------------------
 # A radial deadzone and a curve on what is left (runtime/stick_curve.h), with
 # the direction of the push preserved. Header-only, no platform.

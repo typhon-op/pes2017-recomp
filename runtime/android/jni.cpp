@@ -58,6 +58,7 @@ namespace android::detail
     std::string LogTail();
 }
 namespace android::input::detail { void SetRumbleSink(void (*sink)(uint32_t, uint16_t, uint16_t)); }
+namespace android::input::detail { void SetPhaseSink(void (*sink)(uint8_t)); }
 
 namespace
 {
@@ -69,6 +70,7 @@ namespace
     jmethodID g_onRumble = nullptr;
     jmethodID g_onStatus = nullptr;
     jmethodID g_onKeyboard = nullptr;
+    jmethodID g_onGamePhase = nullptr;
     std::mutex g_keyboardLock;
     std::function<void(bool, const std::string&)> g_keyboardDone;
 
@@ -136,6 +138,17 @@ namespace
         JNIEnv* env = Env();
         if (!env) return;
         env->CallVoidMethod(g_listener, g_onRumble, jint(user), jint(low), jint(high));
+        if (env->ExceptionCheck()) env->ExceptionClear();
+    }
+
+    // What the title is doing, on a change: the app shows the controls that
+    // belong to the menus and hides them over the pitch.
+    void PhaseSink(uint8_t phase)
+    {
+        if (!g_listener || !g_onGamePhase) return;
+        JNIEnv* env = Env();
+        if (!env) return;
+        env->CallVoidMethod(g_listener, g_onGamePhase, jint(phase));
         if (env->ExceptionCheck()) env->ExceptionClear();
     }
 
@@ -263,10 +276,12 @@ PES17_NATIVE(jboolean, nativeInit)(JNIEnv* env, jobject, jstring filesDir, jstri
         g_onRumble = env->GetMethodID(type, "onRumble", "(III)V");
         g_onStatus = env->GetMethodID(type, "onStatus", "(Ljava/lang/String;)V");
         g_onKeyboard = env->GetMethodID(type, "onKeyboard", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V");
+        g_onGamePhase = env->GetMethodID(type, "onGamePhase", "(I)V");
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteLocalRef(type);
     }
     android::input::detail::SetRumbleSink(RumbleSink);
+    android::input::detail::SetPhaseSink(PhaseSink);
 
     // A log per process. The launcher and the run are separate processes
     // and both used to open the same file: whichever started second wiped
@@ -494,6 +509,13 @@ PES17_NATIVE(void, nativeTouchState)(JNIEnv*, jobject, jint buttons, jint leftTr
 PES17_NATIVE(void, nativeTouchPulse)(JNIEnv*, jobject, jint buttons)
 {
     android::input::AddTouchPulse(uint16_t(std::clamp(int(buttons), 0, 0xFFFF)));
+}
+
+// The app's layout has (or has not) a d-pad on screen: while it does, the left
+// stick must not also be standing in for one.
+PES17_NATIVE(void, nativeDpadSynthesis)(JNIEnv*, jobject, jboolean enabled)
+{
+    android::input::SetDpadSynthesis(enabled == JNI_TRUE);
 }
 
 PES17_NATIVE(void, nativeLookDelta)(JNIEnv*, jobject, jfloat dx, jfloat dy)

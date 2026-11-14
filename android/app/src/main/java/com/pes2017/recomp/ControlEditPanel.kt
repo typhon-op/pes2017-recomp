@@ -51,7 +51,7 @@ class ControlEditPanel(
     private val resetOne: Button = view.findViewById(R.id.edit_reset_one)
 
     /** Reset this / Reset all / Done: top right, on screen for the whole edit. */
-    private val actions: View = LinearLayout(activity).apply {
+    private val actions: LinearLayout = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         val dp = activity.resources.displayMetrics.density
         setPadding((4 * dp).roundToInt(), (4 * dp).roundToInt(), (4 * dp).roundToInt(), (4 * dp).roundToInt())
@@ -66,11 +66,25 @@ class ControlEditPanel(
             ).apply { marginStart = (6 * dp).roundToInt() })
         }
     }
+    /** Shown only while a swipe control is selected: what each direction sends. */
+    private val swipes: Button = Button(activity).apply {
+        setText(R.string.swipe_bindings)
+        textSize = 12f
+        minWidth = 0
+        minimumWidth = 0
+        visibility = View.GONE
+        setOnClickListener { showSwipeBindings() }
+    }
+
     private var current: ControlElement? = null
     private var attached = false
     private var atTop = false
 
     init {
+        val dp = activity.resources.displayMetrics.density
+        actions.addView(swipes, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { marginStart = (6 * dp).roundToInt() })
         size.max = 100
         opacity.max = 100
         size.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -143,6 +157,79 @@ class ControlEditPanel(
 
     private fun save() = overlay.layout.save(activity)
 
+    // ---- what a swipe sends -------------------------------------------------
+
+    private fun showSwipeBindings() {
+        val element = current ?: return
+        val directions = intArrayOf(R.string.swipe_up, R.string.swipe_down,
+            R.string.swipe_left, R.string.swipe_right)
+        val labels = Array(directions.size) { index ->
+            activity.getString(directions[index]) + ": " + bitName(swipeBinding(element, index))
+        }
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.swipe_bindings)
+            .setItems(labels) { _, which -> pickSwipeBit(element, which) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun pickSwipeBit(element: ControlElement, direction: Int) {
+        val options = intArrayOf(0, NativeBridge.A, NativeBridge.B, NativeBridge.X, NativeBridge.Y,
+            NativeBridge.LB, NativeBridge.RB, NativeBridge.START, NativeBridge.BACK,
+            NativeBridge.L3, NativeBridge.R3, NativeBridge.UP, NativeBridge.DOWN,
+            NativeBridge.LEFT, NativeBridge.RIGHT)
+        val labels = Array(options.size) { bitName(options[it]) }
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.swipe_direction)
+            .setItems(labels) { _, which ->
+                setSwipeBinding(element, direction, options[which])
+                // Shown straight away: an unbound swipe stays hidden, and a
+                // player who has just bound one expects to see it.
+                if (options[which] != 0 && !element.visible) element.visible = true
+                overlay.refresh()
+                show(element)
+                save()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /** 0 up, 1 down, 2 left, 3 right: the order the dialog lists them in. */
+    private fun swipeBinding(element: ControlElement, direction: Int): Int = when (direction) {
+        0 -> element.swipeUp
+        1 -> element.swipeDown
+        2 -> element.swipeLeft
+        else -> element.swipeRight
+    }
+
+    private fun setSwipeBinding(element: ControlElement, direction: Int, bit: Int) {
+        when (direction) {
+            0 -> element.swipeUp = bit
+            1 -> element.swipeDown = bit
+            2 -> element.swipeLeft = bit
+            else -> element.swipeRight = bit
+        }
+    }
+
+    /** The name printed for a pad bit, as the console's own face names mark them. */
+    private fun bitName(bit: Int): String = when (bit) {
+        0 -> activity.getString(R.string.button_none)
+        NativeBridge.A -> "A"
+        NativeBridge.B -> "B"
+        NativeBridge.X -> "X"
+        NativeBridge.Y -> "Y"
+        NativeBridge.LB -> "LB"
+        NativeBridge.RB -> "RB"
+        NativeBridge.START -> "START"
+        NativeBridge.BACK -> "BACK"
+        NativeBridge.L3 -> "L3"
+        NativeBridge.R3 -> "R3"
+        NativeBridge.UP -> "D-PAD UP"
+        NativeBridge.DOWN -> "D-PAD DOWN"
+        NativeBridge.LEFT -> "D-PAD LEFT"
+        else -> "D-PAD RIGHT"
+    }
+
     fun attach() {
         if (attached) return
         root.addView(view, params(top = false))
@@ -184,6 +271,7 @@ class ControlEditPanel(
         view.visibility = if (element == null) View.GONE else View.VISIBLE
         idle.visibility = if (element == null) View.VISIBLE else View.GONE
         resetOne.isEnabled = element != null
+        if (element == null) swipes.visibility = View.GONE
         val wantTop = element != null && element.yFrac > 0.55f
         if (attached && wantTop != atTop) {
             view.layoutParams = params(wantTop)
@@ -198,6 +286,7 @@ class ControlEditPanel(
             return
         }
         title.text = activity.getString(R.string.edit_selected, ControlLayout.labelFor(element, overlay.playStation))
+        swipes.visibility = if (element.kind == ControlKind.SWIPE) View.VISIBLE else View.GONE
         size.isEnabled = true
         opacity.isEnabled = true
         visible.isEnabled = true

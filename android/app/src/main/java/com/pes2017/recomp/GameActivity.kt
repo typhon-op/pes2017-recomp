@@ -1443,6 +1443,15 @@ class GameActivity : AppCompatActivity(), NativeListener {
         }
     }
 
+    override fun onGamePhase(phase: Int) {
+        // The runtime calls this from its input thread, at most twice a second
+        // and only when the answer changes, so this is not a per-frame hop.
+        handler.post {
+            if (isFinishing) return@post
+            overlay.gamePhase = GamePhase.entries.getOrNull(phase) ?: GamePhase.UNKNOWN
+        }
+    }
+
     override fun onStatus(text: String) {
         handler.post {
             if (isFinishing) return@post

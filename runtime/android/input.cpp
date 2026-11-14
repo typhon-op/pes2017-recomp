@@ -42,6 +42,9 @@ namespace
     Source g_touch;                     // the on-screen controls
     // Presses from the on-screen controls that no poll has carried yet.
     ::input::PressPulses g_touchPulses;
+    // Whether the left stick may stand in for the d-pad. The app turns this off
+    // while its own d-pad is on screen.
+    std::atomic<bool> g_dpadSynthesis{ true };
     Source g_hardware[4];               // physical pads, as the app numbers them
     std::atomic<bool> g_hardwareEnabled{ true };
 
@@ -184,11 +187,14 @@ namespace
 
     // Set by jni.cpp so a motor can reach the app.
     void (*g_rumble)(uint32_t user, uint16_t low, uint16_t high) = nullptr;
+    // Set by jni.cpp so a change of what the title is doing can reach the app.
+    void (*g_phaseSink)(uint8_t phase) = nullptr;
 }
 
 namespace android::input::detail
 {
     void SetRumbleSink(void (*sink)(uint32_t, uint16_t, uint16_t)) { g_rumble = sink; }
+    void SetPhaseSink(void (*sink)(uint8_t phase)) { g_phaseSink = sink; }
 }
 
 void android::input::SetTouchPad(const Pad& pad)
@@ -213,6 +219,25 @@ void android::input::SetTouchPad(const Pad& pad)
 void android::input::AddTouchPulse(uint16_t bits)
 {
     g_touchPulses.Add(bits);
+}
+
+void android::input::SetGamePhase(uint8_t phase)
+{
+    // Only on a change: the caller samples twice a second, and crossing into
+    // Java for the same answer is work for no reason.
+    static std::atomic<uint8_t> last{ 0xFF };
+    if (last.exchange(phase, std::memory_order_relaxed) == phase) return;
+    if (g_phaseSink) g_phaseSink(phase);
+}
+
+void android::input::SetDpadSynthesis(bool enabled)
+{
+    g_dpadSynthesis.store(enabled, std::memory_order_relaxed);
+}
+
+bool android::input::DpadSynthesis()
+{
+    return g_dpadSynthesis.load(std::memory_order_relaxed);
 }
 
 void android::input::SetStickSettings(float leftDeadzone, float leftCurve,

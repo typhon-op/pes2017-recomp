@@ -13,6 +13,7 @@ import android.util.AttributeSet
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
+import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
@@ -94,6 +95,28 @@ class TouchOverlayView @JvmOverloads constructor(
     private val triggerGraceMs = 80L
     private val triggerReleaseAt = HashMap<String, Long>()        // id -> uptime it lets go
 
+    // A d-pad arm is a hold like a button, but it can change without the finger
+    // lifting: sliding from up to right is one gesture and two states.
+    private val dpadBits = HashMap<Int, Int>()                    // pointer id -> arms held
+
+    // A swipe is read when the finger lifts and sent as one pulse: it has no bit
+    // to hold, and a flick is over before the title's next poll anyway.
+    private val swipeClassifier = SwipeClassifier(minTravelPx = 18f * density)
+    private var pendingSwipes = 0
+
+    /**
+     * What the title is doing, as the runtime reports it. Controls marked for a
+     * phase come and go with it; one that is about to leave the screen is let go
+     * first, so a menu cannot keep a direction held into a match.
+     */
+    var gamePhase: GamePhase = GamePhase.UNKNOWN
+        set(value) {
+            if (field == value) return
+            field = value
+            releaseEverything()
+            invalidate()
+        }
+
     // ---- editing -----------------------------------------------------------
     private var dragPointer = -1
     private var dragElement: ControlElement? = null
@@ -174,14 +197,17 @@ class TouchOverlayView @JvmOverloads constructor(
 
     /** Buttons first, the look area last: it sits under everything. */
     private fun elementAt(x: Float, y: Float, includeHidden: Boolean = false): ControlElement? {
+        // The editor sees everything, whatever the title is doing: a control
+        // that is not on screen right now still has to be movable.
+        val showAll = includeHidden || editing
         for (element in layout.elements) {
             if (element.kind == ControlKind.LOOK) continue
-            if (!element.visible && !includeHidden) continue
+            if (!showAll && !element.shownIn(gamePhase)) continue
             if (hit(element, x, y)) return element
         }
         for (element in layout.elements) {
             if (element.kind != ControlKind.LOOK) continue
-            if (!element.visible && !includeHidden) continue
+            if (!showAll && !element.shownIn(gamePhase)) continue
             if (hit(element, x, y)) return element
         }
         return null
@@ -204,10 +230,11 @@ class TouchOverlayView @JvmOverloads constructor(
         triggerReleaseAt.entries.removeAll { it.value <= now }
 
         for (element in layout.elements) {
-            if (!element.visible) continue
+            if (!element.shownIn(gamePhase)) continue
             val on = claims.isOn(element.id)
             when (element.kind) {
                 ControlKind.BUTTON -> if (on) buttons = buttons or element.value
+                ControlKind.DPAD -> buttons = buttons or dpadMaskFor(element)
                 ControlKind.TRIGGER -> {
                     val grace = triggerReleaseAt[element.id]
                     if (on || (grace != null && now < grace)) {
@@ -226,14 +253,16 @@ class TouchOverlayView @JvmOverloads constructor(
                         }
                     }
                 }
-                ControlKind.LOOK -> Unit   // sent as deltas, not as a stick
+                ControlKind.SWIPE -> Unit   // sent when the finger lifts, as a pulse
+                ControlKind.LOOK -> Unit    // sent as deltas, not as a stick
             }
         }
         // A press that went down and up between two of the title's polls has no
         // other way to be seen, so its bits wait in the bridge for the next
         // poll. Taken before the macro check: a macro run drops the fingers,
         // and with them the taps they made while it played.
-        val pressed = claims.takeNewPresses()
+        val pressed = claims.takeNewPresses() or pendingSwipes
+        pendingSwipes = 0
         // A macro is playing: the fingers are not heard, so a run repeats exactly.
         if (Macro.playing) return
         val lx = leftX.coerceIn(-1f, 1f); val ly = leftY.coerceIn(-1f, 1f)
@@ -250,6 +279,9 @@ class TouchOverlayView @JvmOverloads constructor(
         // before the phone rang is still aiming when they come back -- but
         // not the editor, which would otherwise leave a bit stuck down.
         if (editing) claims.clearAll() else claims.clearMomentary()
+        dpadBits.clear()
+        swipeClassifier.clear()
+        pendingSwipes = 0
         lookPointers.clear()
         // Everything up means everything: a trigger does not outlive the pad.
         triggerReleaseAt.clear()
@@ -257,7 +289,19 @@ class TouchOverlayView @JvmOverloads constructor(
             NativeBridge.nativeLookEnd()
             pushState()
         }
+        syncDpadSynthesis()
         invalidate()
+    }
+
+    /**
+     * The stick stands in for the d-pad only while no d-pad of the player's own
+     * is on screen: the same four bits from two places is how a menu ends up
+     * scrolling twice per press.
+     */
+    private fun syncDpadSynthesis() {
+        if (!NativeBridge.isLoaded()) return
+        val onScreen = layout.elements.any { it.kind == ControlKind.DPAD && it.shownIn(gamePhase) }
+        NativeBridge.nativeDpadSynthesis(!onScreen)
     }
 
     // ---- touches --------------------------------------------------------------
@@ -293,6 +337,11 @@ class TouchOverlayView @JvmOverloads constructor(
                     val element = claims.elementFor(id) ?: continue
                     when (element.kind) {
                         ControlKind.STICK -> { moveStick(element, x, y); changed = true }
+                        ControlKind.DPAD -> {
+                            val arm = dpadArm(element, x, y)
+                            if (dpadBits[id] != arm) { dpadBits[id] = arm; changed = true }
+                        }
+                        ControlKind.SWIPE -> swipeClassifier.move(id, x, y)
                         else -> Unit
                     }
                 }
@@ -337,7 +386,12 @@ class TouchOverlayView @JvmOverloads constructor(
         // Recorded, not assigned: a second finger on the same control must not
         // take it from the first, and the control stays down until both lift.
         claims.press(pointerId, element)
-        if (element.kind == ControlKind.STICK) moveStick(element, x, y)
+        when (element.kind) {
+            ControlKind.STICK -> moveStick(element, x, y)
+            ControlKind.DPAD -> dpadBits[pointerId] = dpadArm(element, x, y)
+            ControlKind.SWIPE -> swipeClassifier.begin(pointerId, x, y, SystemClock.uptimeMillis())
+            else -> Unit
+        }
         return true
     }
 
@@ -348,6 +402,19 @@ class TouchOverlayView @JvmOverloads constructor(
             return false
         }
         val released = claims.release(pointerId) ?: return false
+        dpadBits.remove(pointerId)
+        if (released.element.kind == ControlKind.SWIPE) {
+            // One gesture, one bit. Another finger still on the patch keeps its
+            // own gesture, but this one is over and must not fire on top of it.
+            val direction = if (released.lastClaim) {
+                swipeClassifier.end(pointerId, SystemClock.uptimeMillis())
+            } else {
+                swipeClassifier.cancel(pointerId)
+                Swipe.NONE
+            }
+            val bit = released.element.swipeBit(direction)
+            if (bit != 0) pendingSwipes = pendingSwipes or bit
+        }
         // Another finger still on the stick keeps its deflection; the last one
         // to lift centres it.
         if (released.element.kind == ControlKind.STICK && released.lastClaim) {
@@ -367,6 +434,41 @@ class TouchOverlayView @JvmOverloads constructor(
             }, triggerGraceMs)
         }
         return true
+    }
+
+    /**
+     * Which arm of a d-pad a touch is on, or 0 in its middle. The nearer axis
+     * wins, so a thumb between two arms goes the way it is actually leaning
+     * rather than whichever arm was tested first.
+     */
+    private fun dpadArm(element: ControlElement, x: Float, y: Float): Int {
+        val dx = x - centreX(element)
+        val dy = y - centreY(element)
+        if (hypot(dx, dy) < radius(element) * 0.30f) return 0
+        return if (abs(dx) > abs(dy)) {
+            if (dx > 0f) NativeBridge.RIGHT else NativeBridge.LEFT
+        } else {
+            if (dy > 0f) NativeBridge.DOWN else NativeBridge.UP
+        }
+    }
+
+    /** What this control sends for a direction, as the editor bound it. */
+    private fun ControlElement.swipeBit(direction: Swipe): Int = when (direction) {
+        Swipe.UP -> swipeUp
+        Swipe.DOWN -> swipeDown
+        Swipe.LEFT -> swipeLeft
+        Swipe.RIGHT -> swipeRight
+        // A touch that was not a swipe; unbound unless the player asked for it.
+        Swipe.NONE -> swipeTap
+    }
+
+    /** The arms every finger on this d-pad is holding. */
+    private fun dpadMaskFor(element: ControlElement): Int {
+        var bits = 0
+        for ((pointerId, arm) in dpadBits) {
+            if (claims.elementFor(pointerId)?.id == element.id) bits = bits or arm
+        }
+        return bits
     }
 
     private fun sendLook(pointerId: Int, x: Float, y: Float) {
@@ -533,12 +635,17 @@ class TouchOverlayView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         for (element in layout.elements) {
-            if (!element.visible && !editing) continue
-            val faded = editing && !element.visible
+            // In the editor everything is drawn, faded when it is not on screen
+            // in play -- a control that belongs to the menus has to be findable
+            // over the pitch.
+            if (!editing && !element.shownIn(gamePhase)) continue
+            val faded = editing && !element.shownIn(gamePhase)
             val alpha = if (editing) max(0.28f, element.alpha) else element.alpha
             when (element.kind) {
                 ControlKind.LOOK -> drawLook(canvas, element, faded)
                 ControlKind.STICK -> drawStick(canvas, element, alpha, faded)
+                ControlKind.DPAD -> drawDpad(canvas, element, alpha, faded)
+                ControlKind.SWIPE -> drawSwipe(canvas, element, alpha, faded)
                 ControlKind.BUTTON, ControlKind.TRIGGER -> drawButton(canvas, element, alpha, faded)
             }
             if (editing && element === selected) drawSelection(canvas, element)
@@ -916,6 +1023,80 @@ class TouchOverlayView @JvmOverloads constructor(
         canvas.drawCircle(knobX - dotOffset, knobY, dotRadius, dimplePaint)
         // Right dot
         canvas.drawCircle(knobX + dotOffset, knobY, dotRadius, dimplePaint)
+    }
+
+    /**
+     * A cross of four arms that light while they are held. One socket rather than
+     * four buttons: a d-pad is aimed at, not clicked, and the thumb stays on it
+     * while a menu scrolls.
+     */
+    private fun drawDpad(canvas: Canvas, element: ControlElement, alpha: Float, faded: Boolean) {
+        val r = radius(element)
+        val cx = centreX(element)
+        val cy = centreY(element)
+        val fadeFactor = if (faded) 0.45f else 1f
+        val held = dpadMaskFor(element)
+
+        fill.color = Color.argb((alpha * fadeFactor * 75).toInt().coerceIn(0, 255), 16, 20, 26)
+        canvas.drawCircle(cx, cy, r, fill)
+        stroke.color = Color.argb((alpha * fadeFactor * 130).toInt().coerceIn(0, 255), 45, 55, 70)
+        stroke.strokeWidth = max(1.5f, r * 0.035f)
+        canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+
+        val length = r * 0.72f
+        notchPaint.strokeWidth = max(6f, r * 0.22f)
+        for (arm in intArrayOf(NativeBridge.UP, NativeBridge.DOWN, NativeBridge.LEFT, NativeBridge.RIGHT)) {
+            val on = (held and arm) != 0
+            val level = if (on) 220 else 120
+            notchPaint.color = Color.argb((alpha * fadeFactor * level).toInt().coerceIn(0, 255), 235, 238, 242)
+            when (arm) {
+                NativeBridge.UP -> canvas.drawLine(cx, cy, cx, cy - length, notchPaint)
+                NativeBridge.DOWN -> canvas.drawLine(cx, cy, cx, cy + length, notchPaint)
+                NativeBridge.LEFT -> canvas.drawLine(cx, cy, cx - length, cy, notchPaint)
+                else -> canvas.drawLine(cx, cy, cx + length, cy, notchPaint)
+            }
+        }
+
+        // The middle is where the thumb rests, not a fifth direction.
+        fill.color = Color.argb((alpha * fadeFactor * 150).toInt().coerceIn(0, 255), 40, 48, 60)
+        canvas.drawCircle(cx, cy, r * 0.16f, fill)
+    }
+
+    /**
+     * The swipe patch: a ring of four chevrons. It has no held state to light up,
+     * because by the time a direction could be drawn the flick is already over;
+     * the ring says what the control is for and nothing more.
+     */
+    private fun drawSwipe(canvas: Canvas, element: ControlElement, alpha: Float, faded: Boolean) {
+        val r = radius(element)
+        val cx = centreX(element)
+        val cy = centreY(element)
+        val fade = if (faded) 0.45f else 1f
+
+        fill.color = Color.argb((alpha * fade * 45).toInt().coerceIn(0, 255), 16, 20, 26)
+        canvas.drawCircle(cx, cy, r, fill)
+        stroke.color = Color.argb((alpha * fade * 110).toInt().coerceIn(0, 255), 90, 105, 125)
+        stroke.strokeWidth = max(1.5f, r * 0.03f)
+        canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+
+        notchPaint.color = Color.argb((alpha * fade * 170).toInt().coerceIn(0, 255), 220, 226, 236)
+        notchPaint.strokeWidth = max(2f, r * 0.06f)
+        val arm = r * 0.20f
+        val inset = r * 0.55f
+        for (direction in intArrayOf(0, 1, 2, 3)) {
+            val dx = when (direction) { 0 -> 0f; 1 -> 0f; 2 -> -1f; else -> 1f }
+            val dy = when (direction) { 0 -> -1f; 1 -> 1f; else -> 0f }
+            val tipX = cx + dx * inset
+            val tipY = cy + dy * inset
+            val backX = tipX - dx * arm
+            val backY = tipY - dy * arm
+            canvas.drawLine(backX, backY, tipX, tipY, notchPaint)
+            // The barbs, so it reads as an arrow rather than a tick.
+            val barbX = -dy * arm * 0.7f
+            val barbY = dx * arm * 0.7f
+            canvas.drawLine(tipX, tipY, backX + barbX, backY + barbY, notchPaint)
+            canvas.drawLine(tipX, tipY, backX - barbX, backY - barbY, notchPaint)
+        }
     }
 
     private fun drawLook(canvas: Canvas, element: ControlElement, faded: Boolean) {
