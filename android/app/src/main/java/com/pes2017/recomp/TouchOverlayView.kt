@@ -8,6 +8,7 @@ import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
@@ -80,9 +81,18 @@ class TouchOverlayView @JvmOverloads constructor(
     // and it is only let go when the last of them lifts.
     private val claims = TouchClaims()
     private val stickPositions = HashMap<String, FloatArray>()   // id -> normalised x, y
-    private var lookPointer = -1
-    private var lookLastX = 0f
-    private var lookLastY = 0f
+
+    // Look is a gesture rather than a hold, so each finger on it is sampled on
+    // its own: with one slot for "the look pointer", a second thumb landing on
+    // the look area re-based the first one and the view jumped.
+    private val lookPointers = HashMap<Int, FloatArray>()        // id -> last x, y
+
+    // A trigger stays down for a moment after the finger leaves. Lifting RT for
+    // the beat it takes to tap a button used to drop the sprint on exactly the
+    // frame the tap landed; 80 ms is longer than a tap and shorter than the
+    // animation that would notice, and it applies to LT and RT alike.
+    private val triggerGraceMs = 80L
+    private val triggerReleaseAt = HashMap<String, Long>()        // id -> uptime it lets go
 
     // ---- editing -----------------------------------------------------------
     private var dragPointer = -1
@@ -185,13 +195,21 @@ class TouchOverlayView @JvmOverloads constructor(
         var rightX = 0f
         var rightY = 0f
 
+        val now = SystemClock.uptimeMillis()
+        // A grace that is over is let go here as well as by its own callback, so
+        // a push for any other reason cannot keep a trigger down for longer.
+        triggerReleaseAt.entries.removeAll { it.value <= now }
+
         for (element in layout.elements) {
             if (!element.visible) continue
             val on = claims.isOn(element.id)
             when (element.kind) {
                 ControlKind.BUTTON -> if (on) buttons = buttons or element.value
-                ControlKind.TRIGGER -> if (on) {
-                    if (element.value == 0) leftTrigger = 255 else rightTrigger = 255
+                ControlKind.TRIGGER -> {
+                    val grace = triggerReleaseAt[element.id]
+                    if (on || (grace != null && now < grace)) {
+                        if (element.value == 0) leftTrigger = 255 else rightTrigger = 255
+                    }
                 }
                 ControlKind.STICK -> {
                     val position = stickPositions[element.id]
@@ -229,7 +247,9 @@ class TouchOverlayView @JvmOverloads constructor(
         // before the phone rang is still aiming when they come back -- but
         // not the editor, which would otherwise leave a bit stuck down.
         if (editing) claims.clearAll() else claims.clearMomentary()
-        lookPointer = -1
+        lookPointers.clear()
+        // Everything up means everything: a trigger does not outlive the pad.
+        triggerReleaseAt.clear()
         if (NativeBridge.isLoaded()) {
             NativeBridge.nativeLookEnd()
             pushState()
@@ -258,13 +278,13 @@ class TouchOverlayView @JvmOverloads constructor(
                     val id = event.getPointerId(index)
                     val x = event.getX(index)
                     val y = event.getY(index)
-                    if (id == lookPointer) {
+                    if (lookPointers.containsKey(id)) {
                         // Every sample between frames matters for a smooth
                         // turn, so the batched history is used too.
                         for (h in 0 until event.historySize) {
-                            sendLook(event.getHistoricalX(index, h), event.getHistoricalY(index, h))
+                            sendLook(id, event.getHistoricalX(index, h), event.getHistoricalY(index, h))
                         }
-                        sendLook(x, y)
+                        sendLook(id, x, y)
                         continue
                     }
                     val element = claims.elementFor(id) ?: continue
@@ -305,12 +325,12 @@ class TouchOverlayView @JvmOverloads constructor(
     private fun press(pointerId: Int, x: Float, y: Float): Boolean {
         val element = elementAt(x, y) ?: return false
         if (element.kind == ControlKind.LOOK) {
-            lookPointer = pointerId
-            lookLastX = x
-            lookLastY = y
+            lookPointers[pointerId] = floatArrayOf(x, y)
             return false
         }
         triggerHaptic()
+        // Pressed again inside its grace, a trigger is held, not released.
+        if (element.kind == ControlKind.TRIGGER) triggerReleaseAt.remove(element.id)
         // Recorded, not assigned: a second finger on the same control must not
         // take it from the first, and the control stays down until both lift.
         claims.press(pointerId, element)
@@ -319,9 +339,9 @@ class TouchOverlayView @JvmOverloads constructor(
     }
 
     private fun release(pointerId: Int): Boolean {
-        if (pointerId == lookPointer) {
-            lookPointer = -1
-            NativeBridge.nativeLookEnd()
+        if (lookPointers.remove(pointerId) != null) {
+            // A turn ends when the last finger on the look area lifts.
+            if (lookPointers.isEmpty()) NativeBridge.nativeLookEnd()
             return false
         }
         val released = claims.release(pointerId) ?: return false
@@ -330,14 +350,28 @@ class TouchOverlayView @JvmOverloads constructor(
         if (released.element.kind == ControlKind.STICK && released.lastClaim) {
             stickPositions.remove(released.element.id)
         }
+        if (released.element.kind == ControlKind.TRIGGER && released.lastClaim) {
+            val id = released.element.id
+            val until = SystemClock.uptimeMillis() + triggerGraceMs
+            triggerReleaseAt[id] = until
+            // Without this the guest would keep seeing the trigger down: it
+            // holds the last state it was given, so the release has to be sent.
+            postDelayed({
+                if (triggerReleaseAt[id] != until) return@postDelayed   // pressed again since
+                triggerReleaseAt.remove(id)
+                if (NativeBridge.isLoaded()) pushState()
+                invalidate()
+            }, triggerGraceMs)
+        }
         return true
     }
 
-    private fun sendLook(x: Float, y: Float) {
-        val dx = x - lookLastX
-        val dy = y - lookLastY
-        lookLastX = x
-        lookLastY = y
+    private fun sendLook(pointerId: Int, x: Float, y: Float) {
+        val last = lookPointers[pointerId] ?: return
+        val dx = x - last[0]
+        val dy = y - last[1]
+        last[0] = x
+        last[1] = y
         if (dx != 0f || dy != 0f) NativeBridge.nativeLookDelta(dx, dy)
     }
 
