@@ -22,11 +22,12 @@ name: Debug APK
 # 2. The Gradle wrapper lives in android/, not at the root: `./gradlew` here
 #    means `android/gradlew` run from `android/`.
 #
-# Triggers: `main` as asked, the freebuff/* working branches and the
-# typhonstickfix* / typhonfix* work branches so a push to one of them produces an
-# apk to test, and workflow_dispatch for running it by hand. GitHub's "Run workflow" picker
-# only lists workflows on the repository's default branch, so a hand-run needs
-# this file there first; a push works either way.
+# Triggers: `main` as asked, the freebuff/* working branches, the fix1
+# troubleshooting branch and the typhonstickfix* / typhonfix* work branches so a
+# push to one of them produces an apk to test, and workflow_dispatch for running
+# it by hand. GitHub's "Run workflow" picker only lists workflows on the
+# repository's default branch, so a hand-run needs this file there first; a push
+# works either way.
 #
 # A branch missing from this list is the whole reason push can look like it did
 # nothing: no run is created at all, so there is no red build to read, just an
@@ -36,6 +37,7 @@ on:
     branches:
       - main
       - 'freebuff/**'
+      - 'fix1'
       - 'typhonstickfix*'
       - 'typhonfix*'
   workflow_dispatch:
