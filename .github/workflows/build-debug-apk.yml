@@ -13,11 +13,15 @@ name: Debug APK
 #    title, made from the disc's own executables, and those are in no repository
 #    -- so there is nothing in this tree to run CMake over. The app packages a
 #    prebuilt engine instead (`-PprebuiltNative=<dir>`, see app/build.gradle.kts),
-#    which is why the job downloads a published engine apk, checks its SHA-256
-#    and unpacks lib/arm64-v8a from it before Gradle runs. Without that step
-#    assembleDebug would try to compile 1,600 generated units that are not here.
-#    A fork that HAS built an engine from these sources points the two variables
-#    below at its own release asset and gets an apk carrying its own engine.
+#    which is why the job downloads an engine apk, checks its SHA-256 and unpacks
+#    lib/arm64-v8a from it before Gradle runs. Without that step assembleDebug
+#    would try to compile 1,600 generated units that are not here.
+#
+#    Which engine is pinned in one committed file, tools/engine_pin.sh, and
+#    fetched by tools/fetch_engine.sh -- the same script a local build runs, so
+#    CI and a laptop package the same engine. Nothing here pulls from an
+#    upstream repository and no repository variable can redirect it: the tag,
+#    commit and both hashes are in the commit, and a mismatch fails this job.
 #
 # 2. The Gradle wrapper lives in android/, not at the root: `./gradlew` here
 #    means `android/gradlew` run from `android/`.
@@ -52,12 +56,6 @@ concurrency:
 
 permissions:
   contents: read
-
-env:
-  # The published engine unless a fork sets its own (Settings > Secrets and
-  # variables > Actions > Variables).
-  ENGINE_URL: "${{ vars.PES17_ENGINE_URL || 'https://github.com/dzakyraf/pes2017-recomp/releases/download/0.2.0/pes2017-recomp-0.2.0.apk' }}"
-  ENGINE_SHA256: "${{ vars.PES17_ENGINE_SHA256 || '843e276c2f86adc6057c0ed5288ab64110195342ac6bbeec1e6ce663b83ce1d6' }}"
 
 jobs:
   debug:
@@ -144,20 +142,12 @@ jobs:
           ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools"
 
       # See note 1 at the top of the file: there is no native source here to
-      # compile, so the engine is fetched and its checksum enforced.
-      - name: Fetch the native engine
+      # compile, so the pinned engine is fetched. The script prints the tag,
+      # commit and hashes in the log and refuses anything else.
+      - name: Fetch the pinned engine
         run: |
-          echo "engine: $ENGINE_URL"
-          mkdir -p "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a"
-          curl -sL --retry 3 -o /tmp/upstream.apk "$ENGINE_URL"
-          if [ ! -f /tmp/upstream.apk ]; then
-            echo "ERROR: could not download the apk with the native engine."
-            exit 1
-          fi
-          echo "$ENGINE_SHA256  /tmp/upstream.apk" \
-            | sha256sum -c - || { echo "ERROR: engine checksum mismatch!"; exit 1; }
-          unzip -j /tmp/upstream.apk "lib/arm64-v8a/*" -d "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/"
-          ls -lh "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/"
+          chmod +x tools/fetch_engine.sh
+          ./tools/fetch_engine.sh "$GITHUB_WORKSPACE/libpes17_prebuilt"
 
       # Which of the app's entry points this engine has. One built before a
       # function existed does not export it, and the app asks before calling it,

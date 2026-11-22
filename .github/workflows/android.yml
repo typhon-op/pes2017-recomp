@@ -8,12 +8,10 @@ on:
   workflow_dispatch:
 
 # Engine as in debug-apk.yml: the recompiled title needs the player's own disc
-# and is not built here. A fork that built one from these sources points
-# PES17_ENGINE_URL / PES17_ENGINE_SHA256 at its own release asset and every entry
-# point the app calls is in the apk again.
-env:
-  ENGINE_URL: "${{ vars.PES17_ENGINE_URL || 'https://github.com/dzakyraf/pes2017-recomp/releases/download/0.2.0/pes2017-recomp-0.2.0.apk' }}"
-  ENGINE_SHA256: "${{ vars.PES17_ENGINE_SHA256 || '843e276c2f86adc6057c0ed5288ab64110195342ac6bbeec1e6ce663b83ce1d6' }}"
+# and is not built here, so the apk ships the engine pinned in
+# tools/engine_pin.sh, fetched and hash-checked by tools/fetch_engine.sh. That
+# is the same script a local build runs, so a release built here and an apk
+# built on a laptop carry the same engine.
 
 jobs:
   build:
@@ -31,27 +29,13 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Accept Android SDK Licenses & Fetch Prebuilt Native Library
+      - name: Accept Android SDK Licenses
+        run: yes | sdkmanager --licenses || true
+
+      - name: Fetch the pinned engine
         run: |
-          yes | sdkmanager --licenses || true
-          mkdir -p "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a"
-          echo "Downloading official release native engine components..."
-          echo "engine: $ENGINE_URL"
-          curl -sL --retry 3 -o /tmp/upstream.apk "$ENGINE_URL"
-          if [ -f /tmp/upstream.apk ]; then
-            echo "Verifying engine APK SHA-256 checksum..."
-            echo "$ENGINE_SHA256  /tmp/upstream.apk" | sha256sum -c - || {
-              echo "ERROR: Engine APK SHA-256 checksum verification failed!"
-              exit 1
-            }
-            unzip -j /tmp/upstream.apk "lib/arm64-v8a/*" -d "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/"
-            echo "Successfully unpacked full native engine into $GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/:"
-            ls -lh "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/"
-            ./tools/engine_symbols.sh "$GITHUB_WORKSPACE/libpes17_prebuilt/arm64-v8a/libpes17.so"
-          else
-            echo "ERROR: Failed to download upstream reference APK!"
-            exit 1
-          fi
+          chmod +x tools/fetch_engine.sh
+          ./tools/fetch_engine.sh "$GITHUB_WORKSPACE/libpes17_prebuilt" --audit
 
       - name: Prepare Production Signing Keystore
         id: prepare-keystore

@@ -69,6 +69,9 @@ android/local.properties
 # ---- fetched by android/fetch_deps.sh, somebody else's code ----
 third_party/libadrenotools/
 
+# ---- the pinned engine tools/fetch_engine.sh unpacks (tools/engine_pin.sh) ----
+/libpes17_prebuilt/
+
 # ---- the native build's scratch directory ----
 android/app/.cxx/
 .cxx/

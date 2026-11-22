@@ -32,6 +32,31 @@ See [RECOMP_RESEARCH.md](RECOMP_RESEARCH.md): `PROFILE=safe|balanced|aggressive`
 baseline with a CPU check, `-ffp-contract=off`, `-Bsymbolic-functions`,
 automatic helper location, and a 16 KB-alignment check after the link.
 
+## The engine a build packages
+
+The recompiled title cannot be built from this tree — it is linked from the
+disc's own executables — so every apk here carries a prebuilt `libpes17.so`.
+Which one is pinned in one committed file, `tools/engine_pin.sh`: release
+`V0.2.3` of this repository (`app-debug.apk`, commit `ee4af63`), with the
+SHA-256 of the asset and of the `libpes17.so` inside it. `tools/fetch_engine.sh`
+downloads it, enforces both hashes, unpacks `lib/arm64-v8a/` into
+`libpes17_prebuilt/` and prints the tag, commit and hashes; both workflows call
+that script and nothing else, so a build here and a build on a laptop package
+the same engine. A re-uploaded asset, or a library that is not the pinned one,
+fails the build with the hash it actually got instead of shipping silently.
+
+```sh
+tools/fetch_engine.sh                  # into ./libpes17_prebuilt (git-ignored)
+tools/fetch_engine.sh --audit          # and report the entry points it exports
+cd android && ./gradlew :app:assembleDebug -PprebuiltNative=../libpes17_prebuilt
+```
+
+To move to another engine, bump the tag, commit and two hashes in
+`tools/engine_pin.sh`; the workflows follow on the next push, and the change is
+reviewable in the diff. `tools/deploy.sh` is the exception by design: it builds
+an engine locally from these sources and passes that directory to
+`-PprebuiltNative`, which is how the runtime itself gets tested on a device.
+
 ## On a device (Galaxy S20 FE, Snapdragon 865 / Adreno 650, Android 13)
 
 `tools/deploy.sh [seconds]` rebuilds the runtime on every core (about 20 s when
