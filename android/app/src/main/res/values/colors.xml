@@ -7,6 +7,10 @@
     <color name="pes_page">#FFFFFF</color>
     <color name="pes_navy">#0A1B45</color>
     <color name="pes_blue">#004D98</color>
+    <!-- The pause menu's highlight, carried over to the launcher's fills: the
+         selected band, the section bars and the buttons. -->
+    <color name="pes_highlight">#1B8DFF</color>
+    <color name="pes_highlight_deep">#0B5FD8</color>
     <color name="pes_red">#DC0014</color>
     <color name="pes_garnet">#A50044</color>
     <color name="pes_gold">#EDBB00</color>

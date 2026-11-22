@@ -1,5 +1,6 @@
 package com.pes2017.recomp
 
+import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
@@ -8,8 +9,10 @@ import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -140,6 +143,11 @@ class PatchImportActivity : AppCompatActivity() {
         findViewById<Button>(R.id.pick_archive).setOnClickListener { pickArchiveSource() }
         findViewById<Button>(R.id.pick_folder).setOnClickListener { pickFolder.launch(null) }
         findViewById<Button>(R.id.pick_multipart).setOnClickListener { pickParts.launch(null) }
+        // The fourth source is its own screen: it replaces loose game files and
+        // has nothing to do with a data pack, so it must not share this wizard.
+        findViewById<Button>(R.id.pick_game_files).setOnClickListener {
+            startActivity(Intent(this, GameFilesInstallActivity::class.java))
+        }
         findViewById<Button>(R.id.import_cancel_pick).setOnClickListener { finish() }
         findViewById<Button>(R.id.summary_cancel).setOnClickListener { backToPick() }
         installButton.setOnClickListener { beginInstall() }
@@ -191,18 +199,40 @@ class PatchImportActivity : AppCompatActivity() {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
         }
-        val builder = AlertDialog.Builder(this)
-            .setTitle(R.string.patch_import_password_title)
-            .setMessage(getString(R.string.patch_import_password_hint) + "\n\n" + name)
-            .setView(field)
-            .setNegativeButton(R.string.cancel) { _, _ -> onChoice(null) }
-            .setPositiveButton(R.string.patch_import_password_use) { _, _ ->
-                onChoice(field.text.toString())
-            }
-        if (allowNoPassword) {
-            builder.setNeutralButton(R.string.patch_import_password_skip) { _, _ -> onChoice("") }
+        val message = TextView(this).apply {
+            text = getString(R.string.patch_import_password_hint) + "\n\n" + name
+            textSize = 13f
+            setTextColor(ContextCompat.getColor(this@PatchImportActivity, R.color.pes_text))
+            setPadding(0, 0, 0, 8)
         }
-        builder.show()
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(
+                message,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+            addView(
+                field,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+        }
+        // The actions are the dialog's own, stacked in its content: the stock
+        // button bar leaves this theme's labels white on a white surface.
+        val actions = ArrayList<DialogAction>()
+        actions += DialogAction(getString(R.string.patch_import_password_use), filled = true) {
+            onChoice(field.text.toString())
+        }
+        actions += DialogAction(getString(R.string.cancel)) { onChoice(null) }
+        if (allowNoPassword) {
+            actions += DialogAction(getString(R.string.patch_import_password_skip)) { onChoice("") }
+        }
+        DialogActions.show(this, getString(R.string.patch_import_password_title), content, actions)
     }
 
     private fun treeName(tree: Uri): String =

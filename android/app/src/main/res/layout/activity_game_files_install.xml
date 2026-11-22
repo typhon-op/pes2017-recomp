@@ -1,0 +1,357 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- INSTALL FOLDER WITHOUT DPFILIST.BIN: the one source that replaces the
+     game's own files. Same four steps as the patch wizard, in one scroll, and
+     the warning is in front of the pick so it cannot be missed. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/pes_page">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <include layout="@layout/view_back_bar" />
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_panel"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_panel_title"
+                        android:paddingStart="10dp"
+                        android:paddingTop="5dp"
+                        android:paddingBottom="4dp"
+                        android:text="@string/game_files_heading"
+                        android:textColor="@color/pes_on_dark"
+                        android:textSize="14sp"
+                        android:textStyle="bold|italic"
+                        android:textAllCaps="true"
+                        android:fontFamily="sans-serif-condensed" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingStart="10dp"
+                        android:paddingEnd="10dp"
+                        android:paddingTop="6dp"
+                        android:paddingBottom="8dp"
+                        android:text="@string/game_files_warning"
+                        android:textColor="@color/pes_red"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- 1. folder -->
+                <LinearLayout
+                    android:id="@+id/step_pick"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/SectionHeading"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/game_files_section" />
+
+                    <LinearLayout style="@style/SettingGroup">
+
+                        <TextView
+                            android:id="@+id/game_files_source"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_setting_row"
+                            android:paddingStart="10dp"
+                            android:paddingEnd="10dp"
+                            android:paddingTop="8dp"
+                            android:paddingBottom="8dp"
+                            android:text="@string/game_files_source_none"
+                            android:textColor="@color/pes_text"
+                            android:textSize="12sp"
+                            android:fontFamily="monospace" />
+
+                        <Button
+                            android:id="@+id/game_files_pick"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="@string/game_files_pick" />
+
+                        <TextView
+                            style="@style/SettingHint"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="@string/game_files_pick_hint" />
+
+                        <Button
+                            android:id="@+id/game_files_cancel_pick"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="@string/game_files_cancel" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- scanning -->
+                <LinearLayout
+                    android:id="@+id/step_scanning"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        style="@style/SettingGroup"
+                        android:layout_marginTop="16dp"
+                        android:padding="14dp">
+
+                        <ProgressBar
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:indeterminate="true" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:text="@string/game_files_scanning"
+                            android:textColor="@color/pes_blue"
+                            android:textSize="14sp"
+                            android:textStyle="bold|italic"
+                            android:textAllCaps="true"
+                            android:fontFamily="sans-serif-condensed"
+                            android:accessibilityLiveRegion="polite" />
+
+                        <TextView
+                            style="@style/SettingHint"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/game_files_scanning_hint" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- 2. what was matched, before anything is written -->
+                <LinearLayout
+                    android:id="@+id/step_summary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        style="@style/SectionHeading"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/game_files_ready" />
+
+                    <LinearLayout style="@style/SettingGroup">
+
+                        <TextView
+                            android:id="@+id/game_files_summary_source"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:paddingStart="10dp"
+                            android:paddingEnd="10dp"
+                            android:paddingTop="8dp"
+                            android:textColor="@color/pes_text"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:fontFamily="sans-serif-condensed" />
+
+                        <TextView
+                            android:id="@+id/game_files_summary_files"
+                            style="@style/SettingHint"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="monospace" />
+
+                        <TextView
+                            android:id="@+id/game_files_summary_unmatched"
+                            style="@style/SettingHint"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:visibility="gone" />
+
+                        <TextView
+                            android:id="@+id/game_files_summary_ambiguous"
+                            style="@style/SettingHint"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:visibility="gone" />
+
+                        <TextView
+                            android:id="@+id/game_files_summary_refused"
+                            style="@style/SettingHint"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/pes_red"
+                            android:visibility="gone" />
+                    </LinearLayout>
+
+                    <TextView
+                        style="@style/SettingHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingTop="6dp"
+                        android:text="@string/game_files_backup_note" />
+
+                    <Button
+                        android:id="@+id/game_files_install_button"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/game_files_install_none" />
+
+                    <Button
+                        android:id="@+id/game_files_summary_cancel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/game_files_cancel" />
+                </LinearLayout>
+
+                <!-- 3. replacing -->
+                <LinearLayout
+                    android:id="@+id/step_install"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        style="@style/SettingGroup"
+                        android:layout_marginTop="16dp"
+                        android:padding="14dp">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/game_files_installing"
+                            android:textColor="@color/pes_blue"
+                            android:textSize="14sp"
+                            android:textStyle="bold|italic"
+                            android:textAllCaps="true"
+                            android:fontFamily="sans-serif-condensed"
+                            android:accessibilityLiveRegion="polite" />
+
+                        <ProgressBar
+                            android:id="@+id/game_files_progress"
+                            style="?android:attr/progressBarStyleHorizontal"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:max="1000" />
+
+                        <TextView
+                            android:id="@+id/game_files_install_text"
+                            style="@style/SettingHint"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:accessibilityLiveRegion="polite" />
+
+                        <Button
+                            android:id="@+id/game_files_stop"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:text="@string/game_files_stop" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- 4. result -->
+                <LinearLayout
+                    android:id="@+id/step_result"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        style="@style/SettingGroup"
+                        android:layout_marginTop="16dp"
+                        android:padding="12dp">
+
+                        <TextView
+                            android:id="@+id/game_files_result_badge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_panel_title"
+                            android:paddingStart="8dp"
+                            android:paddingEnd="8dp"
+                            android:paddingTop="3dp"
+                            android:paddingBottom="3dp"
+                            android:textColor="@color/pes_on_dark"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:textAllCaps="true"
+                            android:fontFamily="sans-serif-condensed"
+                            android:accessibilityLiveRegion="polite" />
+
+                        <TextView
+                            android:id="@+id/game_files_result_title"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:textColor="@color/pes_navy"
+                            android:textSize="22sp"
+                            android:textStyle="bold|italic"
+                            android:textAllCaps="true"
+                            android:fontFamily="sans-serif-condensed" />
+
+                        <TextView
+                            android:id="@+id/game_files_result_body"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/pes_text"
+                            android:textSize="13sp"
+                            android:lineSpacingExtra="2dp"
+                            android:fontFamily="sans-serif" />
+
+                        <TextView
+                            android:id="@+id/game_files_result_detail"
+                            style="@style/SettingHint"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:paddingBottom="4dp" />
+
+                        <Button
+                            android:id="@+id/game_files_result_done"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:text="@string/game_files_done" />
+
+                        <Button
+                            android:id="@+id/game_files_result_retry"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="@string/game_files_retry" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+    </LinearLayout>
+</FrameLayout>

@@ -921,15 +921,21 @@ class MainActivity : AppCompatActivity() {
                 },
             )
         }
-        AlertDialog.Builder(this)
-            .setTitle(R.string.view_log)
-            .setView(column)
-            .setPositiveButton(R.string.close, null)
-            .setNegativeButton(R.string.log_everything) { _, _ -> showWholeLog() }
-            .setNeutralButton(R.string.log_export_report) { _, _ ->
-                share(report(note.text.toString(), text))
-            }
-            .show()
+        // CLOSE, THE WHOLE LOG and EXPORT REPORT are the dialog's own actions,
+        // stacked in its content (DialogActions): the stock button bar has no
+        // style here and drew white labels on the white surface.
+        DialogActions.show(
+            this,
+            getString(R.string.view_log),
+            column,
+            listOf(
+                DialogAction(getString(R.string.close), filled = true),
+                DialogAction(getString(R.string.log_everything)) { showWholeLog() },
+                DialogAction(getString(R.string.log_export_report)) {
+                    share(report(note.text.toString(), text))
+                },
+            ),
+        )
     }
 
     /**

@@ -151,6 +151,16 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
+        <!-- INSTALL FOLDER WITHOUT DPFILIST.BIN: the one source that replaces
+             the game's own files, opened from INSTALL PATCH. -->
+        <activity
+            android:name=".GameFilesInstallActivity"
+            android:exported="false"
+            android:parentActivityName=".PatchImportActivity"
+            android:screenOrientation="fullUser"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+
         <!-- INSTALL PATCH: a full page, opened from PATCHES. -->
         <activity
             android:name=".PatchImportActivity"

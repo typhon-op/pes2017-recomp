@@ -219,25 +219,6 @@ class TouchOverlayView @JvmOverloads constructor(
     /** What the pad last told the title, so logcat shows a dead stick or a lost flick. */
     private val trace = TouchTraceGate()
 
-    // [FINESSE_DBG] The shoot button's swipe, end to end. Numbered per press so
-    // attempt 1 and attempt 2 can be told apart in one logcat, and the state
-    // line is the same in every message: what SWIPE_HOLD is holding, which
-    // finger owns it, and how long it has been armed.
-    private var finesseShot = 0
-    private var finesseSentButtons = -1
-    private var finesseSentRight = -1
-
-    private fun fdbg(message: String) {
-        Log.i(FINESSE_DBG, message)
-    }
-
-    private fun finesseState(): String =
-        "hold=0x${Integer.toHexString(liveSwipeHoldBits)}" +
-            " mod=0x${Integer.toHexString(liveSwipeButtonBits)}" +
-            " lt=${if (liveSwipeLeft) 1 else 0} rt=${if (liveSwipeRight) 1 else 0}" +
-            " ptr=$liveSwipePointer since=$liveSwipeSince" +
-            " epoch=$liveSwipeEpoch tailEpoch=$liveSwipeTailEpoch"
-
     /**
      * The tail of a live swipe's modifier. A lift that relied on a modifier that
      * was already down does not replay the timed sequence -- the title has the
@@ -245,23 +226,18 @@ class TouchOverlayView @JvmOverloads constructor(
      * go one beat after the button under it (LIVE_MODIFIER_TAIL_MS).
      */
     private val liveSwipeTail = Runnable {
-        fdbg("TAIL start ${finesseState()}")
         // An older hold's tail outliving a newer swipe's modifier: clearing it
         // here would lift the RT the new gesture is relying on, one frame
         // before the button it belongs to. The newer hold has its own tail --
         // but the press this tail carried is not the newer hold's, so it is let
         // go even then: a button with no finger on it must never stay down.
         if (liveSwipeTailEpoch != liveSwipeEpoch) {
-            if (liveSwipeHoldBits == 0) {
-                fdbg("TAIL skipped: a newer hold owns it ${finesseState()}")
-                return@Runnable
-            }
+            if (liveSwipeHoldBits == 0) return@Runnable
             liveSwipeHoldBits = 0
         } else {
             clearLiveSwipe()
         }
         if (NativeBridge.isLoaded()) pushState()
-        fdbg("TAIL end ${finesseState()}")
         invalidate()
     }
 
@@ -956,14 +932,6 @@ class TouchOverlayView @JvmOverloads constructor(
             Log.i(TouchTraceGate.TAG, it)
         }
         Macro.record(Macro.TOUCH, buttons, leftTrigger, rightTrigger, lx, ly, rx, ry)
-        if (buttons != finesseSentButtons || rightTrigger != finesseSentRight || pressed != 0) {
-            finesseSentButtons = buttons
-            finesseSentRight = rightTrigger
-            fdbg(
-                "PUSH buttons=0x${Integer.toHexString(buttons)} lt=$leftTrigger" +
-                    " rt=$rightTrigger pulse=0x${Integer.toHexString(pressed)} ${finesseState()}",
-            )
-        }
         NativeBridge.nativeTouchState(buttons, leftTrigger, rightTrigger, lx, ly, rx, ry)
     }
 
@@ -1271,14 +1239,6 @@ class TouchOverlayView @JvmOverloads constructor(
                 pointerId, x, y, SystemClock.uptimeMillis(), SwipeClassifier.CARDINAL_DOMINANCE,
             )
             ControlKind.BUTTON -> if (!element.toggle) {
-                if (element.value == NativeBridge.X) {
-                    finesseShot++
-                    fdbg(
-                        "shot#$finesseShot DOWN id=${element.id}" +
-                            " bit=0x${Integer.toHexString(element.value)}" +
-                            " held=${claims.isHeld(element.id)} ${finesseState()}",
-                    )
-                }
                 swipeClassifier.begin(
                     pointerId, x, y, SystemClock.uptimeMillis(), SwipeClassifier.CARDINAL_DOMINANCE,
                 )
@@ -1399,13 +1359,6 @@ class TouchOverlayView @JvmOverloads constructor(
             }
         }
         if (released.element.kind == ControlKind.BUTTON) {
-            if (released.element.value == NativeBridge.X) {
-                fdbg(
-                    "shot#$finesseShot UP id=${released.element.id}" +
-                        " lastClaim=${released.lastClaim}" +
-                        " held=${claims.isHeld(released.element.id)} ${finesseState()}",
-                )
-            }
             if (released.element.role == ControlRole.PASS) {
                 passDoubleTap.release(SystemClock.uptimeMillis())
             }
@@ -1635,12 +1588,6 @@ class TouchOverlayView @JvmOverloads constructor(
         // title has the combination and the lift releases it; replaying the
         // sequence would send the same command twice.
         val alreadyHeld = liveSwipeHeldFor(action)
-        fdbg(
-            "shot swipe direction=$direction action=0x${Integer.toHexString(action.bit)}" +
-                " modifier=${action.modifier} bound=${action.bound}" +
-                " carries=${carriesHeldButton(element, action)} alreadyHeld=$alreadyHeld" +
-                " ${finesseState()}",
-        )
         // An ordinary tap on a button is silent here -- it already has its held
         // bit -- but a flick that charged a modifier and then read as no
         // direction is exactly the dropped shot this log exists for.
@@ -1741,7 +1688,6 @@ class TouchOverlayView @JvmOverloads constructor(
         liveSwipeButtonBits = buttons
         liveSwipeLeft = left
         liveSwipeRight = right
-        fdbg("SWIPE_HOLD arm${if (disarmed) " (disarmed)" else ""} ${finesseState()}")
         if (push && NativeBridge.isLoaded()) pushState()
     }
 
@@ -1750,7 +1696,6 @@ class TouchOverlayView @JvmOverloads constructor(
         removeCallbacks(liveSwipeTail)
         liveSwipeTailEpoch = liveSwipeEpoch
         postDelayed(liveSwipeTail, LIVE_MODIFIER_TAIL_MS)
-        fdbg("TAIL armed for ${LIVE_MODIFIER_TAIL_MS}ms ${finesseState()}")
     }
 
     /**
@@ -1792,7 +1737,6 @@ class TouchOverlayView @JvmOverloads constructor(
     /** Lets go of the live swipe's modifier; the release push carries both bits up. */
     private fun clearLiveSwipe(pointerId: Int = -1) {
         if (pointerId >= 0 && pointerId != liveSwipePointer) return
-        fdbg("CLEAR by=${if (pointerId >= 0) "pointer$pointerId" else "timer/teardown"} ${finesseState()}")
         removeCallbacks(liveSwipeTail)
         liveSwipePointer = -1
         liveSwipeSince = 0L
@@ -2298,9 +2242,6 @@ class TouchOverlayView @JvmOverloads constructor(
     private fun isOn(element: ControlElement): Boolean = claims.isOn(element.id)
 
     companion object {
-        /** [FINESSE_DBG] The logcat tag for the shoot-swipe trace added for this bug. */
-        private const val FINESSE_DBG = "FINESSE_DBG"
-
         /** How much of the screen's width, from the left, the floating stick owns. */
         private const val FLOAT_ZONE = 0.5f
 

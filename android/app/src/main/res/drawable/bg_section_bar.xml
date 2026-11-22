@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A settings panel's header bar: navy, with the wordmark's red down its left edge. -->
+<!-- A settings panel's header bar: the highlight blue, deeper on the left so
+     its white label stays crisp, with the wordmark's red down its outer edge. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <gradient android:angle="0" android:startColor="#0A1B45" android:endColor="#004D98" />
+            <gradient android:angle="0" android:startColor="@color/pes_highlight_deep" android:endColor="@color/pes_highlight" />
         </shape>
     </item>
     <item android:gravity="start" android:width="4dp">

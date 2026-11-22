@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A panel's title strip: navy to blue, the wordmark's red along its top. -->
+<!-- A panel's title strip: deep to bright highlight blue, the wordmark's red
+     along its top. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <gradient android:angle="0" android:startColor="#0A1B45" android:endColor="#004D98" />
+            <gradient android:angle="0" android:startColor="@color/pes_highlight_deep" android:endColor="@color/pes_highlight" />
         </shape>
     </item>
     <item android:gravity="top" android:height="2dp">

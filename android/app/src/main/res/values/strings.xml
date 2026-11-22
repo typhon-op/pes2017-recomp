@@ -686,6 +686,62 @@
     <string name="patch_import_kind_multipart">multi-part archive</string>
     <string name="patch_import_help_strip">NOTHING IS WRITTEN UNTIL INSTALL PATCH · CANCEL LEAVES THE GAME AS IT WAS</string>
 
+    <!--
+      INSTALL FOLDER WITHOUT DPFILIST.BIN: the fourth source, on its own screen.
+      It replaces the game's own files, so its wording never says "patch" as
+      lightly as the wizard's does: risky, not recommended, and reversible.
+    -->
+    <string name="patch_import_game_files">INSTALL FOLDER WITHOUT DPFILIST.BIN</string>
+    <string name="patch_import_game_files_hint">RISKY, NOT RECOMMENDED: this replaces the game\'s own files instead of installing a data pack. Use it only when a patch ships loose files.</string>
+    <string name="game_files_title">Install folder without DpFileList.bin</string>
+    <string name="game_files_heading">INSTALL FOLDER WITHOUT DPFILIST.BIN</string>
+    <string name="game_files_warning">WARNING · RISKY AND NOT RECOMMENDED. This source replaces the game\'s own files in place instead of installing a data pack. A file the game does not already have is never added, and default.xex is never replaced. Every replaced file is kept in patch-backups/game, and a failure or a stop puts them all back.</string>
+    <string name="game_files_section">FOLDER TO INSTALL</string>
+    <string name="game_files_source_none">No folder chosen.</string>
+    <string name="game_files_source">Folder: %1$s</string>
+    <string name="game_files_pick">CHOOSE THE EXTRACTED FOLDER</string>
+    <string name="game_files_pick_hint">Pick the folder a folder patch was extracted to. Its files are matched against the game folder before anything is written, and only files that already exist are replaced.</string>
+    <string name="game_files_cancel">CANCEL</string>
+    <string name="game_files_scanning">SCANNING THE FOLDER…</string>
+    <string name="game_files_scanning_hint">Matching every file by its path and name against the game folder. Nothing is written yet.</string>
+    <string name="game_files_ready">READY TO REPLACE</string>
+    <string name="game_files_summary_source">%1$s · matched against the game folder</string>
+    <string name="game_files_summary_files">REPLACE · %1$d files · %2$s</string>
+    <string name="game_files_nothing_matched">Nothing to replace: no file in the folder matches a file the game already has.</string>
+    <string name="game_files_summary_unmatched">LEFT ALONE · %1$d files with no match in the game</string>
+    <string name="game_files_summary_ambiguous">NOT MATCHED · %1$d files whose name the game holds more than once, or claimed twice</string>
+    <string name="game_files_summary_refused">NEVER REPLACED · %1$d .xex files (the runtime expects its own executable)</string>
+    <string name="game_files_backup_note">Every file replaced is moved to patch-backups/game first. A failure or a stop puts every file back, so the game folder is left as it was. No file is added.</string>
+    <string name="game_files_install">REPLACE %1$d FILES</string>
+    <string name="game_files_install_none">REPLACE FILES</string>
+    <string name="game_files_installing">REPLACING GAME FILES…</string>
+    <string name="game_files_progress">%1$d of %2$d files</string>
+    <string name="game_files_stop">STOP</string>
+    <string name="game_files_stopping">Stopping after the file being written…</string>
+    <string name="game_files_confirm_title">Replace %1$d game files?</string>
+    <string name="game_files_confirm_body">This overwrites %1$d of the game\'s own files (%2$s) in place. They cannot be merged and the game may stop working if the folder is not meant for this version. Every replaced file is kept in patch-backups/game first, and default.xex is never touched.</string>
+    <string name="game_files_confirm_positive">CONFIRM</string>
+    <string name="game_files_confirm_negative">CANCEL</string>
+    <string name="game_files_cancel_title">Stop replacing?</string>
+    <string name="game_files_cancel_body">Every file already replaced is put back and the backup is removed. The game folder is left as it was.</string>
+    <string name="game_files_cancel_keep">KEEP GOING</string>
+    <string name="game_files_cancel_stop">STOP</string>
+    <string name="game_files_ok">Operation complete</string>
+    <string name="game_files_result_installed_body">%1$d files (%2$s) were replaced in the game folder. The files they replaced are in patch-backups/game.</string>
+    <string name="game_files_cancelled">REPLACE CANCELLED</string>
+    <string name="game_files_result_cancelled_body">Nothing was changed: every file already replaced was put back.</string>
+    <string name="game_files_result_failed">REPLACE FAILED</string>
+    <string name="game_files_result_failed_body">The replace stopped: %1$s</string>
+    <string name="game_files_no_game">NO GAME FOLDER</string>
+    <string name="game_files_no_game_body">Choose the folder that holds default.xex on PATCHES first, then try again.</string>
+    <string name="game_files_unreadable">The app cannot read that folder by path. Put it on the phone\'s own storage and choose it again.</string>
+    <string name="game_files_same_folder">That is the game folder itself. Choose the patch\'s extracted folder instead.</string>
+    <string name="game_files_running">GAME RUNNING</string>
+    <string name="game_files_done">DONE</string>
+    <string name="game_files_retry">CHOOSE ANOTHER FOLDER</string>
+    <string name="game_files_badge_done">DONE</string>
+    <string name="game_files_badge_failed">FAILED</string>
+
     <!-- One-word states, and the prompts the in-game menu draws at its foot. -->
     <string name="on">On</string>
     <string name="off">Off</string>

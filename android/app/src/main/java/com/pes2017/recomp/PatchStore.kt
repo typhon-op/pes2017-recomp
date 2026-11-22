@@ -51,6 +51,14 @@ object PatchStore {
     /** The list that orders a data pack's archives. */
     const val DP_FILE_LIST = "DpFileList.bin"
 
+    /**
+     * The backup slot of INSTALL FOLDER WITHOUT DPFILIST.BIN: the game files
+     * that source replaced. It is kept apart from `patch` and `edit` so that
+     * restoring a data pack never puts a game file back over a newer one, and
+     * so the PATCHES screen keeps listing only the packs it restores.
+     */
+    const val GAME_FILES = "game"
+
     private const val PATCH_SLOT = "dlc/SYSTEM00000000"
     private const val SAVES = "saves"
     private const val BACKUPS = "patch-backups"
@@ -237,6 +245,108 @@ object PatchStore {
             .map { it.slot }
             .distinct()
         return commitPatch(root, staging, cpks, plan.dpFileList, saves, sourceName)
+    }
+
+    /**
+     * Replaces game files from a scanned folder, for a patch that has no
+     * DpFileList.bin and only changes files the game already has.
+     *
+     * Every file it touches is moved into one backup first (the same slot the
+     * rest of this file uses), and the source is copied in only once the
+     * original is safe. A failure or a cancel puts back every file already
+     * replaced and drops the backup, so the game folder is left exactly as it
+     * was. Nothing is added: a file the game does not already have is never a
+     * match, and an `.xex` is refused here too, whatever the plan says.
+     */
+    fun replaceGameFiles(
+        game: File,
+        plan: GameFiles.Plan,
+        sourceName: String,
+        progress: Progress? = null,
+    ): Backup? {
+        val root = rootOf(game)
+        requireGame(game)
+        if (!plan.hasMatches) throw Failure("there is no game file to replace")
+
+        val backupDir = freshBackupDir(root, GAME_FILES)
+        backupDir.parentFile?.mkdirs()
+        if (!backupDir.mkdirs()) throw Failure("could not make a backup folder", backupDir.absolutePath)
+        val kept = ArrayList<Pair<File, File>>()
+        var copied = 0L
+        val total = plan.payloadBytes
+
+        fun undo() {
+            for ((stored, target) in kept.asReversed()) {
+                runCatching {
+                    target.delete()
+                    stored.copyTo(target, overwrite = true)
+                }
+            }
+            backupDir.deleteRecursively()
+        }
+
+        try {
+            for (match in plan.matches) {
+                val target = match.target
+                if (!target.isFile) {
+                    undo()
+                    throw Failure("the file to replace is gone", target.absolutePath)
+                }
+                if (target.name.lowercase(Locale.US).endsWith(".xex")) {
+                    undo()
+                    throw Failure("the game executable is never replaced", target.absolutePath)
+                }
+                if (!match.source.isFile) {
+                    undo()
+                    throw Failure("the source file is missing", match.source.absolutePath)
+                }
+                val relative = runCatching { target.relativeTo(game).invariantSeparatorsPath }
+                    .getOrNull()
+                if (relative.isNullOrEmpty() || relative.startsWith("..") ||
+                    relative.split('/').any { it.isEmpty() || it == "." || it == ".." }
+                ) {
+                    undo()
+                    throw Failure("the file is not inside the game folder", target.absolutePath)
+                }
+
+                val stored = File(backupDir, relative)
+                stored.parentFile?.mkdirs()
+                // Kept before it is replaced: moved on the same volume, which
+                // is what makes this instant and needs no extra space.
+                if (!move(target, stored)) {
+                    undo()
+                    throw Failure("could not keep the file being replaced", target.absolutePath)
+                }
+                kept += stored to target
+
+                try {
+                    match.source.copyTo(target, overwrite = true)
+                } catch (error: Throwable) {
+                    undo()
+                    throw Failure(
+                        "could not write ${target.name}: ${error.message ?: error}",
+                        target.absolutePath,
+                    )
+                }
+                if (target.length() != match.size) {
+                    undo()
+                    throw Failure("${target.name} changed while it was copied", target.absolutePath)
+                }
+                copied += match.size
+                if (progress != null && !progress.onBytes(copied, total)) {
+                    undo()
+                    throw Failure(CANCELLED)
+                }
+            }
+            val (files, bytes) = count(backupDir)
+            writeManifest(backupDir, GAME_FILES, files, bytes, sourceName)
+            return Backup(GAME_FILES, backupDir.name, System.currentTimeMillis(), files, bytes)
+        } catch (error: Throwable) {
+            // Anything thrown before this point has already undone its work;
+            // this keeps a throw from outside the loop from leaving a folder.
+            if (backupDir.exists()) undo()
+            throw error
+        }
     }
 
     /**
