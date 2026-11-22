@@ -62,7 +62,10 @@ if(EXISTS "${PES17_ADRENOTOOLS_DIR}/CMakeLists.txt")
     # main_hook and hook_impl are the loader itself; file_redirect_hook is
     # what ADRENOTOOLS_DRIVER_FILE_REDIRECT needs (runtime/android/driver.cpp),
     # and a driver that asks for it and cannot find it does not load.
-    foreach(hook main_hook hook_impl file_redirect_hook)
+    # gsl_alloc_hook is the other one a driver asks for by name, and the
+    # released apks carry all four -- leaving it out of this list builds an apk
+    # that is missing a library the previous release had.
+    foreach(hook main_hook hook_impl file_redirect_hook gsl_alloc_hook)
         if(TARGET ${hook})
             add_dependencies(pes17 ${hook})
         endif()

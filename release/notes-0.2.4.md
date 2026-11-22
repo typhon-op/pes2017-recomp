@@ -1,8 +1,10 @@
 # PES 2017 Android 0.2.4
 
-Signed with the debug key, as the 0.2.3 build was, so it installs over that
-build if it came from the same machine; uninstall first otherwise. Same
-requirements and Xbox 360 Europe game files as 0.2.3.
+**Uninstall 0.2.3 before installing this.** Both are signed with the debug key
+of the machine that cut them, and this one was cut somewhere else, so Android
+will refuse it as an update. Back up your saves first (Settings > Back up
+saves): they are in the app's own storage. Same requirements and Xbox 360
+Europe game files as 0.2.3.
 
 This build carries an engine rebuilt from the current sources rather than the
 0.2.3 one, so the fixes below are actually in the game code.
