@@ -55,8 +55,9 @@ A new engine release is cut from a checkout with `tools/release_engine.sh [tag]`
 (default `V0.2.4`): it builds the engine from that commit with `./build.sh`,
 packages a debug apk around it, publishes it as the tag with the asset name
 `app-debug.apk`, downloads the published asset again to hash what the release
-really serves, rewrites `tools/engine_pin.sh`, proves the new pin with
-`tools/fetch_engine.sh --audit`, and commits and pushes it. It needs the disc's
+really serves, moves the apk's own versionName/versionCode to the tag, rewrites
+`tools/engine_pin.sh`, proves the new pin with `tools/fetch_engine.sh --audit`,
+and commits and pushes it. It needs the disc's
 `default.xex`, the NDK and a signed-in `gh` — no CI runner can build the engine,
 so this step is the release machine's. The tag is made at the commit the apk was
 built from; the pin bump is the commit after it.

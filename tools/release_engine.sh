@@ -21,10 +21,10 @@
 # The tag is created at the commit the apk was built from; the pin bump is the
 # commit after it, so `git show <tag>..HEAD` is what the release changed.
 #
-# Before cutting a release that should install over the previous one, bump the
-# versionCode default in android/app/build.gradle.kts. versionName is given to
-# Gradle from the tag here (through PES17_VERSION_NAME), so the apk always
-# reports the release it was published as.
+# The apk's version moves here and nowhere else: versionName becomes the tag and
+# versionCode goes up by one in android/app/build.gradle.kts before the build,
+# so a branch whose engine is still the old one keeps saying so rather than
+# labelling the previous engine as this release.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd); cd "$ROOT"
@@ -113,8 +113,25 @@ ANDROID_NDK_ROOT="$NDK" tools/verify_android_libs.sh "$STAGE/arm64-v8a/libpes17.
 ls -lh "$STAGE/arm64-v8a"
 
 say "==> 1/4 package the debug apk"
-# app/build.gradle.kts reads the version from the environment, not from -P.
-( cd android && PES17_VERSION_NAME="${TAG_LOWER#v}" ./gradlew --no-daemon :app:assembleDebug \
+VERSION=${TAG_LOWER#v}
+python3 - "$ROOT/android/app/build.gradle.kts" "$VERSION" <<'PY'
+import re, sys
+path, version = sys.argv[1:3]
+text = open(path).read()
+text, n = re.subn(r'(versionCode = setting\("PES17_VERSION_CODE"\)\?\.toIntOrNull\(\) \?: )(\d+)',
+                  lambda m: f"{m.group(1)}{int(m.group(2)) + 1}", text, count=1)
+if n != 1:
+    sys.exit(f"versionCode default is not in {path}")
+text, n = re.subn(r'(versionName = setting\("PES17_VERSION_NAME"\) \?: )"[^"]*"',
+                  lambda m: f'{m.group(1)}"{version}"', text, count=1)
+if n != 1:
+    sys.exit(f"versionName default is not in {path}")
+open(path, "w").write(text)
+PY
+say "    apk version: $VERSION, versionCode +1"
+# app/build.gradle.kts reads the version from the environment, not from -P; the
+# variable is what makes the artifact the tag even if the edit above is undone.
+( cd android && PES17_VERSION_NAME="$VERSION" ./gradlew --no-daemon :app:assembleDebug \
     -PprebuiltNative="$STAGE" )
 APK=$(ls "$ROOT"/android/app/build/outputs/apk/debug/*.apk 2>/dev/null | head -1)
 [ -n "$APK" ] && [ -f "$APK" ] || die "gradle produced no apk"
@@ -171,13 +188,14 @@ PY
 VERIFY=$(mktemp -d); TMP+=("$VERIFY")
 tools/fetch_engine.sh "$VERIFY/prebuilt" --audit
 
-git add tools/engine_pin.sh "$NOTES"
+git add tools/engine_pin.sh "$NOTES" android/app/build.gradle.kts
 git commit -q -m "$(cat <<EOF
 Pin builds to the $TAG engine built from $SHORT
 
 $TAG publishes app-debug.apk, the debug apk of $SHORT (and so of the XMP
-music-query and big-core fixes). Both hashes in tools/engine_pin.sh were taken
-from the published asset: the apk as served, and the libpes17.so inside it.
+music-query and big-core fixes), and moves the apk to version $VERSION. Both
+hashes in tools/engine_pin.sh were taken from the published asset: the apk as
+served, and the libpes17.so inside it.
 EOF
 )"
 say ""
