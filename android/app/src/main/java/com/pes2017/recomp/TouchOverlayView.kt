@@ -248,12 +248,18 @@ class TouchOverlayView @JvmOverloads constructor(
         fdbg("TAIL start ${finesseState()}")
         // An older hold's tail outliving a newer swipe's modifier: clearing it
         // here would lift the RT the new gesture is relying on, one frame
-        // before the button it belongs to. The newer hold has its own tail.
+        // before the button it belongs to. The newer hold has its own tail --
+        // but the press this tail carried is not the newer hold's, so it is let
+        // go even then: a button with no finger on it must never stay down.
         if (liveSwipeTailEpoch != liveSwipeEpoch) {
-            fdbg("TAIL skipped: a newer hold owns it ${finesseState()}")
-            return@Runnable
+            if (liveSwipeHoldBits == 0) {
+                fdbg("TAIL skipped: a newer hold owns it ${finesseState()}")
+                return@Runnable
+            }
+            liveSwipeHoldBits = 0
+        } else {
+            clearLiveSwipe()
         }
-        clearLiveSwipe()
         if (NativeBridge.isLoaded()) pushState()
         fdbg("TAIL end ${finesseState()}")
         invalidate()
@@ -847,7 +853,16 @@ class TouchOverlayView @JvmOverloads constructor(
         } else {
             sprintLatch.reset()
         }
-        mixer.set(HoldSource.STICK_SPRINT, if (sprintLatch.active) NativeBridge.RB else 0)
+        // The rim's run is let go for as long as a swipe is holding RT beside
+        // its button. RB + RT is the title's super cancel, and it throws away
+        // the shot the flick is asking for: a thumb sprinting at the rim and
+        // flicking shoot down sends RB, then RT, then X, and the title reads
+        // that pair as "cancel" instead of a finesse shot -- which is why the
+        // first attempt did nothing and a later one, taken off the rim, worked.
+        // The player asked for a finesse, not for a cancel, and the latch starts
+        // the run again on the push after the pair ends, so nothing is lost.
+        val rimRuns = sprintLatch.active && !liveSwipeRight
+        mixer.set(HoldSource.STICK_SPRINT, if (rimRuns) NativeBridge.RB else 0)
 
         // Every source that wants a button down, merged rather than overwritten.
         // A source states the whole truth each frame, so nothing has to be
