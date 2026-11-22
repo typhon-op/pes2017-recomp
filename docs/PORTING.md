@@ -51,7 +51,17 @@ tools/fetch_engine.sh --audit          # and report the entry points it exports
 cd android && ./gradlew :app:assembleDebug -PprebuiltNative=../libpes17_prebuilt
 ```
 
-To move to another engine, bump the tag, commit and two hashes in
+A new engine release is cut from a checkout with `tools/release_engine.sh [tag]`
+(default `V0.2.4`): it builds the engine from that commit with `./build.sh`,
+packages a debug apk around it, publishes it as the tag with the asset name
+`app-debug.apk`, downloads the published asset again to hash what the release
+really serves, rewrites `tools/engine_pin.sh`, proves the new pin with
+`tools/fetch_engine.sh --audit`, and commits and pushes it. It needs the disc's
+`default.xex`, the NDK and a signed-in `gh` — no CI runner can build the engine,
+so this step is the release machine's. The tag is made at the commit the apk was
+built from; the pin bump is the commit after it.
+
+To move to another engine by hand, bump the tag, commit and two hashes in
 `tools/engine_pin.sh`; the workflows follow on the next push, and the change is
 reviewable in the diff. `tools/deploy.sh` is the exception by design: it builds
 an engine locally from these sources and passes that directory to
