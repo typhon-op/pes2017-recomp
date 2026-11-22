@@ -23,9 +23,9 @@ name: Debug APK
 #    means `android/gradlew` run from `android/`.
 #
 # Triggers: `main` as asked, the freebuff/* working branches, the fix1
-# troubleshooting branch and the typhonstickfix* / typhonfix* work branches so a
-# push to one of them produces an apk to test, and workflow_dispatch for running
-# it by hand. GitHub's "Run workflow" picker only lists workflows on the
+# troubleshooting branch, the typhonstickfix* / typhonfix* work branches and
+# tfix4 so a push to one of them produces an apk to test, and workflow_dispatch
+# for running it by hand. GitHub's "Run workflow" picker only lists workflows on the
 # repository's default branch, so a hand-run needs this file there first; a push
 # works either way.
 #
@@ -38,6 +38,7 @@ on:
       - main
       - 'freebuff/**'
       - 'fix1'
+      - 'tfix4'
       - 'typhonstickfix*'
       - 'typhonfix*'
   workflow_dispatch:

@@ -22,13 +22,15 @@ object QuickGraphics {
     private const val X_FSR = "gfx_fsr"
     private const val X_FPS = "gfx_fps"
     private const val X_HEAT = "gfx_heat"
+    private const val X_LOADSCALE = "gfx_loadscale"
     private const val X_CROWD = "gfx_crowd"
     private const val X_LOWMEM = "gfx_lowmem"
     private const val X_PRESET = "gfx_preset"
 
     private class Values(
         var scene: Int, var scale: Int, var msaa: Boolean, var fsr: Boolean, var fps: Int,
-        var heat: Boolean, var crowd: Boolean, var lowMemory: Boolean, var preset: String,
+        var heat: Boolean, var loadScale: Boolean, var crowd: Boolean, var lowMemory: Boolean,
+        var preset: String,
     )
 
     /**
@@ -45,7 +47,7 @@ object QuickGraphics {
 
         private val v = Values(
             prefs.sceneScalePercent, prefs.renderScale, prefs.multisampling, prefs.fsr, prefs.fpsLimit,
-            prefs.heatScale, prefs.crowd, prefs.lowMemory, prefs.preset,
+            prefs.heatScale, prefs.loadScale, prefs.crowd, prefs.lowMemory, prefs.preset,
         )
         private val tiers = DeviceProfile.Tier.values()
 
@@ -68,7 +70,8 @@ object QuickGraphics {
             // is not one of them, so a preset never resets a multiplier the player
             // chose for this phone.
             v.scene = p.sceneScalePercent; v.msaa = p.multisampling; v.fsr = p.fsr
-            v.fps = p.fpsLimit; v.heat = p.heatScale; v.lowMemory = p.lowMemory; v.preset = tier.name
+            v.fps = p.fpsLimit; v.heat = p.heatScale; v.loadScale = p.loadScale
+            v.lowMemory = p.lowMemory; v.preset = tier.name
         }
 
         fun screen(menu: PesMenu): PesMenu.Screen {
@@ -125,6 +128,8 @@ object QuickGraphics {
             toggle(activity.getString(R.string.qg_msaa), { v.msaa }) { v.msaa = it }
             toggle(activity.getString(R.string.qg_fsr), { v.fsr }) { v.fsr = it }
             toggle(activity.getString(R.string.qg_heat), { v.heat }) { v.heat = it }
+            // The load rule is what keeps a GPU with no headroom steady; Low turns it on.
+            toggle(activity.getString(R.string.load_scale), { v.loadScale }) { v.loadScale = it }
             toggle(activity.getString(R.string.qg_crowd), { v.crowd }) { v.crowd = it }
             toggle(activity.getString(R.string.qg_lowmem), { v.lowMemory }) { v.lowMemory = it }
 
@@ -146,7 +151,8 @@ object QuickGraphics {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 .putExtra(EXTRA_RELAUNCH, true)
                 .putExtra(X_SCENE, v.scene).putExtra(X_SCALE, v.scale).putExtra(X_MSAA, v.msaa).putExtra(X_FSR, v.fsr)
-                .putExtra(X_FPS, v.fps).putExtra(X_HEAT, v.heat).putExtra(X_CROWD, v.crowd)
+                .putExtra(X_FPS, v.fps).putExtra(X_HEAT, v.heat).putExtra(X_LOADSCALE, v.loadScale)
+                .putExtra(X_CROWD, v.crowd)
                 .putExtra(X_LOWMEM, v.lowMemory).putExtra(X_PRESET, v.preset)
             activity.startActivity(intent)
             onApply()
@@ -168,6 +174,7 @@ object QuickGraphics {
             prefs.fsr = intent.getBooleanExtra(X_FSR, prefs.fsr)
             prefs.fpsLimit = intent.getIntExtra(X_FPS, prefs.fpsLimit)
             prefs.heatScale = intent.getBooleanExtra(X_HEAT, prefs.heatScale)
+            prefs.loadScale = intent.getBooleanExtra(X_LOADSCALE, prefs.loadScale)
             prefs.crowd = intent.getBooleanExtra(X_CROWD, prefs.crowd)
             prefs.lowMemory = intent.getBooleanExtra(X_LOWMEM, prefs.lowMemory)
             prefs.preset = intent.getStringExtra(X_PRESET) ?: prefs.preset

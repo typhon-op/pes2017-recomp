@@ -8,6 +8,7 @@
 #include <ppc_recomp_shared.h>
 #include "kernel.h"
 #include "objects.h"
+#include "xmp.h"
 #include "../guest.h"
 #include "../log.h"
 #include "../signin.h"
@@ -384,7 +385,7 @@ PPC_FUNC(__imp__XamShowDirtyDiscErrorUI)
     ctx.r3.u64 = X_ERROR_SUCCESS;
 }
 
-// XAM's message ports. Everything the title asks of the multiplayer services --
+// XAM's message ports. What the title asks of system music and multiplayer --
 // sessions, matchmaking, statistics -- arrives here as (app, message, buffer)
 // rather than as its own import, so an entry point named XSessionCreate in the
 // engine is app 0xFB message 0x000B0010 by the time it reaches the kernel.
@@ -857,6 +858,7 @@ namespace
 
     bool Handled(uint32_t app, uint32_t message)
     {
+        if (app == xmp::kApp) return xmp::Handled(message);
         if (app == kAppXGI)
             return message == 0x000B0010 || message == 0x000B0011 || message == 0x000B0018;
         if (app == kAppXLiveBase)
@@ -878,6 +880,23 @@ namespace
             if (seen.insert((uint64_t(app) << 32) | message).second)
                 LOGI("xam: message %02x/%08x answered with success", app, message);
             return {};
+        }
+        if (app == xmp::kApp)
+        {
+            const uint32_t answer = xmp::Query(message, param1, param2);
+            // A rejected music query is what leaves the soundtrack off, and the
+            // title says nothing about it on screen. Named once per message so a
+            // device log shows the packet this phone's title actually sends.
+            if (answer != X_ERROR_SUCCESS)
+            {
+                static std::mutex lock;
+                static std::set<uint32_t> seen;
+                std::lock_guard g(lock);
+                if (seen.insert(message).second)
+                    LOGW("xmp: query %08x rejected (packet %08x, length %u, %08x)",
+                         message, param1, param2, answer);
+            }
+            return Result(answer);
         }
         if (app == kAppXGI)
         {
