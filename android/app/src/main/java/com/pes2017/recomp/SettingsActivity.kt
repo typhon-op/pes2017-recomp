@@ -403,6 +403,12 @@ class SettingsActivity : AppCompatActivity() {
     ) {
         val text: TextView = findViewById(labelId)
         val seek: SeekBar = findViewById(barId)
+        // The bar does not keep its own state across a recreate. The preset buttons
+        // recreate the page after writing the settings, and the framework restores the
+        // old view state *after* onCreate -- which would snap this bar back to the
+        // replaced value under a setting that now says otherwise. The prefs are the
+        // only source of truth here.
+        seek.isSaveEnabled = false
         seek.max = max
         seek.progress = initial.coerceIn(0, max)
         text.text = label(seek.progress)
@@ -475,6 +481,11 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun switch(id: Int, initial: Boolean, onChange: (Boolean) -> Unit) {
         val view: SwitchCompat = findViewById(id)
+        // Not restored across a recreate (see bar): a restored SwitchCompat fires its
+        // checked listener, which is how pressing Low or Medium once marked the preset
+        // Custom -- the old, now-replaced state came back and the listener read it as a
+        // hand edit.
+        view.isSaveEnabled = false
         view.isChecked = initial
         view.setOnCheckedChangeListener { _, checked -> onChange(checked) }
     }
