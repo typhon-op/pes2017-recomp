@@ -24,19 +24,22 @@
 # Sourced, not executed: no shell options, no output.
 
 ENGINE_REPO=typhon-op/pes2017-recomp
-ENGINE_TAG=V0.2.4
+# Lower case on purpose: .github/workflows/android.yml cuts a release on tags
+# matching 'v*', so V0.2.4 would not fire it and v0.2.4 does.
+ENGINE_TAG=v0.2.4
 ENGINE_COMMIT=d98029c2fd880bbad6897d2d1fc1455ee9adac16
-ENGINE_ASSET=wg3gha.apk
-# Not a GitHub release yet: this is the 0.2.4 build (versionName 0.2.4-auto2,
-# versionCode 47) cut by hand from d98029c, and the engine inside it is the
-# Release build of that tree -- it carries 46950ca (the XMP query answers, the
+ENGINE_ASSET=pes17native.apk
+# The 0.2.4 apk itself, not a bare library: tools/fetch_engine.sh unpacks
+# lib/arm64-v8a out of whichever asset the pin names, hooks and all, which is
+# why every engine release here has been a whole apk. This one is the hand-cut
+# build (versionName 0.2.4-auto2, versionCode 47) whose engine is the Release
+# build of d98029c -- it carries 46950ca (the XMP query answers, the
 # capacity-based fast cores, the corrected 8 GB budgets) and 1679e2c (the
-# running flow read from the procedure switch), which the V0.2.3 asset does not.
-# Until a V0.2.4 release exists, this asset is the engine. Re-cutting it with
-# tools/release_engine.sh replaces ENGINE_URL and ENGINE_APK_SHA256 with the
-# published asset and leaves ENGINE_TAG, ENGINE_COMMIT and ENGINE_SO_SHA256
-# alone, because those name the sources rather than the host.
-ENGINE_URL="https://files.catbox.moe/wg3gha.apk"
+# running flow read from the procedure switch), which the V0.2.3 asset, cut
+# from ee4af63, does not. The asset is a container, not a build input: builds
+# take lib/arm64-v8a from it and the app's own classes from this tree, so the
+# apk published here and an apk built from these sources share an engine.
+ENGINE_URL="https://github.com/$ENGINE_REPO/releases/download/$ENGINE_TAG/$ENGINE_ASSET"
 
 # The asset as published.
 ENGINE_APK_SHA256=f06290ebbd1a5025ec0becd5f6458492ed2ea2eb11e33885914c1af774266c02
