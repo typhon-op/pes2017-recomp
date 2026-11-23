@@ -24,12 +24,21 @@
 # Sourced, not executed: no shell options, no output.
 
 ENGINE_REPO=typhon-op/pes2017-recomp
-ENGINE_TAG=V0.2.3
-ENGINE_COMMIT=ee4af63bb5785602d4ffcbaca493abcdad441e84
-ENGINE_ASSET=app-debug.apk
-ENGINE_URL="https://github.com/$ENGINE_REPO/releases/download/$ENGINE_TAG/$ENGINE_ASSET"
+ENGINE_TAG=V0.2.4
+ENGINE_COMMIT=d98029c2fd880bbad6897d2d1fc1455ee9adac16
+ENGINE_ASSET=wg3gha.apk
+# Not a GitHub release yet: this is the 0.2.4 build (versionName 0.2.4-auto2,
+# versionCode 47) cut by hand from d98029c, and the engine inside it is the
+# Release build of that tree -- it carries 46950ca (the XMP query answers, the
+# capacity-based fast cores, the corrected 8 GB budgets) and 1679e2c (the
+# running flow read from the procedure switch), which the V0.2.3 asset does not.
+# Until a V0.2.4 release exists, this asset is the engine. Re-cutting it with
+# tools/release_engine.sh replaces ENGINE_URL and ENGINE_APK_SHA256 with the
+# published asset and leaves ENGINE_TAG, ENGINE_COMMIT and ENGINE_SO_SHA256
+# alone, because those name the sources rather than the host.
+ENGINE_URL="https://files.catbox.moe/wg3gha.apk"
 
-# The release asset as published.
-ENGINE_APK_SHA256=7d233cbd4354aa4af6badc598052c0204f0bb158646d0faba98e5008c553c106
+# The asset as published.
+ENGINE_APK_SHA256=f06290ebbd1a5025ec0becd5f6458492ed2ea2eb11e33885914c1af774266c02
 # lib/arm64-v8a/libpes17.so inside that asset.
-ENGINE_SO_SHA256=cc273ab9d9eb2eb687de51bfd39842aa61bb3029165a2937188c58ff14b657a2
+ENGINE_SO_SHA256=1133fa0b9309b802fbaa8e074b1decde8f5a7912599be409937807ac6478eb69
