@@ -4,7 +4,10 @@ on:
   push:
     branches: [ main ]
     tags:
+      # Both cases, because the repository already carries both (v0.2.1, then
+      # V0.2.2 and V0.2.3) and GitHub matches these filters case-sensitively.
       - 'v*'
+      - 'V*'
   workflow_dispatch:
 
 # Engine as in debug-apk.yml: the recompiled title needs the player's own disc
@@ -98,7 +101,9 @@ jobs:
           if-no-files-found: error
 
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        # Same both-cases rule as the trigger above: started only by a tag, so a
+        # branch build still stops at the artifact.
+        if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/tags/V')
         uses: softprops/action-gh-release@v2
         with:
           files: android/app/build/outputs/apk/release/*.apk
