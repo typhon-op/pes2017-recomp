@@ -55,6 +55,21 @@ int main()
         Check(tracker.Observe(false, true, 1.0) == Phase::Unknown, "still unknown whatever a read would say");
     }
 
+    {
+        // The title's procedure switch names the flow it enters: "Match/..." is
+        // a match, anything else is a menu, and a name that could not be read is
+        // no observation at all.
+        using namespace phase;
+        Check(Observed() == Phase::Unknown, "nothing named yet");
+        Check(NoteProcedure("Match/MatchSetup", 16) == Phase::Match, "the match flow is a match");
+        Check(Observed() == Phase::Match, "and the answer is kept for the sampler");
+        Check(NoteProcedure("TopMenu/TopMenu", 15) == Phase::Menus, "the top menu is the menus");
+        Check(Observed() == Phase::Menus, "and that is kept too");
+        Check(NoteProcedure("", 0) == Phase::Menus, "an unreadable name changes nothing");
+        // A name that merely contains "Match" is not the match flow.
+        Check(NoteProcedure("Setup/MatchUp", 13) == Phase::Menus, "only the prefix counts");
+    }
+
     std::printf("%d checks, %d failed\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

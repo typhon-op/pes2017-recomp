@@ -9,6 +9,7 @@
 #include "diagnostics.h"
 #include "env.h"
 #include "guest.h"
+#include "game_phase.h"
 #include "log.h"
 #include "player.h"
 #include "console.h"
@@ -864,6 +865,15 @@ void player::Report()
 // question.
 player::Presence player::NowRunning()
 {
+    // The title's procedure switch names the flow it enters, and "Match/" is the
+    // match flow (runtime/pes_hooks.cpp). That answers the question without any
+    // address of the title's, so it is preferred to the guest read below.
+    switch (::phase::Observed())
+    {
+    case ::phase::Phase::Match: return Presence::Match;
+    case ::phase::Phase::Menus: return Presence::Menus;
+    default: break;
+    }
 #if T_DATA_ClientStates != 0 && T_CLIENT_VALID != 0
     const uint32_t client = *GuestPtr<be32>(T_DATA_ClientStates);
     if (!client) return Presence::Menus;

@@ -19,10 +19,11 @@ namespace player
         float yaw = 0, pitch = 0;
     };
 
-    // Whether the title has a match running: Unknown when this build has no
-    // addresses for the title's client states (title.h still holds its
-    // placeholders), because then there is nothing to read and a guess would be
-    // worse than saying so. The app's phase listener follows this.
+    // Whether the title has a match running. The answer comes from the title's
+    // own procedure switch (runtime/game_phase.h): a "Match/..." flow is a match.
+    // The guest read below it is a fallback for a build where that switch has
+    // said nothing yet, and Unknown stays the honest answer then -- a guess would
+    // be worse than saying so. The app's phase listener follows this.
     enum class Presence { Unknown, Menus, Match };
     Presence NowRunning();
 

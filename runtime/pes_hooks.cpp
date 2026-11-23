@@ -1,6 +1,7 @@
 // Hooks that make PES 2017 behave on a phone (as opposed to pes_debug.cpp's probes).
 #include <ppc_recomp_shared.h>
 #include "title.h"
+#include "game_phase.h"
 #include "guest.h"
 #include "log.h"
 #include "crash.h"
@@ -70,6 +71,19 @@ GUEST_HOOK(82F00CE8)
     const std::string name = GuestString16(ctx.r5.u32);
     if (logged++ < 400)
         LOGW("procedure: %s (from %08X on '%s')", name.c_str(), uint32_t(ctx.lr), crash::CurrentThreadName());
+    // This name is the title's own answer to "what is running", so it is also
+    // the app's phase: a "Match/..." flow is a match (MatchSetup from kick-off,
+    // MatchIdle in play) and anything else is a menu. See runtime/game_phase.h.
+    // Said once per change, because the switch runs on every transition.
+    static std::atomic<int> lastFlow{ 0 };
+    if (!name.empty())
+    {
+        const ::phase::Phase said = ::phase::NoteProcedure(name.c_str(), unsigned(name.size()));
+        const int word = said == ::phase::Phase::Match ? 2 : 1;
+        if (lastFlow.exchange(word) != word)
+            LOGI("phase: %s -- %s", word == 2 ? "a match is running" : "the menus are up",
+                 name.c_str());
+    }
     if (name == "Intro/ProcInstall" && once++ == 0)
     {
         const char text[] = "FirstFlow/ProcSystemDataSave";

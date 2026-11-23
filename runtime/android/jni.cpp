@@ -27,6 +27,7 @@
 #include "../console.h"
 #include "../online/service.h"
 #include "../kernel/yield_backoff.h"
+#include "../game_phase.h"
 
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
@@ -448,6 +449,15 @@ PES17_NATIVE(void, nativeSurfaceChanged)(JNIEnv* env, jobject, jobject surface, 
 PES17_NATIVE(void, nativeSurfaceDestroyed)(JNIEnv*, jobject)
 {
     android::detail::DestroyWindow();
+}
+
+PES17_NATIVE(jint, nativeGamePhase)(JNIEnv*, jobject)
+{
+    // What the title last named, read rather than pushed. The listener is only
+    // told on a change, so a push sent before the app was listening would leave
+    // it guessing until the next flow; this is the answer itself, and the app
+    // polls it at 2 Hz (GameActivity.phasePoll) beside the push.
+    return jint(std::uint8_t(::phase::Observed()));
 }
 
 PES17_NATIVE(void, nativeSetPaused)(JNIEnv*, jobject, jboolean paused)
