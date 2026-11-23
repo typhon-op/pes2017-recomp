@@ -24,9 +24,7 @@
 # Sourced, not executed: no shell options, no output.
 
 ENGINE_REPO=typhon-op/pes2017-recomp
-# Lower case on purpose: .github/workflows/android.yml cuts a release on tags
-# matching 'v*', so V0.2.4 would not fire it and v0.2.4 does.
-ENGINE_TAG=v0.2.4
+ENGINE_TAG=V0.2.4
 ENGINE_COMMIT=d98029c2fd880bbad6897d2d1fc1455ee9adac16
 ENGINE_ASSET=pes17native.apk
 # The 0.2.4 apk itself, not a bare library: tools/fetch_engine.sh unpacks
