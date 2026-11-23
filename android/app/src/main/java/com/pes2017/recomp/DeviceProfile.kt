@@ -16,10 +16,12 @@ import java.io.File
  *   Medium  a step below (Adreno 640/642L/7xx entry, Mali-G68/G78/G610):
  *           a smaller scene with FSR to sharpen it back.
  *   Low     Helio G99 / Snapdragon 680-class (Mali-G57 MC2, Adreno 610-619):
- *           the smallest scene, no multisampling, and 30 frames a second.
- *           Medium is held to 45: steady frame times on a 60 Hz screen, and a lighter
- *           load than 60 (measured on a Snapdragon 865, which is High: 45 and 30 had the
- *           steadiest frames, 40 and 35 hitched).
+ *           the smallest scene, no multisampling or FSR, and 30 frames a second.
+ *
+ * Low is the only tier with a lower limit. Medium and High run at 60, the same as
+ * the screen: on a Snapdragon 865 (High) 45 and 30 were the steadiest frame times
+ * and 40 and 35 hitched, so 45 is still there for a player who wants a lighter
+ * load, but no tier picks it.
  *
  * Nothing here is measured on a Low or Medium phone yet; the table is the
  * GPUs' relative throughput, not a benchmark.
@@ -58,13 +60,16 @@ object DeviceProfile {
     // acted; a Mali-G52 in Low has no such headroom, and the rule is the quickest way to keep the
     // frame time steady when it does not.
     //
+    // fsr is off in Low: the upscale is a full-screen pass, and at 30 fps on a G52-class GPU
+    // the frame budget has no room for it -- a plain stretch is the cheaper trade there.
+    //
     // lowMemory is off in every preset: the runtime already turns the vertex shadow off by itself
     // when MemTotal is 6 GB or less (perf.cpp), and forcing it from the Low tier cost CPU on 8 GB
     // phones that have the RAM to spare.
     fun preset(tier: Tier): Preset = when (tier) {
         Tier.HIGH -> Preset(75, multisampling = true, fsr = false, fpsLimit = 60, lowMemory = false, heatScale = true, loadScale = false)
         Tier.MEDIUM -> Preset(75, multisampling = true, fsr = true, fpsLimit = 60, lowMemory = false, heatScale = true, loadScale = false)
-        Tier.LOW -> Preset(60, multisampling = false, fsr = true, fpsLimit = 30, lowMemory = false, heatScale = true, loadScale = true)
+        Tier.LOW -> Preset(60, multisampling = false, fsr = false, fpsLimit = 30, lowMemory = false, heatScale = true, loadScale = true)
     }
 
     fun apply(prefs: Prefs, tier: Tier) {
