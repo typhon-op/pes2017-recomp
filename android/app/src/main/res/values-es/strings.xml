@@ -276,6 +276,12 @@
     <string name="widescreen_hint">Ensancha la cámara del juego a la forma del móvil y llena toda la pantalla en lugar de mostrar franjas negras a los lados (PES17_ASPECT). Los menús y la barra del marcador se estiran de lado. Se aplica en el siguiente arranque.</string>
     <string name="fps_limit">Límite de fotogramas: %1$d FPS</string>
     <string name="fps_limit_off">Límite de fotogramas: desactivado (60 FPS)</string>
+    <string name="match_refresh">Ajustar la pantalla al límite de fotogramas</string>
+    <string name="match_refresh_hint">Pide a la pantalla la frecuencia a la que va el partido: con un límite de 30 fps en un modo de 30 Hz hay un refresco por fotograma, así que el teléfono deja de mostrar cada fotograma dos veces y la imagen llega algo antes. Los teléfonos sin ese modo conservan el suyo. Se ignora con la generación de fotogramas, que necesita 60 Hz.</string>
+    <string name="aniso">Nitidez de texturas (anisótropo): %1$dx</string>
+    <string name="aniso_label_short">Nitidez de texturas (anisótropo)</string>
+    <string name="aniso_value">%1$dx</string>
+    <string name="aniso_hint">Cuánto filtrado pueden usar las texturas del juego en ángulo rasante, donde el campo se pierde en el horizonte (PES17_MAX_ANISO). Android ya lo limita a 4x; 2x o 1x cuesta menos en un teléfono que pierde fotogramas en planos amplios, y 8x o 16x se ve más nítido si sobra potencia.</string>
     <string name="fps_limit_hint">Saca el partido del ritmo de 60 Hz y lo limita a estos fotogramas por segundo (PES17_FPS_LIMIT). Más bajo es más fresco y dura más. En una pantalla de 60 Hz, 30 da el movimiento más uniforme; de 35 a 55 puede dar tirones.</string>
     <string name="low_memory">Modo de poca memoria</string>
     <string name="low_memory_hint">Se salta el gran búfer de sombras de vértices (PES17_NO_SHADOW). Úsalo en móviles de 6 GB o menos, o si el partido muere en segundo plano.</string>

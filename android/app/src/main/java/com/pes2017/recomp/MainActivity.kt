@@ -105,6 +105,7 @@ class MainActivity : AppCompatActivity() {
         relaunchRequested = QuickGraphics.takeRelaunch(intent, prefs)
         // The performance preset this phone starts from, once (DeviceProfile).
         try { DeviceProfile.ensurePreset(this, prefs) } catch (_: Throwable) {}
+        try { DeviceProfile.ensureAniso(prefs) } catch (_: Throwable) {}
 
         status = findViewById(R.id.status)
         footer = findViewById(R.id.footer)

@@ -26,6 +26,15 @@ object GraphicsOptions {
     val FPS_LIMIT = intArrayOf(30, 35, 40, 45, 50, 55, 60)
 
     /**
+     * Anisotropic filtering cap, PES17_MAX_ANISO: how many texture samples the
+     * title's own request may become. Android already caps it at 4x, so the steps
+     * above 4 only undo that on a phone with room to spare; 2 and 1 are for a GPU
+     * that is filling the frame with the pitch, where the far end is what is being
+     * drawn (docs/performance.md).
+     */
+    val MAX_ANISO = intArrayOf(1, 2, 4, 8, 16)
+
+    /**
      * [value] as one of [options]. A saved value that is not on the list (an older
      * build's 55% scene, or a hand-written number) becomes the next option up, so
      * what the page shows is one of the four or seven choices and is exactly what

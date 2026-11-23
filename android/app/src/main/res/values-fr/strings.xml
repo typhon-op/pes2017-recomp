@@ -276,6 +276,12 @@
     <string name="widescreen_hint">Élargit la caméra du jeu à la forme du téléphone et remplit tout l’écran au lieu d’afficher des bandes noires sur les côtés (PES17_ASPECT). Les menus et la barre de score sont étirés horizontalement. Prise d’effet au prochain démarrage.</string>
     <string name="fps_limit">Limite de fréquence d’images : %1$d FPS</string>
     <string name="fps_limit_off">Limite de fréquence d’images : désactivée (60 FPS)</string>
+    <string name="match_refresh">Accorder l’écran à la limite d’images</string>
+    <string name="match_refresh_hint">Demande à l’écran la fréquence à laquelle le match est cadencé : une limite de 30 i/s sur un mode 30 Hz, c’est un rafraîchissement par image, donc le téléphone cesse d’afficher chaque image deux fois et l’image arrive un peu plus tôt. Les téléphones sans ce mode gardent le leur. Ignoré quand la génération d’images est active, car elle a besoin du 60 Hz.</string>
+    <string name="aniso">Netteté des textures (anisotrope) : %1$dx</string>
+    <string name="aniso_label_short">Netteté des textures (anisotrope)</string>
+    <string name="aniso_value">%1$dx</string>
+    <string name="aniso_hint">Le filtrage que les textures du jeu peuvent utiliser en angle rasant, là où la pelouse file vers l’horizon (PES17_MAX_ANISO). Android le plafonne déjà à 4x ; 2x ou 1x coûte moins sur un téléphone qui perd des images dans les plans larges, 8x ou 16x est plus net s’il reste de la marge.</string>
     <string name="fps_limit_hint">Retire le match du rythme 60 Hz et le limite à ce nombre d’images par seconde (PES17_FPS_LIMIT). Plus bas signifie plus frais et plus durable. Sur un écran 60 Hz, 30 donne le mouvement le plus régulier ; 35 à 55 peuvent saccader.</string>
     <string name="low_memory">Mode faible mémoire</string>
     <string name="low_memory_hint">Évite le grand tampon d’ombres des sommets (PES17_NO_SHADOW). À utiliser sur les téléphones de 6 Go ou moins, ou si le match est tué en arrière-plan.</string>

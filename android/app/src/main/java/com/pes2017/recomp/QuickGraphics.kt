@@ -25,12 +25,14 @@ object QuickGraphics {
     private const val X_LOADSCALE = "gfx_loadscale"
     private const val X_CROWD = "gfx_crowd"
     private const val X_LOWMEM = "gfx_lowmem"
+    private const val X_ANISO = "gfx_aniso"
+    private const val X_REFRESH = "gfx_refresh"
     private const val X_PRESET = "gfx_preset"
 
     private class Values(
         var scene: Int, var scale: Int, var msaa: Boolean, var fsr: Boolean, var fps: Int,
         var heat: Boolean, var loadScale: Boolean, var crowd: Boolean, var lowMemory: Boolean,
-        var preset: String,
+        var aniso: Int, var refresh: Boolean, var preset: String,
     )
 
     /**
@@ -47,7 +49,8 @@ object QuickGraphics {
 
         private val v = Values(
             prefs.sceneScalePercent, prefs.renderScale, prefs.multisampling, prefs.fsr, prefs.fpsLimit,
-            prefs.heatScale, prefs.loadScale, prefs.crowd, prefs.lowMemory, prefs.preset,
+            prefs.heatScale, prefs.loadScale, prefs.crowd, prefs.lowMemory,
+            prefs.maxAniso, prefs.matchRefresh, prefs.preset,
         )
         private val tiers = DeviceProfile.Tier.values()
 
@@ -71,7 +74,7 @@ object QuickGraphics {
             // chose for this phone.
             v.scene = p.sceneScalePercent; v.msaa = p.multisampling; v.fsr = p.fsr
             v.fps = p.fpsLimit; v.heat = p.heatScale; v.loadScale = p.loadScale
-            v.lowMemory = p.lowMemory; v.preset = tier.name
+            v.lowMemory = p.lowMemory; v.aniso = p.maxAniso; v.preset = tier.name
         }
 
         fun screen(menu: PesMenu): PesMenu.Screen {
@@ -125,6 +128,15 @@ object QuickGraphics {
                     onAdjust = { m, _ -> set(!get()); touched(); m.refresh() },
                 )
             }
+            rows += PesMenu.Row(
+                activity.getString(R.string.aniso_label_short),
+                detail = activity.getString(R.string.aniso_value, v.aniso),
+                onAdjust = { m, d ->
+                    v.aniso = GraphicsOptions.step(GraphicsOptions.MAX_ANISO, v.aniso, d)
+                    touched()
+                    m.refresh()
+                },
+            )
             toggle(activity.getString(R.string.qg_msaa), { v.msaa }) { v.msaa = it }
             toggle(activity.getString(R.string.qg_fsr), { v.fsr }) { v.fsr = it }
             toggle(activity.getString(R.string.qg_heat), { v.heat }) { v.heat = it }
@@ -132,6 +144,7 @@ object QuickGraphics {
             toggle(activity.getString(R.string.load_scale), { v.loadScale }) { v.loadScale = it }
             toggle(activity.getString(R.string.qg_crowd), { v.crowd }) { v.crowd = it }
             toggle(activity.getString(R.string.qg_lowmem), { v.lowMemory }) { v.lowMemory = it }
+            toggle(activity.getString(R.string.match_refresh), { v.refresh }) { v.refresh = it }
 
             rows += PesMenu.Row(activity.getString(R.string.qg_apply)) { m ->
                 m.dismissNow()
@@ -153,7 +166,9 @@ object QuickGraphics {
                 .putExtra(X_SCENE, v.scene).putExtra(X_SCALE, v.scale).putExtra(X_MSAA, v.msaa).putExtra(X_FSR, v.fsr)
                 .putExtra(X_FPS, v.fps).putExtra(X_HEAT, v.heat).putExtra(X_LOADSCALE, v.loadScale)
                 .putExtra(X_CROWD, v.crowd)
-                .putExtra(X_LOWMEM, v.lowMemory).putExtra(X_PRESET, v.preset)
+                .putExtra(X_LOWMEM, v.lowMemory).putExtra(X_ANISO, v.aniso)
+                .putExtra(X_REFRESH, v.refresh)
+                .putExtra(X_PRESET, v.preset)
             activity.startActivity(intent)
             onApply()
         }
@@ -177,6 +192,8 @@ object QuickGraphics {
             prefs.loadScale = intent.getBooleanExtra(X_LOADSCALE, prefs.loadScale)
             prefs.crowd = intent.getBooleanExtra(X_CROWD, prefs.crowd)
             prefs.lowMemory = intent.getBooleanExtra(X_LOWMEM, prefs.lowMemory)
+            prefs.maxAniso = intent.getIntExtra(X_ANISO, prefs.maxAniso)
+            prefs.matchRefresh = intent.getBooleanExtra(X_REFRESH, prefs.matchRefresh)
             prefs.preset = intent.getStringExtra(X_PRESET) ?: prefs.preset
         }
         return true

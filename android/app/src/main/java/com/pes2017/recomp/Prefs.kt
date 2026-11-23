@@ -200,6 +200,9 @@ class Prefs(context: Context) {
     fun hasTunedPerformance(): Boolean =
         listOf(KEY_SCENE_SCALE, KEY_MSAA, KEY_FSR, KEY_CAP30, KEY_FPS_LIMIT, KEY_LOW_MEMORY).any { store.contains(it) }
 
+    /** Whether the player set the aniso cap themselves ([maxAniso]). */
+    fun hasChosenAniso(): Boolean = store.contains(KEY_MAX_ANISO)
+
     /** The GPU's GL renderer name, as read on the build `key` (DeviceProfile). */
     fun cachedGpu(key: String): String? =
         if (store.getString(KEY_GPU_BUILD, null) == key) store.getString(KEY_GPU_NAME, null) else null
@@ -271,6 +274,30 @@ class Prefs(context: Context) {
     var prefer60Hz: Boolean
         get() = store.getBoolean(KEY_60HZ, true)
         set(value) = store.edit().putBoolean(KEY_60HZ, value).apply()
+
+    /**
+     * Ask the display for the rate the match is paced at instead of a flat 60 Hz.
+     * A 30 fps limit on a 30 Hz mode is one screen tick per frame, so the phone
+     * stops showing every frame twice and each frame reaches the eye a refresh
+     * sooner. Only 30 is paced this way: the other limits match no mode, and asking
+     * for one promotes the panel to the next rate up. A panel with no mode that
+     * divides the limit keeps the 60 Hz lock, and frame generation ignores this:
+     * it fills the blanks of a 60 Hz screen.
+     */
+    var matchRefresh: Boolean
+        get() = store.getBoolean(KEY_MATCH_REFRESH, true)
+        set(value) = store.edit().putBoolean(KEY_MATCH_REFRESH, value).apply()
+
+    /**
+     * The cap on the title's anisotropic filtering (PES17_MAX_ANISO, one of
+     * GraphicsOptions.MAX_ANISO). 4 is Android's own default (perf.cpp); lower is
+     * cheaper where the pitch runs to the horizon, higher is sharper.
+     */
+    var maxAniso: Int
+        get() = GraphicsOptions.normalize(GraphicsOptions.MAX_ANISO, store.getInt(KEY_MAX_ANISO, 4))
+        set(value) = store.edit()
+            .putInt(KEY_MAX_ANISO, GraphicsOptions.normalize(GraphicsOptions.MAX_ANISO, value))
+            .apply()
 
     // ---- sound ------------------------------------------------------------
 
@@ -645,6 +672,8 @@ class Prefs(context: Context) {
         private const val KEY_HUD_LEVEL = "hudLevel"
         private const val KEY_DEV_TOOLS = "developerTools"
         private const val KEY_60HZ = "prefer60Hz"
+        private const val KEY_MATCH_REFRESH = "matchRefresh"
+        private const val KEY_MAX_ANISO = "maxAniso"
         private const val KEY_AUDIO = "audio"
         private const val KEY_TOUCH = "touchControls"
         private const val KEY_GAMEPAD = "gamepad"

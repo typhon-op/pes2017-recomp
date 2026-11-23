@@ -50,6 +50,7 @@ object DeviceProfile {
         val lowMemory: Boolean,
         val heatScale: Boolean,
         val loadScale: Boolean,
+        val maxAniso: Int,
     )
 
     // With the heat rule on, the scene scale is the most the match will be drawn at and the
@@ -63,13 +64,18 @@ object DeviceProfile {
     // fsr is off in Low: the upscale is a full-screen pass, and at 30 fps on a G52-class GPU
     // the frame budget has no room for it -- a plain stretch is the cheaper trade there.
     //
+    // maxAniso is 2x in Low and 4x everywhere else, which is Android's own cap (perf.cpp):
+    // the pitch is most of what a wide camera draws, and the far half of it is where the
+    // filtering is spent, so halving the samples there buys frame time that no other
+    // setting on that tier buys as cheaply.
+    //
     // lowMemory is off in every preset: the runtime already turns the vertex shadow off by itself
     // when MemTotal is 6 GB or less (perf.cpp), and forcing it from the Low tier cost CPU on 8 GB
     // phones that have the RAM to spare.
     fun preset(tier: Tier): Preset = when (tier) {
-        Tier.HIGH -> Preset(75, multisampling = true, fsr = false, fpsLimit = 60, lowMemory = false, heatScale = true, loadScale = false)
-        Tier.MEDIUM -> Preset(75, multisampling = true, fsr = true, fpsLimit = 60, lowMemory = false, heatScale = true, loadScale = false)
-        Tier.LOW -> Preset(60, multisampling = false, fsr = false, fpsLimit = 30, lowMemory = false, heatScale = true, loadScale = true)
+        Tier.HIGH -> Preset(75, multisampling = true, fsr = false, fpsLimit = 60, lowMemory = false, heatScale = true, loadScale = false, maxAniso = 4)
+        Tier.MEDIUM -> Preset(75, multisampling = true, fsr = true, fpsLimit = 60, lowMemory = false, heatScale = true, loadScale = false, maxAniso = 4)
+        Tier.LOW -> Preset(60, multisampling = false, fsr = false, fpsLimit = 30, lowMemory = false, heatScale = true, loadScale = true, maxAniso = 2)
     }
 
     fun apply(prefs: Prefs, tier: Tier) {
@@ -81,6 +87,7 @@ object DeviceProfile {
         prefs.lowMemory = p.lowMemory
         prefs.heatScale = p.heatScale
         prefs.loadScale = p.loadScale
+        prefs.maxAniso = p.maxAniso
         prefs.preset = tier.name
     }
 
@@ -96,6 +103,19 @@ object DeviceProfile {
             return
         }
         apply(prefs, detect(context, prefs).tier)
+    }
+
+    /**
+     * The 2x cap for an install that was already on Low before the cap became a
+     * setting: it has no stored value of its own, so it kept the runtime's 4x
+     * while a fresh Low now starts at 2x. Only Low is filled in -- a Custom
+     * player is left as they are, and a player who moved the slider has written
+     * the value and is Custom by then, so neither loses a choice.
+     */
+    fun ensureAniso(prefs: Prefs) {
+        if (prefs.preset != Tier.LOW.name) return
+        if (prefs.hasChosenAniso()) return
+        prefs.maxAniso = preset(Tier.LOW).maxAniso
     }
 
     fun detect(context: Context, prefs: Prefs): Result {

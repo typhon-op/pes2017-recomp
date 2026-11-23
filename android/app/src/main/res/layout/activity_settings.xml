@@ -272,6 +272,23 @@
                         android:layout_height="wrap_content"
                         android:text="@string/frame_gen_hint" />
 
+                    <TextView
+                        android:id="@+id/aniso_label"
+                        style="@style/SettingLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                    <SeekBar
+                        android:id="@+id/aniso"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                    <TextView
+                        style="@style/SettingHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/aniso_hint" />
+
                     <androidx.appcompat.widget.SwitchCompat
                         android:id="@+id/black_guard"
                         style="@style/SettingSwitch"
@@ -403,6 +420,19 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/prefer_60_hint" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/match_refresh"
+                        style="@style/SettingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/match_refresh" />
+
+                    <TextView
+                        style="@style/SettingHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/match_refresh_hint" />
 
 
                 </LinearLayout>

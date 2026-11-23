@@ -327,6 +327,12 @@
     <string name="widescreen_hint">Widens the game\'s camera to the phone\'s shape and fills the whole screen instead of showing black bars at the sides (PES17_ASPECT). Menus and the score bar are stretched sideways. Takes effect on the next start.</string>
     <string name="fps_limit">Frame rate limit: %1$d FPS</string>
     <string name="fps_limit_off">Frame rate limit: off (60 FPS)</string>
+    <string name="match_refresh">Match the screen to the frame limit</string>
+    <string name="match_refresh_hint">Asks the display for the rate the match is paced at: a 30 fps limit on a 30 Hz mode is one screen tick per frame, so the phone stops showing every frame twice and the picture arrives a little sooner. Phones with no such mode keep the one they are on. Ignored while frame generation is on, which needs 60 Hz.</string>
+    <string name="aniso">Texture sharpening (anisotropic): %1$dx</string>
+    <string name="aniso_label_short">Texture sharpening (anisotropic)</string>
+    <string name="aniso_value">%1$dx</string>
+    <string name="aniso_hint">How much filtering the game\u2019s textures may use at a glancing angle, where the pitch runs to the horizon (PES17_MAX_ANISO). Android already caps it at 4x; 2x or 1x is cheaper on a phone losing frames in wide camera shots, 8x or 16x sharper on one with room to spare.</string>
     <string name="fps_limit_hint">Takes the match off the 60 Hz pacing and limits it to this many frames a second (PES17_FPS_LIMIT). Lower is cooler and longer-lasting. On a 60 Hz screen 30 gives the most even motion; 35 to 55 can judder.</string>
     <string name="low_memory">Low-memory mode</string>
     <string name="low_memory_hint">Skips the large vertex shadow buffer (PES17_NO_SHADOW). Use it on 6 GB phones or less, or if the match is killed in the background.</string>

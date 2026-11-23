@@ -74,6 +74,11 @@ class SettingsActivity : AppCompatActivity() {
         switch(R.id.msaa, prefs.multisampling) { prefs.multisampling = it; presetTouched() }
         switch(R.id.fsr, prefs.fsr) { prefs.fsr = it; presetTouched() }
         switch(R.id.frame_gen, prefs.frameGeneration) { prefs.frameGeneration = it }
+        bar(R.id.aniso, R.id.aniso_label, GraphicsOptions.MAX_ANISO.size - 1,
+            GraphicsOptions.MAX_ANISO.indexOf(prefs.maxAniso),
+            { getString(R.string.aniso, GraphicsOptions.MAX_ANISO[it]) }) {
+            prefs.maxAniso = GraphicsOptions.MAX_ANISO[it]; presetTouched()
+        }
         switch(R.id.black_guard, prefs.blackGuard) { prefs.blackGuard = it }
         // Experiments: arena size (Auto, 128, 192, 256, 320 MB) and four switches the runtime already has.
         val arenaIds = intArrayOf(R.id.arena_auto, R.id.arena_128, R.id.arena_192, R.id.arena_256, R.id.arena_320)
@@ -95,6 +100,7 @@ class SettingsActivity : AppCompatActivity() {
             prefs.fpsLimit = GraphicsOptions.FPS_LIMIT[it]; presetTouched()
         }
         switch(R.id.prefer60, prefs.prefer60Hz) { prefs.prefer60Hz = it }
+        switch(R.id.match_refresh, prefs.matchRefresh) { prefs.matchRefresh = it }
         // Off / Minimal / Normal / Complete, in Prefs.HUD_* order.
         val hudChoices = intArrayOf(R.id.hud_off, R.id.hud_minimal, R.id.hud_normal, R.id.hud_complete)
         val hudLevel: android.widget.RadioGroup = findViewById(R.id.hud_level)
@@ -260,6 +266,7 @@ class SettingsActivity : AppCompatActivity() {
      */
     private fun presets() {
         DeviceProfile.ensurePreset(this, prefs)
+        DeviceProfile.ensureAniso(prefs)
         val detected = DeviceProfile.detect(this, prefs)
         val specs = detected.specs
         findViewById<TextView>(R.id.preset_detected).text = getString(

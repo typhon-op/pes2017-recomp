@@ -276,6 +276,12 @@
     <string name="widescreen_hint">Alarga a câmara do jogo à forma do telemóvel e enche o ecrã todo em vez de mostrar barras negras nas laterais (PES17_ASPECT). Os menus e a barra do resultado são esticados na horizontal. Aplica-se no arranque seguinte.</string>
     <string name="fps_limit">Limite de fotogramas: %1$d FPS</string>
     <string name="fps_limit_off">Limite de fotogramas: desligado (60 FPS)</string>
+    <string name="match_refresh">Ajustar o ecrã ao limite de fotogramas</string>
+    <string name="match_refresh_hint">Pede ao ecrã a taxa a que o jogo está ritmado: um limite de 30 fps num modo de 30 Hz dá um refresco por fotograma, por isso o telemóvel deixa de mostrar cada fotograma duas vezes e a imagem chega um pouco mais cedo. Os telemóveis sem esse modo mantêm o seu. Ignorado com a geração de fotogramas, que precisa dos 60 Hz.</string>
+    <string name="aniso">Nitidez das texturas (anisótropo): %1$dx</string>
+    <string name="aniso_label_short">Nitidez das texturas (anisótropo)</string>
+    <string name="aniso_value">%1$dx</string>
+    <string name="aniso_hint">Quanto filtragem as texturas do jogo podem usar em ângulo rasante, onde o relvado se perde no horizonte (PES17_MAX_ANISO). O Android já a limita a 4x; 2x ou 1x custa menos num telemóvel que perde fotogramas nos planos abertos, 8x ou 16x é mais nítido se houver folga.</string>
     <string name="fps_limit_hint">Tira o jogo do ritmo de 60 Hz e limita-o a este número de fotogramas por segundo (PES17_FPS_LIMIT). Mais baixo é mais fresco e dura mais. Num ecrã de 60 Hz, 30 dá o movimento mais uniforme; de 35 a 55 pode soluçar.</string>
     <string name="low_memory">Modo de pouca memória</string>
     <string name="low_memory_hint">Salta a grande memória de sombras de vértices (PES17_NO_SHADOW). Usa-o em telemóveis de 6 GB ou menos, ou se o jogo for morto em segundo plano.</string>

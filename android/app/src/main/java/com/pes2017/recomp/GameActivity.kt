@@ -422,22 +422,39 @@ class GameActivity : AppCompatActivity(), NativeListener {
         window.setSustainedPerformanceMode(!noSustained)
         Trail.note(this, "game: sustained performance mode ${if (noSustained) "off" else "on"}")
         watchThermalStatus()
-        // Frame generation pairs a 30 fps game with a 60 Hz screen (PES17_FRAMEGEN).
-        if (prefs.prefer60Hz || prefs.frameGeneration) {
+        // The panel is asked for the rate the match is paced at (Prefs.matchRefresh):
+        // a 30 fps match on a 30 Hz mode is one screen tick a frame, so the phone stops
+        // showing every frame twice. Frame generation is the exception -- it fills the
+        // blanks of a 60 Hz screen (PES17_FRAMEGEN).
+        val refresh = requestedRefresh()
+        if (refresh > 0f) {
             val attributes = window.attributes
-            attributes.preferredRefreshRate = 60f
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val displayObj = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display
-                else {
-                    @Suppress("DEPRECATION")
-                    windowManager.defaultDisplay
+            val displayObj = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display
+            else {
+                @Suppress("DEPRECATION")
+                windowManager.defaultDisplay
+            }
+            val mode = if (refresh < 60f && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                displayModeFor(displayObj, refresh) else null
+            when {
+                // A real mode at the pacing rate: ask for it by id, and for its rate,
+                // so the system cannot land on a neighbour that happens to be close.
+                mode != null -> {
+                    attributes.preferredDisplayModeId = mode.modeId
+                    attributes.preferredRefreshRate = mode.refreshRate
                 }
-                if (displayObj != null) {
-                    val mode60 = displayObj.supportedModes.firstOrNull { kotlin.math.abs(it.refreshRate - 60f) < 1f }
-                    if (mode60 != null) {
-                        attributes.preferredDisplayModeId = mode60.modeId
+                // Everything else gets the 60 Hz lock it had before: every other
+                // limit, frame generation, and a 30 fps match on a panel with no
+                // mode that divides it (which is most phones, at 60/90/120 Hz).
+                refresh >= 60f || prefs.prefer60Hz -> {
+                    attributes.preferredRefreshRate = 60f
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        displayObj?.supportedModes
+                            ?.firstOrNull { kotlin.math.abs(it.refreshRate - 60f) < 1f }
+                            ?.let { attributes.preferredDisplayModeId = it.modeId }
                     }
                 }
+                else -> Unit
             }
             window.attributes = attributes
         }
@@ -812,6 +829,33 @@ class GameActivity : AppCompatActivity(), NativeListener {
         }
     }
 
+    /**
+     * The refresh rate to ask the display for, or 0 to leave the panel alone.
+     *
+     * Only a 30 fps match asks for anything but the 60 Hz lock. 30 is the one limit
+     * a phone panel's rates divide: asking for 45 (or 40, or 35) matches no mode, and
+     * the system then settles on the next one up -- 90 Hz on a 60/90/120 screen -- so
+     * the picture would be shown on a faster panel at exactly the power cost this is
+     * meant to avoid. Frame generation fills the blanks of a 60 Hz screen, so it
+     * always asks for 60.
+     */
+    private fun requestedRefresh(): Float {
+        if (prefs.frameGeneration) return 60f
+        if (prefs.matchRefresh && prefs.fpsLimit == 30) return 30f
+        return if (prefs.prefer60Hz) 60f else 0f
+    }
+
+    /**
+     * The mode to ask for [target] at, or null when the panel has none that divides
+     * evenly: the lowest rate that is a whole number of [target] ticks. For 30 on a
+     * 60/90/120 screen that is the 60 Hz it was already on, which is the point -- a
+     * 30 Hz mode is the only thing this changes, and only where the panel has one.
+     */
+    private fun displayModeFor(displayObj: android.view.Display?, target: Float): android.view.Display.Mode? =
+        displayObj?.supportedModes
+            ?.filter { it.refreshRate >= target && kotlin.math.abs(it.refreshRate % target) < 1f }
+            ?.minByOrNull { it.refreshRate }
+
     // ---- what the runtime is told before it starts -----------------------------
 
     private fun applyOptions() {
@@ -865,6 +909,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
             "PES17_TEXTURE_BUDGET_MB",
             if (prefs.textureBudgetMB > 0) prefs.textureBudgetMB.toString() else "",
         )
+        // The title's own anisotropic request, capped (PES17_MAX_ANISO). Android's
+        // default is 4x; a phone that cannot hold the frame can go lower.
+        NativeBridge.nativeSetOption("PES17_MAX_ANISO", prefs.maxAniso.toString())
         // Both caches live in the app's own folder and make the second start
         // of a level far quicker than the first.
         val extDir = getExternalFilesDir(null)
