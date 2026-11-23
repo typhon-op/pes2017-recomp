@@ -78,9 +78,11 @@ ISO importing and the Bluetooth/USB gamepad path were not modified.
 
 ## Defending without possession detection
 
-The title does not report possession (and in this build the match-phase read is
-disabled too: `T_DATA_ClientStates` is still a placeholder), so the defending pad
-is the player's call. It is now one tap away: a **stance chip** above the action
+The title does not report possession, so the defending pad
+is the player's call. The match phase itself is known now: the title's procedure
+switch names each flow it enters, and `Match/...` is a match (see
+`runtime/game_phase.h`), which is what the app's `onGamePhase` follows. Possession
+is still absent. It is now one tap away: a **stance chip** above the action
 diamond (`ControlKind.STANCE`, no bit of its own) flips the pad, writes
 `Prefs.defendingPad`, and toasts which pad is out. The four action buttons carry
 their defensive names in `sub2` (PRESS / TEAM / SLIDE / GK), and the defending pad

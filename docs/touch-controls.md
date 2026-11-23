@@ -272,6 +272,36 @@ axis can carry. Everything that belongs to the movement stick's gesture keys off
 push can never start, end or inherit the first stick's sprint. It ships hidden
 (`visible = false`) and is added from the editor's add palette, like the spares.
 
+## The switch on auto
+
+The pause menu's **Stick switch** row picks who moves the MATCH/MENU pill:
+
+| Mode | Who moves the switch |
+|---|---|
+| Manual (default) | the player, one tap at a time |
+| Auto | the game: MATCH while a match is running, MENU in the title's menus and whenever the game is paused |
+
+Auto reads two things and nothing else: the phase the runtime reports (a `Match/`
+flow, see `runtime/game_phase.h`) and the app's own pause (`menuOpen` or the pad
+editor). A paused match is still the match flow, so the pause has to be a source
+of its own -- that is the whole reason it is in the rule.
+
+The phase is both pushed (only on a change) and *read*: `nativeGamePhase()` is
+polled twice a second, because a flow named before the app was listening would
+otherwise be lost for the session. A phase the engine has not named yet is not
+an answer, so auto leaves the switch alone there: a broken signal has to behave
+like Manual, never like a pad that can no longer sprint.
+
+A tap on the pill while auto is on is an **override**: it stands until the game
+changes state (the next kick-off, pause, menu or resume), and then auto has the
+switch back. Auto itself is turned off only in the pause menu, so a stray tap
+never takes the switch over for good.
+
+Every move goes through one method (`setStickStage`), which lets go of the run
+and the two-stage dwell before the new throw applies: switching to MENU
+mid-sprint must not leave R1 down. The rule itself is `StickSwitch`, pure and
+pinned by `StickSwitchTest`.
+
 ## The resting light
 
 The controls that have a switch of their own — the six latches, the tactical
@@ -421,11 +451,16 @@ it on B. That must be checked in the title before the labels are treated as
 fact; "match-up" is not part of PES 2017's documented defensive set and is
 deliberately absent here.
 
-**Phase signal caveat.** `runtime/title.h` still holds placeholders for the
-title's client states (`T_DATA_ClientStates = 0`), so `player::NowRunning()`
-answers `Unknown` and the app never learns that a match has started. The stance
-chip is therefore the only on-pitch way to change pads; automatic switching needs
-that address chain derived first.
+**Phase signal.** The engine now learns whether a match is running from the
+title's own procedure switch (`runtime/pes_hooks.cpp`, `sub_82F00CE8`), which is
+handed the name of each flow it enters: a name beginning `Match/` (`Match/
+MatchSetup` from kick-off, `Match/MatchIdle` in play) is a match and anything
+else is a menu. The engine logs the change as `phase: a match is running --
+Match/MatchIdle` and passes it to the app through `onGamePhase`, so controls
+marked for one phase are drawn in it. `runtime/title.h` still holds placeholders
+for the title's client states (`T_DATA_ClientStates = 0`), so the guest read in
+`player::NowRunning()` stays a fallback and is not reached. Pause is not a
+separate signal: a paused match is still the match flow.
 
 ## The pad's look
 

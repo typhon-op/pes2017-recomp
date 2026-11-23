@@ -85,6 +85,13 @@ object NativeBridge {
     external fun nativeStart(gameDir: String): Boolean
     external fun nativeRequestStop()
     external fun nativeIsRunning(): Boolean
+
+    /**
+     * The title's phase right now, as [GamePhase]'s index: read from the engine
+     * rather than waited for. The listener is only told on a change, so a push
+     * sent before the app was listening would otherwise leave it guessing.
+     */
+    external fun nativeGamePhase(): Int
     external fun nativeStatus(): String
     external fun nativeLogTail(): String
 

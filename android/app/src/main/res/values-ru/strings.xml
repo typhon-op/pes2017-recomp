@@ -596,4 +596,10 @@
     <string name="patch_import_warn_dp_unreadable">DpFileList.bin не в том формате, который читает приложение. Он устанавливается как есть; проверьте соответствие CPK.</string>
     <string name="patch_import_warn_dp_missing_cpk">DpFileList.bin ссылается на CPK, которого нет в наборе.</string>
     <string name="patch_import_warn_dp_order">Приоритеты DpFileList.bin не по убыванию.</string>
+    <string name="stick_switch">Переключатель стика</string>
+    <string name="stick_switch_auto">Авто</string>
+    <string name="stick_switch_auto_detail">MATCH на старте матча, MENU в меню и на паузе</string>
+    <string name="stick_switch_manual">Вручную</string>
+    <string name="stick_switch_manual_detail">Выбираете кнопкой MATCH/MENU</string>
+    <string name="stick_switch_hint">Стик MATCH ускоряется, когда палец доходит до края. Стик MENU никогда не шлёт R1, поэтому меню не может поехать. В режиме «авто» переключатель двигается сам; нажатие на кнопку переопределяет его до следующего старта матча или паузы.</string>
 </resources>

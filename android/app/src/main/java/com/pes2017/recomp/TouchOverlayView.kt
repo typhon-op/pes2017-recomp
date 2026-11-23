@@ -138,6 +138,12 @@ class TouchOverlayView @JvmOverloads constructor(
     private val sprintLatch = SprintLatch()
 
     /**
+     * The state a tap on the MATCH/MENU pill was made in, while auto is on: the
+     * tap stands until the game changes state (StickSwitch.key).
+     */
+    private var stickOverride = StickSwitch.NO_OVERRIDE
+
+    /**
      * Whether the state the pad last sent held RB, from any source: the Sprint
      * control, one of the latches, a compound sequence or the MATCH stick's own
      * rim. Drawing cannot see a bit no thumb is holding, and the MATCH stick's
@@ -375,6 +381,9 @@ class TouchOverlayView @JvmOverloads constructor(
             invalidate()
             // Entering or leaving a match starts the d-pad's idle clock fresh.
             refreshDpad()
+            // ...and it is one of the two things that can move the movement
+            // stick's switch while auto is on; the pause is the other.
+            reconsiderStick()
         }
 
     /**
@@ -388,6 +397,18 @@ class TouchOverlayView @JvmOverloads constructor(
             field = value
             invalidate()
             refreshDpad()
+        }
+
+    /**
+     * Whether the app has paused the guest: the pause menu, the pad editor, the
+     * way out. Not the same as the phase -- the title keeps its match flow while
+     * our menu is up -- so it is a source of its own for auto mode.
+     */
+    var paused: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            reconsiderStick()
         }
 
     private var stanceToast: Toast? = null
@@ -414,6 +435,15 @@ class TouchOverlayView @JvmOverloads constructor(
             if (value == PadStance.DEFEND) R.string.stance_toast_defend else R.string.stance_toast_attack,
             Toast.LENGTH_SHORT,
         ).also { it.show() }
+    }
+
+    /**
+     * The pause menu's Auto/Manual row was changed: work the switch out again
+     * from the state the game is in now, and redraw the pill.
+     */
+    fun stickModeChanged() {
+        reconsiderStick()
+        invalidate()
     }
 
     // ---- editing -----------------------------------------------------------
@@ -1047,6 +1077,9 @@ class TouchOverlayView @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         refreshDpad()
+        // A fresh pad has no phase yet: with auto on, the switch starts on MENU,
+        // which is where launch and an activity rebuild both land.
+        reconsiderStick()
     }
 
     override fun onDetachedFromWindow() {
@@ -1330,16 +1363,14 @@ class TouchOverlayView @JvmOverloads constructor(
             val start = pressedAt
             val tapSlop = 18f * density
             if (start == null || hypot(x - start[0], y - start[1]) <= tapSlop) {
-                triggerHaptic()
-                prefs.stickStage =
+                // With auto on, a tap is an override the player asked for: it
+                // stands until the game changes state, and auto has the switch
+                // back after that. Auto itself is turned off in the pause menu,
+                // so a stray tap can never quietly take the switch over.
+                if (prefs.stickAuto) stickOverride = StickSwitch.key(gamePhase, paused)
+                val stage =
                     if (prefs.stickStage == Prefs.STAGE_TWO) Prefs.STAGE_ONE else Prefs.STAGE_TWO
-                resetTwoStage()
-                // A flip to MENU lets go of the run at once rather than on the
-                // next state push: RB is the title's next key, and a menu must
-                // not be scrolled by a rim the player just switched away from.
-                sprintLatch.reset()
-                invalidate()
-                if (NativeBridge.isLoaded()) pushState()
+                setStickStage(stage, automatic = false)
             }
         }
         // The team mentality pair: one tap sends the title's own double press of
@@ -1859,6 +1890,65 @@ class TouchOverlayView @JvmOverloads constructor(
     /** Whether a run is on right now: the rim's latch, or the RB the pad sends. */
     private fun sprintRunning(): Boolean = sprintLatch.active || sprintHeld
 
+    /**
+     * The one way the MATCH/MENU switch moves: the pill, auto mode, and the pause
+     * menu all come through here. A switch changes what the same thumb means, so
+     * the run it was holding and the two-stage dwell are let go with it -- RB is
+     * the title's R1, and the MENU half must never keep a run down. Nothing else
+     * is released: a held pass is not a reason for a stick bookkeeping change.
+     */
+    private fun setStickStage(stage: Int, automatic: Boolean, because: String = "") {
+        if (stage == prefs.stickStage) return
+        prefs.stickStage = stage
+        resetTwoStage()
+        sprintLatch.reset()
+        twoStageSprint = false
+        twoStagePointer = -1
+        stickRaw.clear()
+        if (automatic) {
+            val name = if (stage == Prefs.STAGE_ONE) "MATCH" else "MENU"
+            Log.i(TAG, "stick: auto -> $name ($because)")
+        } else {
+            triggerHaptic()
+        }
+        invalidate()
+        if (NativeBridge.isLoaded()) pushState()
+    }
+
+    /**
+     * Auto mode's one decision point: the phase, the pause and a tap the player
+     * made, read together. Every input that can change the answer calls this, so
+     * the two setters cannot disagree and the switch is never moved twice for
+     * one change.
+     */
+    private fun reconsiderStick() {
+        if (!prefs.stickAuto) {
+            stickOverride = StickSwitch.NO_OVERRIDE
+            return
+        }
+        // A tap stands until the game itself moves on -- kick-off, a pause,
+        // another screen -- and auto has the switch back then.
+        if (stickOverride != StickSwitch.NO_OVERRIDE &&
+            stickOverride != StickSwitch.key(gamePhase, paused)
+        ) stickOverride = StickSwitch.NO_OVERRIDE
+        val stage = StickSwitch.stage(prefs.stickAuto, gamePhase, paused, stickOverride)
+        Log.i(
+            TAG,
+            "stick: auto phase=$gamePhase paused=$paused override=$stickOverride -> " +
+                (stage?.let { if (it == Prefs.STAGE_ONE) "MATCH" else "MENU" } ?: "keep"),
+        )
+        if (stage == null) return
+        setStickStage(
+            stage, automatic = true,
+            because = when {
+                paused -> "paused"
+                gamePhase == GamePhase.MATCH -> "match"
+                gamePhase == GamePhase.MENUS -> "menus"
+                else -> "no phase yet"
+            },
+        )
+    }
+
     /** Every stage let go: a lift, a cancel, a phase change, the editor, a pause. */
     private fun resetTwoStage() {
         twoStage.reset()
@@ -2242,6 +2332,9 @@ class TouchOverlayView @JvmOverloads constructor(
     private fun isOn(element: ControlElement): Boolean = claims.isOn(element.id)
 
     companion object {
+        /** Logcat tag for the automatic switch: `adb logcat -s PES17Stick`. */
+        private const val TAG = "PES17Stick"
+
         /** How much of the screen's width, from the left, the floating stick owns. */
         private const val FLOAT_ZONE = 0.5f
 

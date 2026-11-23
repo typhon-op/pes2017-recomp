@@ -20,6 +20,7 @@ import android.os.Process
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import android.view.Gravity
 import android.view.InputDevice
 import android.view.KeyEvent
@@ -105,6 +106,29 @@ class GameActivity : AppCompatActivity(), NativeListener {
     private var chordPolling = false
     private var chordSince = 0L
     private val chordPoll = Runnable { pollMenuChord() }
+
+    /**
+     * Auto mode's second source: the engine's own answer, read twice a second.
+     * [NativeListener.onGamePhase] is only called when the answer changes, so a
+     * flow named while the app was not listening -- or before this activity was
+     * the listener -- would otherwise be lost for the rest of the session. This
+     * asks for the same state, which the runtime keeps until the next flow, and
+     * it also covers an activity that was rebuilt under a running game.
+     */
+    private val phasePoll = object : Runnable {
+        override fun run() {
+            if (started && NativeBridge.isLoaded()) {
+                val phase = GamePhase.entries.getOrNull(NativeBridge.nativeGamePhase())
+                    ?: GamePhase.UNKNOWN
+                if (overlay.gamePhase != phase) {
+                    Log.i("PES17Stick", "stick: phase read as $phase")
+                    overlay.gamePhase = phase
+                }
+            }
+            handler.postDelayed(this, PHASE_POLL_MS)
+        }
+    }
+
     private var vibrator: Vibrator? = null
 
     /** The shared haptics policy: the pad and this activity ask the same switch. */
@@ -464,6 +488,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
         pads.refreshDevices()
         startHardwareMonitor()
         handler.post(statsTick)
+        handler.post(phasePoll)
     }
 
     // ---- the screen ---------------------------------------------------------
@@ -985,6 +1010,10 @@ class GameActivity : AppCompatActivity(), NativeListener {
     private fun syncPause() {
         if (!started || !NativeBridge.isLoaded()) return
         val paused = quitting || menuOpen || overlay.editing
+        // The pad hears the same answer the guest does: with the switch on auto,
+        // a pause is one of the two things that can move it (the phase is the
+        // other), and the title keeps its match flow while this menu is up.
+        overlay.paused = paused
         NativeBridge.nativeSetPaused(paused)
         setGameState(playing = !paused)
     }
@@ -1030,6 +1059,12 @@ class GameActivity : AppCompatActivity(), NativeListener {
         val rows = ArrayList<PesMenu.Row>()
         rows += PesMenu.Row(getString(R.string.resume)) { it.closeMenu() }
         rows += PesMenu.Row(getString(R.string.edit_controls)) { editControls() }
+        // The row names the mode in use, so the setting can be seen to have
+        // taken without opening it again.
+        rows += PesMenu.Row(
+            getString(R.string.stick_switch) + " \u00b7 " +
+                getString(if (prefs.stickAuto) R.string.stick_switch_auto else R.string.stick_switch_manual),
+        ) { paused -> paused.push { stickScreen() } }
         rows += PesMenu.Row(getString(R.string.controls_guide)) { paused ->
             // The guide is its own screen: close the menu first, as the old
             // list did, so returning from it lands on the match.
@@ -1095,6 +1130,41 @@ class GameActivity : AppCompatActivity(), NativeListener {
             }
         }
         return PesMenu.Screen(getString(R.string.hud_menu), rows = rows)
+    }
+
+    /**
+     * Auto or manual for the MATCH/MENU switch above the movement socket. Auto
+     * follows the title -- MATCH from kick-off, MENU in its menus and MENU while
+     * this menu or the editor has the game paused -- and a tap on the pill is a
+     * one-off override that lasts until the next of those changes. Manual is
+     * what the pad shipped with.
+     */
+    private fun stickScreen(): PesMenu.Screen {
+        val auto = prefs.stickAuto
+        val rows = ArrayList<PesMenu.Row>()
+        rows += PesMenu.Row(
+            getString(R.string.stick_switch_auto),
+            detail = getString(R.string.stick_switch_auto_detail),
+            checked = if (auto) true else null,
+        ) { paused ->
+            prefs.stickAuto = true
+            overlay.stickModeChanged()
+            paused.refresh()
+        }
+        rows += PesMenu.Row(
+            getString(R.string.stick_switch_manual),
+            detail = getString(R.string.stick_switch_manual_detail),
+            checked = if (!auto) true else null,
+        ) { paused ->
+            prefs.stickAuto = false
+            overlay.stickModeChanged()
+            paused.refresh()
+        }
+        return PesMenu.Screen(
+            getString(R.string.stick_switch),
+            message = getString(R.string.stick_switch_hint),
+            rows = rows,
+        )
     }
 
     private fun quitScreen(): PesMenu.Screen = PesMenu.Screen(
@@ -1168,6 +1238,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
         editingFromMenu = false
         syncPause()
         handler.removeCallbacks(statsTick)
+        handler.removeCallbacks(phasePoll)
         // Quit Game lands on the launcher, which sits under this activity in
         // the same task: finish() uncovers it. finishAndRemoveTask() used to be
         // here, and it takes the whole task down -- the launcher included -- so
@@ -1419,6 +1490,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
         hudContainer.visibility = if (prefs.showStats) View.VISIBLE else View.GONE
         applyDeveloperTools()
         handler.post(statsTick)
+        handler.post(phasePoll)
     }
 
     override fun onPause() {
@@ -1431,6 +1503,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
         setGameState(playing = false)
         overlay.releaseEverything()
         handler.removeCallbacks(statsTick)
+        handler.removeCallbacks(phasePoll)
         overlay.layout.save(this)
     }
 
@@ -1832,6 +1905,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
     }
 
     companion object {
+        /** How often the title's phase is read, in ms: twice a second, as the runtime samples it. */
+        private const val PHASE_POLL_MS = 500L
+
         /** How long a gamepad button must stay down to open the menu. */
         private const val PAD_MENU_HOLD_MS = 3000L
 

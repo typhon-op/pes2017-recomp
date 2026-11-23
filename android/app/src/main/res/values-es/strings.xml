@@ -596,4 +596,10 @@
     <string name="patch_import_warn_dp_unreadable">DpFileList.bin no tiene el formato que lee la aplicación. Se instala tal cual; comprueba que coincide con los CPK.</string>
     <string name="patch_import_warn_dp_missing_cpk">DpFileList.bin nombra un CPK que el paquete no incluye.</string>
     <string name="patch_import_warn_dp_order">Las prioridades de DpFileList.bin no son descendentes.</string>
+    <string name="stick_switch">Cambio de stick</string>
+    <string name="stick_switch_auto">Automático</string>
+    <string name="stick_switch_auto_detail">MATCH al sacar de centro, MENU en menús y pausa</string>
+    <string name="stick_switch_manual">Manual</string>
+    <string name="stick_switch_manual_detail">Lo eliges con el botón MATCH/MENU</string>
+    <string name="stick_switch_hint">El stick MATCH esprinta cuando el pulgar llega al borde. El stick MENU no envía R1, así que no puede desplazar un menú. En automático el cambio se mueve solo; un toque en el botón lo anula hasta el próximo saque de centro o pausa.</string>
 </resources>

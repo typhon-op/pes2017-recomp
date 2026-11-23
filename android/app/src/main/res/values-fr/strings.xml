@@ -596,4 +596,10 @@
     <string name="patch_import_warn_dp_unreadable">DpFileList.bin n’est pas au format lu par l’application. Il est installé tel quel ; vérifiez qu’il correspond aux CPK.</string>
     <string name="patch_import_warn_dp_missing_cpk">DpFileList.bin cite un CPK absent du pack.</string>
     <string name="patch_import_warn_dp_order">Les priorités de DpFileList.bin ne sont pas décroissantes.</string>
+    <string name="stick_switch">Bascule du stick</string>
+    <string name="stick_switch_auto">Auto</string>
+    <string name="stick_switch_auto_detail">MATCH au coup d’envoi, MENU dans les menus et en pause</string>
+    <string name="stick_switch_manual">Manuel</string>
+    <string name="stick_switch_manual_detail">Vous choisissez avec la pastille MATCH/MENU</string>
+    <string name="stick_switch_hint">Le stick MATCH sprinte quand le pouce atteint le bord. Le stick MENU n’envoie jamais R1 : un menu ne peut donc pas défiler par erreur. En auto, la bascule se fait seule ; un appui sur la pastille la force jusqu’au prochain coup d’envoi ou à la pause suivante.</string>
 </resources>

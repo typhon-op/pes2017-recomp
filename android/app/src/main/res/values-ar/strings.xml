@@ -596,4 +596,10 @@
     <string name="patch_import_warn_dp_unreadable">ملف DpFileList.bin ليس بالصيغة التي يقرأها التطبيق. سيُثبَّت كما هو؛ تحقق من مطابقته للملفات.</string>
     <string name="patch_import_warn_dp_missing_cpk">يشير DpFileList.bin إلى ملف CPK غير موجود في الحزمة.</string>
     <string name="patch_import_warn_dp_order">أولويات DpFileList.bin ليست تنازلية.</string>
+    <string name="stick_switch">مفتاح العصا</string>
+    <string name="stick_switch_auto">تلقائي</string>
+    <string name="stick_switch_auto_detail">MATCH عند بداية المباراة، وMENU في القوائم وعند الإيقاف</string>
+    <string name="stick_switch_manual">يدوي</string>
+    <string name="stick_switch_manual_detail">تختارها بزر MATCH/MENU</string>
+    <string name="stick_switch_hint">عصا MATCH تركض عندما يبلغ الإبهام الحافة. وعصا MENU لا ترسل R1 أبدًا، فلا يمكن أن تُمرَّر قائمة بها. في الوضع التلقائي يتحرك المفتاح وحده؛ ولمسة على الزر تجاوز ذلك حتى بداية المباراة التالية أو الإيقاف التالي.</string>
 </resources>

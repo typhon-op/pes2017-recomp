@@ -822,4 +822,10 @@
     <string name="toggle_super_cancel">Super Cancel: RB + RT</string>
     <string name="toggle_shielding">Shielding: LT</string>
     <string name="toggle_player_movement">Player Movement: LS</string>
+    <string name="stick_switch">Stick switch</string>
+    <string name="stick_switch_auto">Auto</string>
+    <string name="stick_switch_auto_detail">MATCH at kick-off, MENU in menus and pause</string>
+    <string name="stick_switch_manual">Manual</string>
+    <string name="stick_switch_manual_detail">You pick with the MATCH/MENU pill</string>
+    <string name="stick_switch_hint">The MATCH stick sprints when your thumb reaches the rim. The MENU stick sends no R1, so a menu cannot be scrolled by it. Auto moves the switch by itself; a tap on the pill overrides it until the next kick-off or pause.</string>
 </resources>

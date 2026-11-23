@@ -463,6 +463,17 @@ class Prefs(context: Context) {
         get() = store.contains(KEY_STICK_MODE)
 
     /**
+     * Whether the MATCH/MENU switch follows the game by itself rather than
+     * waiting for a tap. On, a running match gets the MATCH half (the sprint at
+     * the rim), the title's menus and a pause get the MENU half (no RB at all);
+     * a tap on the pill is then a one-off override (StickSwitch). Off is what
+     * the pad shipped with, so an update does not move anyone's switch.
+     */
+    var stickAuto: Boolean
+        get() = store.getBoolean(KEY_STICK_AUTO, false)
+        set(value) = store.edit().putBoolean(KEY_STICK_AUTO, value).apply()
+
+    /**
      * Which throw the movement stick reads with, picked by the switch above its
      * socket: [STAGE_ONE] is the normal stick, [STAGE_TWO] is the two-stage one
      * (TouchMath.StickStage). Global rather than per layout -- it changes how the
@@ -658,6 +669,7 @@ class Prefs(context: Context) {
         private const val KEY_HAPTICS = "haptics"
         private const val KEY_STICK_MODE = "stickMode"
         private const val KEY_STICK_STAGE = "stickStage"
+        private const val KEY_STICK_AUTO = "stickAuto"
         private const val KEY_DEFENDING_PAD = "defendingPad"
 
         /** The movement stick under the thumb, anywhere in its half of the screen. */
