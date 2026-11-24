@@ -1388,6 +1388,12 @@ class GameActivity : AppCompatActivity(), NativeListener {
             // match already being played with a controller, and both drive
             // player 1.
             hideTouchForPad()
+            // Let the overlay's auto stick follow a pad's steering too: with
+            // the touchscreen hidden, touch MOVE events never arrive, and a
+            // pad player's kick-off would otherwise only be seen by the timer.
+            overlay.notePadStick(
+                event.getAxisValue(MotionEvent.AXIS_X), event.getAxisValue(MotionEvent.AXIS_Y),
+            )
             return true
         }
         return super.onGenericMotionEvent(event)

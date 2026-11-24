@@ -285,10 +285,19 @@ class TouchOverlayView @JvmOverloads constructor(
     // Whether the Match flow has reached kick-off. The engine calls the whole
     // Match/... flow a match, so the lineups and the walk-out read as MATCH as
     // well; a START in that window is the title's skip, not its pause sheet.
-    // The first real steering of the movement stick marks the kick-off, with a
-    // time fallback for a match played without touching it.
+    // Real steering marks the kick-off: the stick must stay deflected for a
+    // moment, so a nudge through a lineup screen is not mistaken for play. A
+    // physical pad's left stick counts too, and a long time fallback covers a
+    // match played without either.
     private var kickOffPending = false
     private var matchEnteredAt = 0L
+    private var steerHeldSince = 0L
+    private var padSteerSince = 0L
+    private var padSteerAt = 0L
+    private var padX = 0f
+    private var padY = 0f
+    private val kickOffProbe = Runnable { probeKickOff() }
+    private val padKickOffProbe = Runnable { probePadKickOff() }
 
     // Sprint's press pulse is gated: two taps are the speed burst, a bounce of
     // one tap is not. The hold itself is never gated.
@@ -391,6 +400,10 @@ class TouchOverlayView @JvmOverloads constructor(
             // the whistle goes and the next START flips it the wrong way.
             kickOffPending = value == GamePhase.MATCH
             if (kickOffPending) matchEnteredAt = SystemClock.uptimeMillis()
+            steerHeldSince = 0L
+            padSteerSince = 0L
+            removeCallbacks(kickOffProbe)
+            removeCallbacks(padKickOffProbe)
             // Everything the pad was holding is let go across a phase change, the
             // two-stage stick's ring included: RB means "next" in the title's
             // menus, so a sprint still held while the match ended would scroll a
@@ -459,15 +472,24 @@ class TouchOverlayView @JvmOverloads constructor(
             }
             return
         }
-        if (kickOffPending && SystemClock.uptimeMillis() - matchEnteredAt < KICK_OFF_FALLBACK_MS) {
-            // The title's own START before kick-off: it skips the pre-match, so
-            // it is not the pause sheet and must not move the switch. The press
-            // itself is already on its way to the title untouched.
-            reconsiderStick()
-            invalidate()
-            return
+        if (kickOffPending) {
+            // Holding a stick at this moment is live play, even if no MOVE has
+            // arrived since the hold began (a still thumb sends nothing).
+            if (steeringSustained() || padSteeringSustained()) {
+                noteKickOff("a stick held at START")
+            } else if (SystemClock.uptimeMillis() - matchEnteredAt < KICK_OFF_FALLBACK_MS) {
+                // The title's own START before kick-off: it skips the pre-match,
+                // so it is not the pause sheet and must not move the switch. The
+                // press itself is already on its way to the title untouched.
+                reconsiderStick()
+                invalidate()
+                return
+            } else {
+                kickOffPending = false
+                removeCallbacks(kickOffProbe)
+                removeCallbacks(padKickOffProbe)
+            }
         }
-        kickOffPending = false
         titleMenu = !titleMenu
         // The new stage lets go of the run and the two-stage dwell itself; the
         // title stops the match behind its menu, so nothing else is held on
@@ -508,6 +530,87 @@ class TouchOverlayView @JvmOverloads constructor(
      * from the state the game is in now, and redraw the pill.
      */
     fun stickModeChanged() {
+        reconsiderStick()
+        invalidate()
+    }
+
+    /**
+     * A physical pad's left stick, from GameActivity's motion events. The
+     * screen is hidden while a pad drives, so its steering cannot come through
+     * the touch path -- without this a pad player's match would not count as
+     * kicked off until the time fallback.
+     */
+    fun notePadStick(x: Float, y: Float) {
+        padX = x
+        padY = y
+        if (!kickOffPending) return
+        if (!padSteeringMatch()) {
+            padSteerSince = 0L
+            removeCallbacks(padKickOffProbe)
+            return
+        }
+        val now = SystemClock.uptimeMillis()
+        padSteerAt = now
+        if (padSteerSince == 0L) {
+            padSteerSince = now
+            removeCallbacks(padKickOffProbe)
+            postDelayed(padKickOffProbe, KICK_OFF_STEER_MS)
+        } else if (now - padSteerSince >= KICK_OFF_STEER_MS) {
+            noteKickOff("a pad's stick")
+        }
+    }
+
+    /** The touch stick is deflected far enough to be play, not a menu nudge. */
+    private fun steeringMatch(): Boolean {
+        if (gamePhase != GamePhase.MATCH || titleMenu || paused || editing) return false
+        val p = stickPositions[MOVE_STICK] ?: return false
+        return hypot(p[0], p[1]) >= KICK_OFF_STEER
+    }
+
+    /** That deflection has lasted long enough to be steering a player. */
+    private fun steeringSustained(): Boolean =
+        steerHeldSince != 0L && steeringMatch() &&
+            SystemClock.uptimeMillis() - steerHeldSince >= KICK_OFF_STEER_MS
+
+    private fun padSteeringMatch(): Boolean =
+        kickOffPending && !titleMenu && !paused && !editing &&
+            hypot(padX, padY) >= KICK_OFF_STEER
+
+    private fun padSteeringSustained(): Boolean {
+        if (padSteerSince == 0L || !padSteeringMatch()) return false
+        val now = SystemClock.uptimeMillis()
+        return now - padSteerSince >= KICK_OFF_STEER_MS &&
+            now - padSteerAt <= PAD_STEER_FRESH_MS
+    }
+
+    private fun probeKickOff() {
+        if (!kickOffPending) return
+        if (steeringSustained()) noteKickOff("the match stick held")
+        else steerHeldSince = 0L
+    }
+
+    private fun probePadKickOff() {
+        if (!kickOffPending) return
+        if (padSteeringSustained()) noteKickOff("a pad's stick")
+        else padSteerSince = 0L
+    }
+
+    /**
+     * The match is being played. Done once per Match flow: the switch goes to
+     * MATCH and a pre-match tap on the pill stops standing, because kick-off is
+     * exactly the state change it was made to wait for.
+     */
+    private fun noteKickOff(because: String) {
+        if (!kickOffPending) return
+        kickOffPending = false
+        steerHeldSince = 0L
+        padSteerSince = 0L
+        removeCallbacks(kickOffProbe)
+        removeCallbacks(padKickOffProbe)
+        if (stickOverride == StickSwitch.key(GamePhase.MATCH, paused = false, titleMenu = false)) {
+            stickOverride = StickSwitch.NO_OVERRIDE
+        }
+        Log.i(TAG, "stick: kick-off seen ($because)")
         reconsiderStick()
         invalidate()
     }
@@ -1069,6 +1172,10 @@ class TouchOverlayView @JvmOverloads constructor(
         stickArrows.clear()
         pulseBits = 0
         pulseUntil = 0L
+        steerHeldSince = 0L
+        padSteerSince = 0L
+        removeCallbacks(kickOffProbe)
+        removeCallbacks(padKickOffProbe)
         removeCallbacks(pulseClear)
         if (NativeBridge.isLoaded()) {
             NativeBridge.nativeLookEnd()
@@ -1200,13 +1307,25 @@ class TouchOverlayView @JvmOverloads constructor(
                                 sendSkill(x, y)
                             } else {
                                 moveStick(element, x, y, id)
-                                // A real deflection of the match stick is the
-                                // kick-off: there is a player on the pitch and
-                                // the thumb is steering them. A resting thumb's
-                                // jitter does not cross this threshold.
+                                // A sustained deflection of the match stick is
+                                // the kick-off. One sample is not: a thumb
+                                // nudging a lineup screen crosses it too, and
+                                // moving through the title's menu is not play.
+                                // The probe covers a thumb that holds still.
                                 if (kickOffPending && element.id == MOVE_STICK) {
-                                    val p = stickPositions[element.id]
-                                    if (p != null && hypot(p[0], p[1]) > 0.35f) kickOffPending = false
+                                    if (!steeringMatch()) {
+                                        steerHeldSince = 0L
+                                        removeCallbacks(kickOffProbe)
+                                    } else {
+                                        val now = SystemClock.uptimeMillis()
+                                        if (steerHeldSince == 0L) {
+                                            steerHeldSince = now
+                                            removeCallbacks(kickOffProbe)
+                                            postDelayed(kickOffProbe, KICK_OFF_STEER_MS)
+                                        } else if (now - steerHeldSince >= KICK_OFF_STEER_MS) {
+                                            noteKickOff("the match stick held")
+                                        }
+                                    }
                                 }
                                 changed = true
                             }
@@ -1318,7 +1437,11 @@ class TouchOverlayView @JvmOverloads constructor(
         // START is the title's pause/menu key. Follow it while the switch is on
         // auto, so the title's in-match menu gets the MENU stick even though
         // the engine still calls the match flow a match.
-        if (element.kind == ControlKind.BUTTON && element.value == NativeBridge.START) {
+        if (element.kind == ControlKind.BUTTON && element.value == NativeBridge.START &&
+            !element.toggle
+        ) {
+            // A toggle that holds START is a latch, not the player pressing the
+            // title's pause key, so it must not move the switch either way.
             noteStartPressed()
         }
         if (element.kind == ControlKind.DPAD) wakeDpad()
@@ -1452,6 +1575,11 @@ class TouchOverlayView @JvmOverloads constructor(
         // The lift counts as activity too: a long hold should not make the
         // d-pad vanish the instant it is let go.
         if (released.element.kind == ControlKind.DPAD) wakeDpad()
+        // A steering run ends with the thumb; a new one starts its own clock.
+        if (released.element.kind == ControlKind.STICK && released.element.id == MOVE_STICK) {
+            steerHeldSince = 0L
+            removeCallbacks(kickOffProbe)
+        }
         liveSwipes.remove(pointerId)
         // The two-stage switch: one tap, one flip, and a thumb that slid off it
         // said something else. Nothing is sent -- the mode changes what the left
@@ -2470,7 +2598,16 @@ class TouchOverlayView @JvmOverloads constructor(
          * match that is played without ever touching the stick is treated as
          * live after it, so the pause sheet can still move the switch.
          */
-        private const val KICK_OFF_FALLBACK_MS = 45_000L
+        private const val KICK_OFF_FALLBACK_MS = 60_000L
+
+        /** How far the stick must be held before it counts as playing. */
+        private const val KICK_OFF_STEER = 0.6f
+
+        /** How long it must stay there: a nudge through a lineup is shorter. */
+        private const val KICK_OFF_STEER_MS = 600L
+
+        /** A pad axis older than this is a released stick, not a deflection. */
+        private const val PAD_STEER_FRESH_MS = 500L
 
         /** How long a released swipe's trail takes to fly out and fade. */
         private const val SWIPE_TRAIL_MS = 200L
