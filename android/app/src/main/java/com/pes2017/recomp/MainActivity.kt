@@ -106,6 +106,20 @@ class MainActivity : AppCompatActivity() {
         WrapperTheme.dimArtwork(this)
         coldStart = savedInstanceState == null
         prefs = Prefs(this)
+        // A fresh install opens on the setup screen, not on the launcher: the
+        // first thing a player has to do is point at their copy of the game,
+        // and every row of the launcher is about a game that is not there yet.
+        // It is remembered, so a later open starts on the launcher even when
+        // the player backed out of setup; an already-installed copy skips it.
+        if (coldStart && !prefs.seenWelcome) {
+            prefs.seenWelcome = true
+            if (prefs.gameDirectory.isEmpty()) {
+                startActivity(
+                    Intent(this, InstallActivity::class.java)
+                        .putExtra(InstallActivity.EXTRA_REQUIRED, true)
+                )
+            }
+        }
         relaunchRequested = QuickGraphics.takeRelaunch(intent, prefs)
         // The performance preset this phone starts from, once (DeviceProfile).
         try { DeviceProfile.ensurePreset(this, prefs) } catch (_: Throwable) {}

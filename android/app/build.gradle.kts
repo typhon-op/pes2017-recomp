@@ -117,6 +117,34 @@ android {
             }
         }
     } else {
+        // A prebuilt folder ships libpes17.so and nothing else. AGP adds
+        // libc++_shared.so itself when CMake builds the runtime; for jniLibs it
+        // only copies the files it finds. libpes17.so is linked against that
+        // library, so an apk packaged without it fails at
+        // System.loadLibrary("pes17") with "library libc++_shared.so not found",
+        // which the launcher can only report as the runtime not loading (and
+        // the installer, which is in the runtime, never runs).
+        val abiDir = file(prebuiltNative).resolve("arm64-v8a")
+        if (!abiDir.resolve("libpes17.so").isFile) {
+            throw GradleException(
+                "prebuiltNative=$prebuiltNative has no arm64-v8a/libpes17.so: " +
+                    "unpack the engine apk's lib/arm64-v8a/libpes17.so beside it, or build it with ./build.sh."
+            )
+        }
+        val stl = abiDir.resolve("libc++_shared.so")
+        if (!stl.isFile) {
+            val fromNdk = ndkDirectory.toPath()
+                .resolve("toolchains/llvm/prebuilt").toFile().listFiles()
+                ?.firstOrNull()
+                ?.let { File(it, "sysroot/usr/lib/aarch64-linux-android/libc++_shared.so") }
+            if (fromNdk != null && fromNdk.isFile) fromNdk.copyTo(stl)
+            else throw GradleException(
+                "prebuiltNative=$prebuiltNative has no arm64-v8a/libc++_shared.so and NDK $ndkVersion " +
+                    "was not found to take it from. Copy it from the NDK's " +
+                    "sysroot/usr/lib/aarch64-linux-android/ (or from the working apk) into $abiDir; " +
+                    "without it the runtime cannot load."
+            )
+        }
         sourceSets.getByName("main").jniLibs.srcDir(prebuiltNative)
     }
 
