@@ -46,6 +46,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var selectFolderButton: Button
     private lateinit var updatesButton: Button
     private lateinit var languageButton: Button
+    private lateinit var darkModeButton: Button
     private lateinit var quitButton: Button
     private lateinit var detailTitle: TextView
     private lateinit var detailText: TextView
@@ -99,7 +100,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The player's Light or Dark Mode, before any view resolves a colour.
+        WrapperTheme.apply(this)
         setContentView(R.layout.activity_main)
+        WrapperTheme.dimArtwork(this)
         coldStart = savedInstanceState == null
         prefs = Prefs(this)
         relaunchRequested = QuickGraphics.takeRelaunch(intent, prefs)
@@ -114,6 +118,7 @@ class MainActivity : AppCompatActivity() {
         selectFolderButton = findViewById(R.id.select_folder)
         updatesButton = findViewById(R.id.entry_updates)
         languageButton = findViewById(R.id.entry_language)
+        darkModeButton = findViewById(R.id.entry_dark_mode)
         quitButton = findViewById(R.id.entry_quit)
         detailTitle = findViewById(R.id.detail_title)
         detailText = findViewById(R.id.detail_text)
@@ -226,6 +231,17 @@ class MainActivity : AppCompatActivity() {
             select(it as Button)
             showDetail(getString(R.string.patches_menu), getString(R.string.patches_hint))
             startActivity(Intent(this, PatchesActivity::class.java))
+        }
+        // Dark Mode, directly under PATCHES: its label carries the state and
+        // the whole launcher is rebuilt in the chosen palette, which is also
+        // what every page and dialog opened from here will use.
+        darkModeButton.text = getString(
+            if (prefs.darkMode) R.string.dark_mode_on else R.string.dark_mode_off,
+        )
+        darkModeButton.setOnClickListener {
+            select(darkModeButton)
+            prefs.darkMode = !prefs.darkMode
+            recreate()
         }
         quitButton.setOnClickListener {
             select(quitButton)

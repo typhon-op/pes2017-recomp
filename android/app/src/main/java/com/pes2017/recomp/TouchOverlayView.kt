@@ -373,6 +373,9 @@ class TouchOverlayView @JvmOverloads constructor(
         set(value) {
             if (field == value) return
             field = value
+            // A different flow is not the title's in-match menu the switch was
+            // following: START's latch belongs to one match and goes with it.
+            titleMenu = false
             // Everything the pad was holding is let go across a phase change, the
             // two-stage stick's ring included: RB means "next" in the title's
             // menus, so a sprint still held while the match ended would scroll a
@@ -410,6 +413,45 @@ class TouchOverlayView @JvmOverloads constructor(
             field = value
             reconsiderStick()
         }
+
+    /**
+     * Whether the title's own in-match menu is open. The engine keeps naming
+     * the flow `Match/...` while Game Plan, Substitutions or the START pause
+     * sheet is up, so the phase cannot answer this: START does. A press in a
+     * running match opens the menu (MENU stick), the next START -- the title's
+     * own resume -- closes it (MATCH stick). A phase change clears it, and the
+     * app's own pause does not: closing that lands back in the title's menu,
+     * where the MENU stick is still the right one.
+     */
+    var titleMenu: Boolean = false
+        private set
+
+    /**
+     * One START press, from the on-screen button (press) or a physical pad
+     * (GameActivity.dispatchKeyEvent). Only a running match has a menu to open,
+     * so anywhere else this is just the title's own Start and changes nothing;
+     * it never touches the phase or the pause.
+     */
+    fun noteStartPressed() {
+        if (editing || paused) return
+        if (gamePhase != GamePhase.MATCH) {
+            // Defensive: a latch from a previous match cannot survive a screen
+            // that is no longer a match even if the phase was not rebuilt.
+            if (titleMenu) {
+                titleMenu = false
+                reconsiderStick()
+                invalidate()
+            }
+            return
+        }
+        titleMenu = !titleMenu
+        // The new stage lets go of the run and the two-stage dwell itself; the
+        // title stops the match behind its menu, so nothing else is held on
+        // purpose. The START finger's own claim is left alone: it is the press
+        // that opened the menu and must still reach the title.
+        reconsiderStick()
+        invalidate()
+    }
 
     private var stanceToast: Toast? = null
 
@@ -1232,6 +1274,12 @@ class TouchOverlayView @JvmOverloads constructor(
         triggerHaptic()
         pressAt[pointerId] = floatArrayOf(x, y)
         markPressed(element)
+        // START is the title's pause/menu key. Follow it while the switch is on
+        // auto, so the title's in-match menu gets the MENU stick even though
+        // the engine still calls the match flow a match.
+        if (element.kind == ControlKind.BUTTON && element.value == NativeBridge.START) {
+            noteStartPressed()
+        }
         if (element.kind == ControlKind.DPAD) wakeDpad()
         // Pressed again inside its grace, a trigger is held, not released.
         if (element.kind == ControlKind.TRIGGER) triggerReleaseAt.remove(element.id)
@@ -1367,7 +1415,7 @@ class TouchOverlayView @JvmOverloads constructor(
                 // stands until the game changes state, and auto has the switch
                 // back after that. Auto itself is turned off in the pause menu,
                 // so a stray tap can never quietly take the switch over.
-                if (prefs.stickAuto) stickOverride = StickSwitch.key(gamePhase, paused)
+                if (prefs.stickAuto) stickOverride = StickSwitch.key(gamePhase, paused, titleMenu)
                 val stage =
                     if (prefs.stickStage == Prefs.STAGE_TWO) Prefs.STAGE_ONE else Prefs.STAGE_TWO
                 setStickStage(stage, automatic = false)
@@ -1929,12 +1977,13 @@ class TouchOverlayView @JvmOverloads constructor(
         // A tap stands until the game itself moves on -- kick-off, a pause,
         // another screen -- and auto has the switch back then.
         if (stickOverride != StickSwitch.NO_OVERRIDE &&
-            stickOverride != StickSwitch.key(gamePhase, paused)
+            stickOverride != StickSwitch.key(gamePhase, paused, titleMenu)
         ) stickOverride = StickSwitch.NO_OVERRIDE
-        val stage = StickSwitch.stage(prefs.stickAuto, gamePhase, paused, stickOverride)
+        val stage = StickSwitch.stage(prefs.stickAuto, gamePhase, paused, titleMenu, stickOverride)
         Log.i(
             TAG,
-            "stick: auto phase=$gamePhase paused=$paused override=$stickOverride -> " +
+            "stick: auto phase=$gamePhase paused=$paused titleMenu=$titleMenu " +
+                "override=$stickOverride -> " +
                 (stage?.let { if (it == Prefs.STAGE_ONE) "MATCH" else "MENU" } ?: "keep"),
         )
         if (stage == null) return
@@ -1942,6 +1991,7 @@ class TouchOverlayView @JvmOverloads constructor(
             stage, automatic = true,
             because = when {
                 paused -> "paused"
+                titleMenu -> "the title's in-match menu"
                 gamePhase == GamePhase.MATCH -> "match"
                 gamePhase == GamePhase.MENUS -> "menus"
                 else -> "no phase yet"

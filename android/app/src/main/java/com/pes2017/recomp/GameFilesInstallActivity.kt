@@ -70,6 +70,8 @@ class GameFilesInstallActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The player's Light or Dark Mode, before any view resolves a colour.
+        WrapperTheme.apply(this)
         setContentView(R.layout.activity_game_files_install)
         prefs = Prefs(this)
         title = getString(R.string.game_files_title)
@@ -249,10 +251,7 @@ class GameFilesInstallActivity : AppCompatActivity() {
                 PatchFormat.bytes(scanned.payloadBytes),
             )
             textSize = 13f
-            setTextColor(androidx.core.content.ContextCompat.getColor(
-                this@GameFilesInstallActivity,
-                R.color.pes_text,
-            ))
+            setTextColor(WrapperTheme.color(this@GameFilesInstallActivity, R.attr.pesText, R.color.pes_text))
         }
         DialogActions.show(
             this,
@@ -359,10 +358,7 @@ class GameFilesInstallActivity : AppCompatActivity() {
             TextView(this).apply {
                 text = getString(R.string.game_files_cancel_body)
                 textSize = 13f
-                setTextColor(androidx.core.content.ContextCompat.getColor(
-                    this@GameFilesInstallActivity,
-                    R.color.pes_text,
-                ))
+                setTextColor(WrapperTheme.color(this@GameFilesInstallActivity, R.attr.pesText, R.color.pes_text))
             },
             listOf(
                 DialogAction(getString(R.string.game_files_cancel_keep), filled = true),

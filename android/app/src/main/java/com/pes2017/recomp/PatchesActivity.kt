@@ -65,7 +65,10 @@ class PatchesActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The player's Light or Dark Mode, before any view resolves a colour.
+        WrapperTheme.apply(this)
         setContentView(R.layout.activity_patches)
+        WrapperTheme.dimArtwork(this)
         prefs = Prefs(this)
         title = getString(R.string.patches)
         findViewById<android.view.View>(R.id.back_button).setOnClickListener {

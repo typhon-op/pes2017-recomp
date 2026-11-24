@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/pes_page">
+    android:background="?attr/pesPage">
 
     <include layout="@layout/view_back_bar" />
 
@@ -18,7 +18,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/captures_title"
-            android:textColor="@color/pes_navy"
+            android:textColor="?attr/pesText"
             android:textSize="20sp"
             android:textStyle="bold" />
 
@@ -27,9 +27,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:background="@color/pes_panel"
+            android:background="?attr/pesPanel"
             android:padding="12dp"
-            android:textColor="@color/pes_text"
+            android:textColor="?attr/pesText"
             android:textSize="13sp" />
 
         <TextView
@@ -44,7 +44,7 @@
             android:layout_height="0dp"
             android:layout_weight="1"
             android:layout_marginTop="12dp"
-            android:divider="@color/pes_line"
+            android:divider="?attr/pesCardBorder"
             android:dividerHeight="1dp" />
 
         <Button

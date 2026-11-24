@@ -107,6 +107,8 @@ class PatchImportActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The player's Light or Dark Mode, before any view resolves a colour.
+        WrapperTheme.apply(this)
         setContentView(R.layout.activity_patch_import)
         prefs = Prefs(this)
         title = getString(R.string.patch_import_title)
@@ -202,7 +204,7 @@ class PatchImportActivity : AppCompatActivity() {
         val message = TextView(this).apply {
             text = getString(R.string.patch_import_password_hint) + "\n\n" + name
             textSize = 13f
-            setTextColor(ContextCompat.getColor(this@PatchImportActivity, R.color.pes_text))
+            setTextColor(WrapperTheme.color(this@PatchImportActivity, R.attr.pesText, R.color.pes_text))
             setPadding(0, 0, 0, 8)
         }
         val content = LinearLayout(this).apply {

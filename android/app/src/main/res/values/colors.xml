@@ -20,4 +20,29 @@
     <color name="pes_text">#0A1B45</color>
     <color name="pes_muted">#5D6B86</color>
     <color name="pes_on_dark">#FFFFFF</color>
+
+    <!-- Dark Mode. The wrapper's light palette above is the original one and is
+         left untouched: these are the surfaces and inks Theme.PES17.Dark hands
+         the same layouts through attrs.xml. Navy rather than black, so the
+         cards still read as cards, and every ink keeps a wide contrast margin
+         against the surface it sits on. -->
+    <color name="pes_page_dark">#0A1120</color>
+    <color name="pes_panel_dark">#121B2C</color>
+    <color name="pes_panel_overlay_dark">#E60D1526</color>
+    <color name="pes_row_dark">#151F33</color>
+    <color name="pes_row_dark_top">#1A253C</color>
+    <color name="pes_row_dark_bottom">#141D30</color>
+    <color name="pes_line_dark">#2A3750</color>
+    <color name="pes_text_dark">#EAF1FF</color>
+    <color name="pes_muted_dark">#A9B8D4</color>
+    <color name="pes_blue_light">#8FCBFF</color>
+    <color name="pes_red_light">#FF7A8A</color>
+    <color name="pes_ticker_dark">#15233B</color>
+    <color name="pes_ticker_text_dark">#D7E2F2</color>
+
+    <!-- The light theme's surfaces, named so the drawables can ask the theme
+         for them (a shape's colours are attributes, not resources). -->
+    <color name="pes_panel_overlay_light">#EBF2F4F8</color>
+    <color name="pes_row_light_top">#F7F9FC</color>
+    <color name="pes_row_light_bottom">#E9EDF4</color>
 </resources>

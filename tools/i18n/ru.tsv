@@ -1,5 +1,7 @@
 check_updates	ПРОВЕРИТЬ ОБНОВЛЕНИЯ
 quit_launcher	ВЫХОД
+dark_mode_on	Тёмная тема · вкл.
+dark_mode_off	Тёмная тема · выкл.
 up_to_date	Это последняя опубликованная версия (%1$s).
 graphics_driver	Графический драйвер
 settings	Настройки

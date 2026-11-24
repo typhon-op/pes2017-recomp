@@ -28,6 +28,19 @@ class Prefs(context: Context) {
         get() = store.getString(KEY_LANGUAGE, "") ?: ""
         set(value) = store.edit().putString(KEY_LANGUAGE, value).apply()
 
+    // ---- the wrapper's look ------------------------------------------------
+
+    /**
+     * Dark Mode for this app's own screens: the launcher, Settings and every
+     * page opened from them. Saved here so it survives a restart and an update;
+     * [WrapperTheme] is the one place that turns it into a theme. The in-game
+     * pause menu and the pad editor keep their own dark match surfaces and are
+     * not affected by it.
+     */
+    var darkMode: Boolean
+        get() = store.getBoolean(KEY_DARK_MODE, false)
+        set(value) = store.edit().putBoolean(KEY_DARK_MODE, value).apply()
+
     // ---- graphics ---------------------------------------------------------
 
     /**
@@ -752,5 +765,6 @@ class Prefs(context: Context) {
         private const val KEY_GPU_BUILD = "gpuNameBuild"
         private const val KEY_GPU_NAME = "gpuName"
         private const val KEY_LANGUAGE = "language"
+        private const val KEY_DARK_MODE = "darkMode"
     }
 }

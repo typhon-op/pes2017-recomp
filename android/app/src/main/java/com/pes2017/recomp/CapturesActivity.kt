@@ -27,6 +27,8 @@ class CapturesActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The player's Light or Dark Mode, before any view resolves a colour.
+        WrapperTheme.apply(this)
         setContentView(R.layout.activity_captures)
         findViewById<View>(R.id.back_button).setOnClickListener { onBackPressedDispatcher.onBackPressed() }
         title = getString(R.string.captures_title)

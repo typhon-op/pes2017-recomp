@@ -4,6 +4,9 @@
 <resources>
     <string name="check_updates">BUSCAR ACTUALIZACIONES</string>
     <string name="quit_launcher">SALIR</string>
+    <!-- The launcher's Dark Mode entry: the label carries the state. -->
+    <string name="dark_mode_on">Modo oscuro \u00b7 activado</string>
+    <string name="dark_mode_off">Modo oscuro \u00b7 desactivado</string>
     <string name="up_to_date">Esta es la última versión publicada (%1$s).</string>
     <string name="graphics_driver">Controlador gráfico</string>
     <string name="settings">Ajustes</string>
@@ -604,8 +607,8 @@
     <string name="patch_import_warn_dp_order">Las prioridades de DpFileList.bin no son descendentes.</string>
     <string name="stick_switch">Cambio de stick</string>
     <string name="stick_switch_auto">Automático</string>
-    <string name="stick_switch_auto_detail">MATCH al sacar de centro, MENU en menús y pausa</string>
+    <string name="stick_switch_auto_detail">MATCH al sacar de centro, MENU en menús, pausa y el menú del partido</string>
     <string name="stick_switch_manual">Manual</string>
     <string name="stick_switch_manual_detail">Lo eliges con el botón MATCH/MENU</string>
-    <string name="stick_switch_hint">El stick MATCH esprinta cuando el pulgar llega al borde. El stick MENU no envía R1, así que no puede desplazar un menú. En automático el cambio se mueve solo; un toque en el botón lo anula hasta el próximo saque de centro o pausa.</string>
+    <string name="stick_switch_hint">El stick MATCH esprinta cuando el pulgar llega al borde. El stick MENU no envía R1, así que no puede desplazar un menú. En automático el cambio se mueve solo; un toque en el botón lo anula hasta el próximo saque de centro, pausa o menú.</string>
 </resources>

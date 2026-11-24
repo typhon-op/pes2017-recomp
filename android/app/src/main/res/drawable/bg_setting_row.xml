@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A settings row: a light grey band with a hairline at its foot. -->
+<!-- A settings row: a soft band with a hairline at its foot. The colours come
+     from the theme, so the same file is the light grey row and the dark one. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <gradient android:angle="270" android:startColor="#F7F9FC" android:endColor="#E9EDF4" />
+            <gradient android:angle="270" android:startColor="?attr/pesRowTop" android:endColor="?attr/pesRowBottom" />
         </shape>
     </item>
     <item android:gravity="bottom" android:height="1dp">
         <shape android:shape="rectangle">
-            <solid android:color="#C9D1DE" />
+            <solid android:color="?attr/pesDivider" />
         </shape>
     </item>
 </layer-list>

@@ -279,12 +279,24 @@ The pause menu's **Stick switch** row picks who moves the MATCH/MENU pill:
 | Mode | Who moves the switch |
 |---|---|
 | Manual (default) | the player, one tap at a time |
-| Auto | the game: MATCH while a match is running, MENU in the title's menus and whenever the game is paused |
+| Auto | the game: MATCH while a match is running, MENU in the title's menus, whenever the game is paused, and while the title's own in-match menu is open |
 
-Auto reads two things and nothing else: the phase the runtime reports (a `Match/`
-flow, see `runtime/game_phase.h`) and the app's own pause (`menuOpen` or the pad
-editor). A paused match is still the match flow, so the pause has to be a source
-of its own -- that is the whole reason it is in the rule.
+Auto reads three things and nothing else: the phase the runtime reports (a
+`Match/` flow, see `runtime/game_phase.h`), the app's own pause (`menuOpen` or
+the pad editor), and the title's in-match menu. A paused match is still the
+match flow, so the pause has to be a source of its own -- that is the whole
+reason it is in the rule.
+
+The third source is START. PES keeps the flow named `Match/...` while Game Plan,
+Substitutions or the pause sheet is up, so the phase cannot tell that a menu is
+open; the key that opens it can. A START press in a running match puts the
+switch on MENU and the next START -- the title's own resume -- puts it back on
+MATCH. The latch is cleared when the phase changes (the match ends, or the
+title returns to a menu) and is kept when the app's pause menu opens and closes
+over the top, because carrying on from it lands back in the title's menu. A
+tap on the pill still overrides auto until the next state change, and a START
+bound to a swipe or sent by a macro is not followed: only the plain START
+button and a pad's Start key are.
 
 The phase is both pushed (only on a change) and *read*: `nativeGamePhase()` is
 polled twice a second, because a flow named before the app was listening would
@@ -293,8 +305,8 @@ an answer, so auto leaves the switch alone there: a broken signal has to behave
 like Manual, never like a pad that can no longer sprint.
 
 A tap on the pill while auto is on is an **override**: it stands until the game
-changes state (the next kick-off, pause, menu or resume), and then auto has the
-switch back. Auto itself is turned off only in the pause menu, so a stray tap
+changes state (the next kick-off, pause, menu, or the title's menu opening or
+resuming), and then auto has the switch back. Auto itself is turned off only in the pause menu, so a stray tap
 never takes the switch over for good.
 
 Every move goes through one method (`setStickStage`), which lets go of the run

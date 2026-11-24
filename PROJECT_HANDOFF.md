@@ -193,3 +193,59 @@ Static checks done: every modified Kotlin file balances its delimiters; every
 3. Tune the compound and wheel timings if the title misses a modifier, a double
    tap or a move; they live in two places (`SwipeSequence`/`TrickWheel` in
    `PadGestures.kt`, and the frame counts in `runtime/skill_moves.h`).
+
+## tfix4 (2026-11-24)
+
+### Engine
+
+`libpes17.so` was taken from the engine APK at
+`https://files.catbox.moe/wg3gha.apk` and unpacked into
+`libpes17_prebuilt/arm64-v8a/` (git-ignored, `-PprebuiltNative` layout). Its
+SHA-256 is `1133fa0b...8eb69`, exactly `ENGINE_SO_SHA256` in
+`tools/engine_pin.sh`, and the APK's own hash is `f06290eb...66c02`, exactly
+`ENGINE_APK_SHA256`: the catbox file and the pinned `V0.2.4` `pes17native.apk`
+are the same build, so no pin change was needed. The planned
+`pes2017native.apk` release will need the five values in `engine_pin.sh`
+updated when it is published.
+
+### Auto MATCH/MENU switch in the title's in-match menu
+
+The engine keeps naming the flow `Match/...` while Game Plan, Substitutions or
+the START pause sheet is open, so the phase cannot tell that a menu is up.
+`TouchOverlayView.noteStartPressed()` now follows the START key: a press in a
+running match latches the title's in-match menu and puts the switch on MENU; the
+next START (the title's own resume) releases it. The latch is cleared on a
+phase change and is kept across the app's own pause menu, because carrying on
+from it returns to the title's menu. Both the on-screen START and a pad's Start
+(`GameActivity.dispatchKeyEvent`) feed it; a START bound to a swipe or sent by a
+macro is not followed. `StickSwitch.stage`/`key` take the new source, and
+`StickSwitchTest` covers it. Edge case: resuming the title's menu with the
+"Resume Match" row or a Back/Circle press instead of START leaves the switch on
+MENU until the next START or phase change; the app cannot see that resume from
+the engine.
+
+### Dark Mode for the wrapper
+
+`Prefs.darkMode` (SharedPreferences, default off) is read by `WrapperTheme`,
+which sets `Theme.PES17` or `Theme.PES17.Dark` before a wrapper activity inflates
+its layout. The neutral palette moved to theme attributes (`attrs.xml`:
+`pesPage`, `pesPanel`, `pesPanelSurface`, `pesCard`, `pesCardBorder`,
+`pesDivider`, `pesRowTop`, `pesRowBottom`, `pesText`, `pesMuted`,
+`pesAccentText`, `pesInfoText`, `pesTicker`, `pesTickerText`, `pesScrimStart`),
+used by layouts, styles and the four shared drawables, so both modes share one
+layout. The launcher entry sits under PATCHES; pressing it saves and recreates
+the launcher. Settings, Graphics & performance, Controls & sound, Advanced, Game
+Files, Patches, Graphics driver, Captures, Install, Install patch, Game files
+install, the file browser and their dialogs all take the same theme; the
+in-game pause overlay (`PesMenu`) and the pad editor keep their own dark match
+surfaces and were not changed. The launcher artwork is faded in Dark Mode
+because it is drawn on a white sheet, and the footer strip becomes a dark band
+with silver text instead of the light blue one. Light Mode's values are the
+originals.
+
+### Verification
+
+Built with the extracted engine (`:app:assembleDebug -PprebuiltNative=...`) and
+`StickSwitchTest` run on the JVM. No device was available: the title's menu
+transition, the dark/light look on a phone and dialogs at large font sizes were
+not viewed on a device.

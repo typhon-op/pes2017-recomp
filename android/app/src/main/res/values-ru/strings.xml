@@ -4,6 +4,9 @@
 <resources>
     <string name="check_updates">ПРОВЕРИТЬ ОБНОВЛЕНИЯ</string>
     <string name="quit_launcher">ВЫХОД</string>
+    <!-- The launcher's Dark Mode entry: the label carries the state. -->
+    <string name="dark_mode_on">Тёмная тема \u00b7 вкл.</string>
+    <string name="dark_mode_off">Тёмная тема \u00b7 выкл.</string>
     <string name="up_to_date">Это последняя опубликованная версия (%1$s).</string>
     <string name="graphics_driver">Графический драйвер</string>
     <string name="settings">Настройки</string>
@@ -604,8 +607,8 @@
     <string name="patch_import_warn_dp_order">Приоритеты DpFileList.bin не по убыванию.</string>
     <string name="stick_switch">Переключатель стика</string>
     <string name="stick_switch_auto">Авто</string>
-    <string name="stick_switch_auto_detail">MATCH на старте матча, MENU в меню и на паузе</string>
+    <string name="stick_switch_auto_detail">MATCH на старте матча, MENU в меню, на паузе и в меню матча</string>
     <string name="stick_switch_manual">Вручную</string>
     <string name="stick_switch_manual_detail">Выбираете кнопкой MATCH/MENU</string>
-    <string name="stick_switch_hint">Стик MATCH ускоряется, когда палец доходит до края. Стик MENU никогда не шлёт R1, поэтому меню не может поехать. В режиме «авто» переключатель двигается сам; нажатие на кнопку переопределяет его до следующего старта матча или паузы.</string>
+    <string name="stick_switch_hint">Стик MATCH ускоряется, когда палец доходит до края. Стик MENU никогда не шлёт R1, поэтому меню не может поехать. В режиме «авто» переключатель двигается сам; нажатие на кнопку переопределяет его до следующего старта матча, паузы или меню.</string>
 </resources>

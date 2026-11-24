@@ -9,8 +9,65 @@
         <item name="colorControlActivated">@color/pes_red</item>
         <item name="android:textColorPrimary">@color/pes_text</item>
         <item name="android:textColorSecondary">@color/pes_muted</item>
+        <item name="android:textColorHint">@color/pes_muted</item>
         <item name="buttonStyle">@style/PanelButton</item>
         <item name="android:buttonStyle">@style/PanelButton</item>
+        <!-- The wrapper's palette (attrs.xml): the original light values. -->
+        <item name="pesPage">@color/pes_page</item>
+        <item name="pesPanel">@color/pes_panel</item>
+        <item name="pesPanelSurface">@color/pes_panel_overlay_light</item>
+        <item name="pesCard">@color/pes_row</item>
+        <item name="pesCardBorder">@color/pes_line</item>
+        <item name="pesDivider">@color/pes_line</item>
+        <item name="pesRowTop">@color/pes_row_light_top</item>
+        <item name="pesRowBottom">@color/pes_row_light_bottom</item>
+        <item name="pesText">@color/pes_text</item>
+        <item name="pesMuted">@color/pes_muted</item>
+        <item name="pesAccentText">@color/pes_red</item>
+        <item name="pesInfoText">@color/pes_blue</item>
+        <item name="pesTicker">@color/pes_highlight</item>
+        <item name="pesTickerText">@color/pes_on_dark</item>
+        <item name="pesScrimStart">@color/launcher_background</item>
+    </style>
+
+    <!--
+      The same wrapper screens in Dark Mode (WrapperTheme picks it before a
+      screen inflates its layout, so it applies to the launcher and every page
+      opened from it). It is a dark AppCompat theme on purpose: the alert
+      dialogs the wrapper opens then come with dark surfaces, light body copy
+      and the accent buttons already in the right colours.
+
+      The accent colours (the blue section bars, the gold cursor and the red
+      highlight) are unchanged; the surfaces and the ink move, and both inks are
+      set well above 4.5:1 against the surface under them.
+    -->
+    <style name="Theme.PES17.Dark" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/pes_page_dark</item>
+        <item name="colorPrimary">@color/pes_highlight_deep</item>
+        <item name="colorPrimaryDark">@color/pes_page_dark</item>
+        <item name="colorAccent">@color/pes_highlight</item>
+        <item name="colorControlActivated">@color/pes_highlight</item>
+        <item name="colorControlNormal">@color/pes_muted_dark</item>
+        <item name="android:textColorPrimary">@color/pes_text_dark</item>
+        <item name="android:textColorSecondary">@color/pes_muted_dark</item>
+        <item name="android:textColorHint">@color/pes_muted_dark</item>
+        <item name="buttonStyle">@style/PanelButton</item>
+        <item name="android:buttonStyle">@style/PanelButton</item>
+        <item name="pesPage">@color/pes_page_dark</item>
+        <item name="pesPanel">@color/pes_panel_dark</item>
+        <item name="pesPanelSurface">@color/pes_panel_overlay_dark</item>
+        <item name="pesCard">@color/pes_row_dark</item>
+        <item name="pesCardBorder">@color/pes_line_dark</item>
+        <item name="pesDivider">@color/pes_line_dark</item>
+        <item name="pesRowTop">@color/pes_row_dark_top</item>
+        <item name="pesRowBottom">@color/pes_row_dark_bottom</item>
+        <item name="pesText">@color/pes_text_dark</item>
+        <item name="pesMuted">@color/pes_muted_dark</item>
+        <item name="pesAccentText">@color/pes_red_light</item>
+        <item name="pesInfoText">@color/pes_blue_light</item>
+        <item name="pesTicker">@color/pes_ticker_dark</item>
+        <item name="pesTickerText">@color/pes_ticker_text_dark</item>
+        <item name="pesScrimStart">@color/pes_page_dark</item>
     </style>
 
     <!-- The run: black behind the surface, and the dark pad editor over it. -->
@@ -61,7 +118,7 @@
         <item name="android:paddingStart">10dp</item>
         <item name="android:paddingTop">7dp</item>
         <item name="android:paddingBottom">5dp</item>
-        <item name="android:textColor">@color/pes_text</item>
+        <item name="android:textColor">?attr/pesText</item>
         <item name="android:textSize">14sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:fontFamily">sans-serif-condensed</item>
@@ -71,7 +128,7 @@
         <item name="android:paddingStart">10dp</item>
         <item name="android:paddingTop">2dp</item>
         <item name="android:paddingBottom">4dp</item>
-        <item name="android:textColor">@color/pes_muted</item>
+        <item name="android:textColor">?attr/pesMuted</item>
         <item name="android:textSize">11sp</item>
     </style>
 
@@ -82,7 +139,7 @@
         <item name="android:paddingEnd">6dp</item>
         <item name="android:paddingTop">7dp</item>
         <item name="android:paddingBottom">5dp</item>
-        <item name="android:textColor">@color/pes_text</item>
+        <item name="android:textColor">?attr/pesText</item>
         <item name="android:textSize">14sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:fontFamily">sans-serif-condensed</item>
@@ -99,7 +156,7 @@
         <item name="android:paddingStart">6dp</item>
         <item name="android:drawablePadding">8dp</item>
         <item name="android:drawableStart">@drawable/ic_menu_cursor_space</item>
-        <item name="android:textColor">@color/pes_navy</item>
+        <item name="android:textColor">?attr/pesText</item>
         <item name="android:textSize">17sp</item>
         <item name="android:textStyle">bold|italic</item>
         <item name="android:textAllCaps">true</item>

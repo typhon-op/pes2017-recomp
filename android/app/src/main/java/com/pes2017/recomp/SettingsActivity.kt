@@ -43,7 +43,10 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The player's Light or Dark Mode, before any view resolves a colour.
+        WrapperTheme.apply(this)
         setContentView(R.layout.activity_settings)
+        WrapperTheme.dimArtwork(this)
         // BACK on the strip along the top; through the dispatcher, so a screen's own back handling (the install's
         // "stop copying?") applies to it too.
         findViewById<android.view.View>(R.id.back_button).setOnClickListener { onBackPressedDispatcher.onBackPressed() }
