@@ -37,6 +37,9 @@
     <color name="pes_muted_dark">#A9B8D4</color>
     <color name="pes_blue_light">#8FCBFF</color>
     <color name="pes_red_light">#FF7A8A</color>
+    <!-- The light theme's ticker: dark blue rather than the bright accent
+         blue, so white type on it reads as a ticker and not a button. -->
+    <color name="pes_ticker_light">#0C2E5C</color>
     <color name="pes_ticker_dark">#15233B</color>
     <color name="pes_ticker_text_dark">#D7E2F2</color>
 

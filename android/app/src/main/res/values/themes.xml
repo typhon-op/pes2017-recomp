@@ -25,7 +25,7 @@
         <item name="pesMuted">@color/pes_muted</item>
         <item name="pesAccentText">@color/pes_red</item>
         <item name="pesInfoText">@color/pes_blue</item>
-        <item name="pesTicker">@color/pes_highlight</item>
+        <item name="pesTicker">@color/pes_ticker_light</item>
         <item name="pesTickerText">@color/pes_on_dark</item>
         <item name="pesScrimStart">@color/launcher_background</item>
     </style>

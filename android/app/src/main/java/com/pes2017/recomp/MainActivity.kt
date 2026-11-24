@@ -102,8 +102,6 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         // The player's Light or Dark Mode, before any view resolves a colour.
         WrapperTheme.apply(this)
-        setContentView(R.layout.activity_main)
-        WrapperTheme.dimArtwork(this)
         coldStart = savedInstanceState == null
         prefs = Prefs(this)
         // A fresh install opens on the setup screen, not on the launcher: the
@@ -111,15 +109,22 @@ class MainActivity : AppCompatActivity() {
         // and every row of the launcher is about a game that is not there yet.
         // It is remembered, so a later open starts on the launcher even when
         // the player backed out of setup; an already-installed copy skips it.
-        if (coldStart && !prefs.seenWelcome) {
+        //
+        // Nothing of the launcher is inflated and the runtime is not loaded
+        // before handing over: both were the solid white screen in front of
+        // setup, which is the only screen a fresh install needs. That work is
+        // skipped and the setup page starts the runtime behind itself.
+        if (coldStart && !prefs.seenWelcome && prefs.gameDirectory.isEmpty()) {
             prefs.seenWelcome = true
-            if (prefs.gameDirectory.isEmpty()) {
-                startActivity(
-                    Intent(this, InstallActivity::class.java)
-                        .putExtra(InstallActivity.EXTRA_REQUIRED, true)
-                )
-            }
+            startActivity(
+                Intent(this, InstallActivity::class.java)
+                    .putExtra(InstallActivity.EXTRA_REQUIRED, true)
+            )
+            finish()
+            return
         }
+        setContentView(R.layout.activity_main)
+        WrapperTheme.dimArtwork(this)
         relaunchRequested = QuickGraphics.takeRelaunch(intent, prefs)
         // The performance preset this phone starts from, once (DeviceProfile).
         try { DeviceProfile.ensurePreset(this, prefs) } catch (_: Throwable) {}
@@ -275,22 +280,7 @@ class MainActivity : AppCompatActivity() {
         // is reported rather than fatal. The breadcrumb is what identifies a
         // native crash inside the load itself, which no handler can catch.
         Trail.note(this, "launcher: loading the runtime library")
-        nativeReady = NativeBridge.load(this)
-        if (nativeReady) {
-            Trail.note(this, "launcher: library loaded, initialising")
-            try {
-                NativeBridge.nativeInit(
-                    filesDir.absolutePath,
-                    (getExternalFilesDir(null) ?: filesDir).absolutePath,
-                    cacheDir.absolutePath,
-                    applicationInfo.nativeLibraryDir,
-                    null,
-                )
-            } catch (error: Throwable) {
-                nativeReady = false
-                NativeBridge.noteInitFailure(error.message ?: error.toString())
-            }
-        }
+        nativeReady = NativeBridge.ensureInitialized(this)
         Trail.clear(this)
         ContextCompat.registerReceiver(
             this, downloadDone,
@@ -504,10 +494,10 @@ class MainActivity : AppCompatActivity() {
                 NativeBridge.loadError() ?: getString(R.string.unknown_reason),
             )
             play.isEnabled = false
-            footer.text = getString(
+            setTicker(getString(
                 R.string.footer, device(), getString(R.string.driver_system),
                 BuildConfig.BUILD_SHA, BuildConfig.BUILD_STAMP,
-            )
+            ))
             return
         }
 
@@ -620,10 +610,28 @@ class MainActivity : AppCompatActivity() {
         }
 
         applyDriverChoice()
-        footer.text = getString(
+        setTicker(getString(
             R.string.footer, device(), currentDriverName(),
             BuildConfig.BUILD_SHA, BuildConfig.BUILD_STAMP,
-        )
+        ))
+    }
+
+    /**
+     * Replacing the text stops a TextView's marquee: the run was started when
+     * the strip was selected, and new text leaves that animation at a standstill
+     * (the strip looked frozen). Selecting it again restarts the run from the
+     * new text; the posted pass catches the case where the text has not been
+     * laid out yet on the first frame.
+     */
+    private fun setTicker(text: CharSequence) {
+        footer.text = text
+        restartTicker()
+        footer.post { restartTicker() }
+    }
+
+    private fun restartTicker() {
+        footer.isSelected = false
+        footer.isSelected = true
     }
 
     private fun filesDirParent(): String = (getExternalFilesDir(null) ?: filesDir).absolutePath

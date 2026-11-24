@@ -282,6 +282,14 @@ class TouchOverlayView @JvmOverloads constructor(
         invalidate()
     }
 
+    // Whether the Match flow has reached kick-off. The engine calls the whole
+    // Match/... flow a match, so the lineups and the walk-out read as MATCH as
+    // well; a START in that window is the title's skip, not its pause sheet.
+    // The first real steering of the movement stick marks the kick-off, with a
+    // time fallback for a match played without touching it.
+    private var kickOffPending = false
+    private var matchEnteredAt = 0L
+
     // Sprint's press pulse is gated: two taps are the speed burst, a bounce of
     // one tap is not. The hold itself is never gated.
     private val burstCadence = TapCadence()
@@ -376,6 +384,13 @@ class TouchOverlayView @JvmOverloads constructor(
             // A different flow is not the title's in-match menu the switch was
             // following: START's latch belongs to one match and goes with it.
             titleMenu = false
+            // Entering the Match flow is not the kick-off: the lineups, the
+            // walk-out and the pre-match cutscenes are inside it too, and START
+            // there skips them rather than opening the pause sheet. The switch
+            // must stay on MATCH through those, or it is already on MENU when
+            // the whistle goes and the next START flips it the wrong way.
+            kickOffPending = value == GamePhase.MATCH
+            if (kickOffPending) matchEnteredAt = SystemClock.uptimeMillis()
             // Everything the pad was holding is let go across a phase change, the
             // two-stage stick's ring included: RB means "next" in the title's
             // menus, so a sprint still held while the match ended would scroll a
@@ -444,6 +459,15 @@ class TouchOverlayView @JvmOverloads constructor(
             }
             return
         }
+        if (kickOffPending && SystemClock.uptimeMillis() - matchEnteredAt < KICK_OFF_FALLBACK_MS) {
+            // The title's own START before kick-off: it skips the pre-match, so
+            // it is not the pause sheet and must not move the switch. The press
+            // itself is already on its way to the title untouched.
+            reconsiderStick()
+            invalidate()
+            return
+        }
+        kickOffPending = false
         titleMenu = !titleMenu
         // The new stage lets go of the run and the two-stage dwell itself; the
         // title stops the match behind its menu, so nothing else is held on
@@ -1176,6 +1200,14 @@ class TouchOverlayView @JvmOverloads constructor(
                                 sendSkill(x, y)
                             } else {
                                 moveStick(element, x, y, id)
+                                // A real deflection of the match stick is the
+                                // kick-off: there is a player on the pitch and
+                                // the thumb is steering them. A resting thumb's
+                                // jitter does not cross this threshold.
+                                if (kickOffPending && element.id == MOVE_STICK) {
+                                    val p = stickPositions[element.id]
+                                    if (p != null && hypot(p[0], p[1]) > 0.35f) kickOffPending = false
+                                }
                                 changed = true
                             }
                         }
@@ -1215,6 +1247,15 @@ class TouchOverlayView @JvmOverloads constructor(
                         }
                         ControlKind.TRICK -> {
                             if (id != trickPointer) continue
+                            // A wheel that was let go of by something else while
+                            // the thumb never moved reopens here, so a long hold
+                            // keeps it on screen instead of needing a new press.
+                            if (!trickOpen &&
+                                SystemClock.uptimeMillis() - trickDownAt >= TrickWheel.HOLD_MS
+                            ) {
+                                trickOpen = true
+                                changed = true
+                            }
                             // The sector follows the thumb from the moment it
                             // lands, so the ring is already showing the right
                             // move when it opens; only a change after that is
@@ -1363,14 +1404,22 @@ class TouchOverlayView @JvmOverloads constructor(
             // The wheel opens on a hold, and the move is chosen by where the
             // thumb is when it lifts: nothing to send while it is down.
             ControlKind.TRICK -> {
-                trickPointer = pointerId
-                trickDownAt = SystemClock.uptimeMillis()
-                trickOriginX = x
-                trickOriginY = y
-                trickSector = -1
-                trickOpen = false
-                postDelayed(trickOpenTask, TrickWheel.HOLD_MS)
-                invalidate()
+                // A wheel already open owns the gesture. A second thumb landing
+                // on the button (to press the wheel it is holding) must not
+                // close it or move its origin out from under the first.
+                val openWheel = trickPointer >= 0 && trickPointer != pointerId &&
+                    SystemClock.uptimeMillis() - trickDownAt >= TrickWheel.HOLD_MS
+                if (!openWheel) {
+                    trickPointer = pointerId
+                    trickDownAt = SystemClock.uptimeMillis()
+                    trickOriginX = x
+                    trickOriginY = y
+                    trickSector = -1
+                    trickOpen = false
+                    removeCallbacks(trickOpenTask)
+                    postDelayed(trickOpenTask, TrickWheel.HOLD_MS)
+                    invalidate()
+                }
             }
             else -> Unit
         }
@@ -1468,8 +1517,11 @@ class TouchOverlayView @JvmOverloads constructor(
             noteSwipeTrail(released.element, direction)
         }
         if (released.element.kind == ControlKind.TRICK) {
-            removeCallbacks(trickOpenTask)
             if (pointerId == trickPointer) {
+                // Only the finger that owns the wheel may close it. A second
+                // thumb on the button used to cancel the first one's open task
+                // and take the wheel down while it was still held.
+                removeCallbacks(trickOpenTask)
                 val held = SystemClock.uptimeMillis() - trickDownAt
                 val sector = trickSector
                 trickPointer = -1
@@ -2294,10 +2346,18 @@ class TouchOverlayView @JvmOverloads constructor(
                 ControlKind.STICK_MODE -> drawStickMode(canvas, element, alpha, faded)
                 ControlKind.TRICK -> {
                     drawButton(canvas, element, alpha, faded)
-                    if (trickOpen && trickPointer >= 0 &&
+                    // Open is derived from the finger still on the control and
+                    // the hold having run out, not from the one-shot flag: if
+                    // anything cleared the flag while the wheel was held, the
+                    // ring stays up (and the timer is re-armed on the next
+                    // move) instead of disappearing mid-hold.
+                    val heldLongEnough = trickPointer >= 0 &&
+                        SystemClock.uptimeMillis() - trickDownAt >= TrickWheel.HOLD_MS
+                    if ((trickOpen || heldLongEnough) && trickPointer >= 0 &&
                         claims.elementFor(trickPointer) === element
                     ) {
                         drawTrickRing(canvas, element, alpha)
+                        if (!trickOpen) trickOpen = true
                     }
                 }
             }
@@ -2403,6 +2463,14 @@ class TouchOverlayView @JvmOverloads constructor(
 
         /** How long the last skill-stick sample is held after the thumb lifts. */
         private const val SKILL_RELEASE_HOLD_MS = 90L
+
+        /**
+         * How long after entering the Match flow a START still counts as the
+         * pre-match skip. Most matches are kicking off well before this, and a
+         * match that is played without ever touching the stick is treated as
+         * live after it, so the pause sheet can still move the switch.
+         */
+        private const val KICK_OFF_FALLBACK_MS = 45_000L
 
         /** How long a released swipe's trail takes to fly out and fade. */
         private const val SWIPE_TRAIL_MS = 200L

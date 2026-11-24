@@ -103,6 +103,15 @@ class PesMenu(
      * is "PES 2017 | Typhon Lhoucine" in either language.
      */
     private val rtl = activity.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
+
+    /**
+     * The launcher's Dark Mode, read once as the menu opens. The panel, header
+     * and foot are navy in both modes, but the rows were a fixed light grey --
+     * the one surface that still read as Light Mode in the pause menu that
+     * carries Edit Controls. The rows follow the choice now.
+     */
+    private val dark = Prefs(activity).darkMode
+
     private fun dp(value: Int): Int = (value * density).roundToInt()
 
     /**
@@ -607,7 +616,7 @@ class PesMenu(
         // Flat fills, as the reference's rows are: light grey for a row, the
         // bright PES blue for the one the player is on. Two drawables reused by
         // every row rather than one gradient repainted per selection change.
-        private val resting = GradientDrawable().apply { setColor(ROW) }
+        private val resting = GradientDrawable().apply { setColor(if (dark) DARK_ROW else ROW) }
         private val lit = GradientDrawable().apply { setColor(SELECTED) }
 
         var chosen: Boolean
@@ -712,15 +721,24 @@ class PesMenu(
             background = if (isSelected) lit else resting
             label.setTextColor(
                 when {
-                    !row.enabled -> 0xFF77828F.toInt()
+                    !row.enabled -> if (dark) 0xFF6B7788.toInt() else 0xFF77828F.toInt()
                     isSelected -> Color.WHITE
-                    else -> INK
+                    else -> if (dark) DARK_INK else INK
                 },
             )
-            detail.setTextColor(if (isSelected) 0xFFD9ECFF.toInt() else 0xFF3E4C5C.toInt())
+            detail.setTextColor(
+                if (isSelected) 0xFFD9ECFF.toInt()
+                else if (dark) 0xFFA9B8D4.toInt() else 0xFF3E4C5C.toInt(),
+            )
             detail.text = row.detail
-            tick.setTextColor(if (row.checked == true) 0xFF1B8DFF.toInt() else 0x33202C3A)
-            chevron.setTextColor(if (isSelected) 0xFFEAF6FF.toInt() else 0xFF5C6B7C.toInt())
+            tick.setTextColor(
+                if (row.checked == true) 0xFF1B8DFF.toInt()
+                else if (dark) 0x55EAF2FF.toInt() else 0x33202C3A,
+            )
+            chevron.setTextColor(
+                if (isSelected) 0xFFEAF6FF.toInt()
+                else if (dark) 0xFF9FB2D0.toInt() else 0xFF5C6B7C.toInt(),
+            )
             alpha = if (row.enabled) 1f else 0.6f
         }
     }
@@ -772,6 +790,10 @@ class PesMenu(
         private const val ROW = 0xFFD2D6DC.toInt()
         private const val SELECTED = 0xFF1B8DFF.toInt()
         private const val INK = 0xFF172433.toInt()
+
+        /** The same row in Dark Mode: the launcher's dark card over the panel. */
+        private const val DARK_ROW = 0xFF1A253C.toInt()
+        private const val DARK_INK = 0xFFEAF1FF.toInt()
     }
 }
 

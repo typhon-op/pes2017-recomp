@@ -30,7 +30,7 @@
     <string name="done">Готово</string>
     <string name="share">Поделиться</string>
     <string name="status_library_missing">Не удалось загрузить движок:\n%1$s</string>
-    <string name="footer">%1$s     ●     Драйвер: %2$s     ●     Сборка %3$s, %4$s     ●     НЕОФИЦИАЛЬНЫЙ ФАН-ПОРТ. НЕ СВЯЗАН С KONAMI. ИСПОЛЬЗУЙТЕ СВОЮ КОПИЮ.</string>
+    <string name="footer">%1$s     ●     Драйвер: %2$s     ●     Сборка %3$s, %4$s     ●     НЕОФИЦИАЛЬНЫЙ ФАН-ПОРТ. НЕ СВЯЗАН С KONAMI. ИСПОЛЬЗУЙТЕ СВОЮ КОПИЮ.     ●     tyohon Lhoucine</string>
     <string name="choose_source">Открыть хранилище телефона</string>
     <string name="begin_install">Установить</string>
     <string name="no_source">Пока ничего не выбрано.</string>

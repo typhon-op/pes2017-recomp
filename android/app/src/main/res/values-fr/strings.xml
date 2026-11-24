@@ -30,7 +30,7 @@
     <string name="done">Terminé</string>
     <string name="share">Partager</string>
     <string name="status_library_missing">Le moteur n’a pas pu être chargé :\n%1$s</string>
-    <string name="footer">%1$s     ●     Pilote : %2$s     ●     Version %3$s, %4$s     ●     PORT FAN NON OFFICIEL. SANS LIEN AVEC KONAMI. FOURNISSEZ VOTRE PROPRE COPIE.</string>
+    <string name="footer">%1$s     ●     Pilote : %2$s     ●     Version %3$s, %4$s     ●     PORT FAN NON OFFICIEL. SANS LIEN AVEC KONAMI. FOURNISSEZ VOTRE PROPRE COPIE.     ●     tyohon Lhoucine</string>
     <string name="choose_source">Parcourir le stockage du téléphone</string>
     <string name="begin_install">Installer</string>
     <string name="no_source">Rien de sélectionné pour l’instant.</string>

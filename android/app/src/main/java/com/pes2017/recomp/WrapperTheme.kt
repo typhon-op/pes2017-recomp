@@ -2,6 +2,7 @@ package com.pes2017.recomp
 
 import android.app.Activity
 import android.content.Context
+import android.graphics.drawable.ColorDrawable
 import android.util.TypedValue
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
@@ -22,8 +23,9 @@ import androidx.core.view.WindowInsetsControllerCompat
  * to the next screen opened as well as to the launcher as soon as it is toggled
  * (MainActivity saves it and recreates itself).
  *
- * Deliberately not used by GameActivity, PesMenu or the pad editor: those are
- * the match's own dark surfaces and are the same in both modes.
+ * Deliberately not used by GameActivity or the pad editor: those are the
+ * match's own dark surfaces and are the same in both modes. PesMenu reads the
+ * choice itself for the one light surface it had -- its rows.
  */
 object WrapperTheme {
 
@@ -44,6 +46,10 @@ object WrapperTheme {
 
         val window = activity.window ?: return
         val page = page(activity)
+        // setTheme is called after the window exists, so the starting window
+        // keeps the theme it was created with. Painting the window now is what
+        // stops the white flash a moment before the page's first frame.
+        window.setBackgroundDrawable(ColorDrawable(page))
         // The bars around the page follow it, and their icons flip with it:
         // dark icons on the white page, light icons on the navy one.
         window.statusBarColor = page

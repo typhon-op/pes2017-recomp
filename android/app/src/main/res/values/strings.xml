@@ -37,10 +37,13 @@
     <string name="done">Done</string>
     <string name="share">Share</string>
     <string name="status_library_missing">The runtime could not be loaded:\n%1$s</string>
-    <string name="footer">%1$s     ●     Driver: %2$s     ●     Build %3$s, %4$s     ●     UNOFFICIAL FAN PORT. NOT AFFILIATED WITH KONAMI. BRING YOUR OWN COPY.</string>
+    <string name="footer">%1$s     ●     Driver: %2$s     ●     Build %3$s, %4$s     ●     UNOFFICIAL FAN PORT. NOT AFFILIATED WITH KONAMI. BRING YOUR OWN COPY.     ●     tyohon Lhoucine</string>
 
     <!-- installing -->
     <string name="choose_source">Browse the phone\u2019s storage</string>
+    <string name="allow_all_files">Allow access to all files</string>
+    <string name="runtime_preparing">Preparing the runtime\u2026</string>
+    <string name="runtime_did_not_start">The runtime did not start.</string>
     <string name="begin_install">Install</string>
     <string name="no_source">Nothing chosen yet.</string>
     <string name="chosen">Installing from:\n%1$s</string>

@@ -3,11 +3,13 @@ package com.pes2017.recomp
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.StatFs
 import android.provider.OpenableColumns
+import android.provider.Settings
 import android.view.View
 import android.widget.Button
 import android.widget.ProgressBar
@@ -50,6 +52,7 @@ class InstallActivity : AppCompatActivity() {
     private lateinit var choose: Button
     private lateinit var pick: Button
     private lateinit var pickFolder: Button
+    private lateinit var allFiles: Button
     private lateinit var cancel: Button
 
     private val handler = Handler(Looper.getMainLooper())
@@ -58,6 +61,17 @@ class InstallActivity : AppCompatActivity() {
 
     @Volatile
     private var running = false
+
+    /**
+     * Loaded and started off the main thread. The first-run setup used to wait
+     * for the launcher to finish this before its page could even be used; the
+     * page is now up at once and Install turns on when the runtime is ready.
+     */
+    @Volatile
+    private var runtimeReady = false
+
+    /** An install asked to begin as soon as the runtime behind this page is up. */
+    private var startWhenReady = false
 
     @Volatile
     private var copying = false
@@ -121,9 +135,13 @@ class InstallActivity : AppCompatActivity() {
         choose = findViewById(R.id.choose)
         pick = findViewById(R.id.pick)
         pickFolder = findViewById(R.id.pick_folder)
+        allFiles = findViewById(R.id.all_files)
         cancel = findViewById(R.id.cancel)
 
         sourceText.text = getString(R.string.no_source)
+
+        allFiles.setOnClickListener { requestAllFiles() }
+        prepareRuntime()
 
         pick.setOnClickListener {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
@@ -169,12 +187,88 @@ class InstallActivity : AppCompatActivity() {
         if (!initial.isNullOrEmpty() && File(initial).exists()) {
             useSource(initial)
             if (intent.getBooleanExtra(EXTRA_AUTO_START, false)) {
-                start()
+                startWhenReady = true
+                if (runtimeReady) onRuntimeReady()
             }
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        updateAllFiles()
+    }
+
+    /**
+     * The library and runtime are loaded here, in the background, so this page
+     * is never held behind a shared white screen. If the launcher already
+     * started them, this is the cheap answer it should be.
+     */
+    private fun prepareRuntime() {
+        if (NativeBridge.isInitialized()) {
+            runtimeReady = true
+            onRuntimeReady()
+            return
+        }
+        progressText.text = getString(R.string.runtime_preparing)
+        thread(name = "runtime-init") {
+            val ready = NativeBridge.ensureInitialized(this)
+            handler.post {
+                runtimeReady = ready
+                if (ready) {
+                    if (!running && !copying) progressText.text = ""
+                } else {
+                    progressText.text =
+                        NativeBridge.loadError() ?: getString(R.string.runtime_did_not_start)
+                }
+                if (ready) onRuntimeReady() else updateBegin()
+            }
+        }
+    }
+
+    private fun onRuntimeReady() {
+        updateBegin()
+        if (!startWhenReady) return
+        startWhenReady = false
+        start()
+    }
+
+    private fun updateBegin() {
+        begin.isEnabled = runtimeReady && !running && !copying && source.isNotEmpty()
+    }
+
+    /**
+     * Right below Browse: the system screen that lets this app read the game
+     * folder over a real path. Android 11 and later has the per-app screen;
+     * older versions take the ordinary storage prompt instead.
+     */
+    private fun requestAllFiles() {
+        val intent = GameFolder.accessIntent(this)
+        if (intent != null) {
+            try {
+                startActivity(intent)
+                return
+            } catch (_: Throwable) {
+                // Some builds know only the global screen.
+            }
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                return
+            } catch (_: Throwable) {
+            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            requestPermissions(GameFolder.legacyPermissions, REQUEST_STORAGE)
+        }
+    }
+
+    private fun updateAllFiles() {
+        if (!::allFiles.isInitialized) return
+        allFiles.isEnabled = !running && !copying
+        allFiles.visibility = if (GameFolder.hasAccess(this)) View.GONE else View.VISIBLE
+    }
+
     companion object {
+        private const val REQUEST_STORAGE = 17
         const val EXTRA_INITIAL_PATH = "initial_path"
         const val EXTRA_AUTO_START = "auto_start"
         const val EXTRA_REQUIRED = "required"
@@ -183,7 +277,8 @@ class InstallActivity : AppCompatActivity() {
     private fun useSource(path: String) {
         source = path
         sourceText.text = getString(R.string.chosen, path)
-        begin.isEnabled = NativeBridge.isLoaded()
+        updateBegin()
+        updateAllFiles()
     }
 
     private fun gameDirectory(): File {
@@ -448,7 +543,7 @@ class InstallActivity : AppCompatActivity() {
     // ---- installing ---------------------------------------------------------------
 
     private fun start() {
-        if (!NativeBridge.isLoaded() || running) return
+        if (!runtimeReady || running) return
         val target = gameDirectory()
         target.mkdirs()
 
@@ -488,13 +583,15 @@ class InstallActivity : AppCompatActivity() {
     }
 
     private fun setBusy(busy: Boolean) {
-        begin.isEnabled = !busy && source.isNotEmpty() && NativeBridge.isLoaded()
+        updateBegin()
         choose.isEnabled = !busy
         pick.isEnabled = !busy
         pickFolder.isEnabled = !busy
         // Out of the way while it works, so the progress and cancel fit without scrolling.
         val choosing = if (busy) View.GONE else View.VISIBLE
         for (button in listOf(pick, pickFolder, choose, begin)) button.visibility = choosing
+        allFiles.visibility = if (busy || GameFolder.hasAccess(this)) View.GONE else View.VISIBLE
+        allFiles.isEnabled = !busy
         progress.visibility = if (busy) View.VISIBLE else View.GONE
         cancel.visibility = if (busy) View.VISIBLE else View.GONE
         cancel.isEnabled = busy

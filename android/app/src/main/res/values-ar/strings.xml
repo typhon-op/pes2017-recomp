@@ -30,7 +30,7 @@
     <string name="done">تم</string>
     <string name="share">مشاركة</string>
     <string name="status_library_missing">تعذّر تحميل المحرك:\n%1$s</string>
-    <string name="footer">%1$s     ●     برنامج التشغيل: %2$s     ●     الإصدار %3$s، %4$s     ●     نسخة معجبين غير رسمية. لا صلة لها بشركة KONAMI. استخدم نسختك الخاصة.</string>
+    <string name="footer">%1$s     ●     برنامج التشغيل: %2$s     ●     الإصدار %3$s، %4$s     ●     نسخة معجبين غير رسمية. لا صلة لها بشركة KONAMI. استخدم نسختك الخاصة.     ●     tyohon Lhoucine</string>
     <string name="choose_source">تصفح تخزين الهاتف</string>
     <string name="begin_install">تثبيت</string>
     <string name="no_source">لم يتم اختيار شيء بعد.</string>

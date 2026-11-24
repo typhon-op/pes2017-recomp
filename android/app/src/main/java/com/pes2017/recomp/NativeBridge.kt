@@ -57,6 +57,39 @@ object NativeBridge {
     fun isLoaded(): Boolean = loaded
     fun loadError(): String? = loadError
 
+    @Volatile
+    private var initialized = false
+
+    fun isInitialized(): Boolean = initialized
+
+    /**
+     * Loads the library and starts the runtime once for this process. The
+     * launcher used to do this itself, and the setup screen only worked when
+     * the launcher happened to have finished first; now whichever screen needs
+     * the runtime asks for it, and the first-run setup does it off the main
+     * thread behind its own page.
+     */
+    @Synchronized
+    fun ensureInitialized(context: Context): Boolean {
+        if (initialized) return true
+        if (!load(context)) return false
+        return try {
+            val ok = nativeInit(
+                context.filesDir.absolutePath,
+                (context.getExternalFilesDir(null) ?: context.filesDir).absolutePath,
+                context.cacheDir.absolutePath,
+                context.applicationInfo.nativeLibraryDir,
+                null,
+            )
+            initialized = ok
+            if (!ok) noteInitFailure(context.getString(R.string.runtime_did_not_start))
+            ok
+        } catch (error: Throwable) {
+            noteInitFailure(error.message ?: error.toString())
+            false
+        }
+    }
+
     /**
      * A library that loaded but would not start. An UnsatisfiedLinkError on
      * the first call means the .so and this file have drifted apart, which
@@ -64,6 +97,11 @@ object NativeBridge {
      */
     fun noteInitFailure(reason: String) {
         loadError = reason
+    }
+
+    /** The runtime started and can install and play. */
+    fun noteInitialized() {
+        initialized = true
     }
 
     // ---- start-up ---------------------------------------------------------

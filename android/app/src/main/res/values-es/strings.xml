@@ -30,7 +30,7 @@
     <string name="done">Listo</string>
     <string name="share">Compartir</string>
     <string name="status_library_missing">No se pudo cargar el motor:\n%1$s</string>
-    <string name="footer">%1$s     ●     Controlador: %2$s     ●     Versión %3$s, %4$s     ●     PORT NO OFICIAL HECHO POR AFICIONADOS. SIN RELACIÓN CON KONAMI. USA TU PROPIA COPIA.</string>
+    <string name="footer">%1$s     ●     Controlador: %2$s     ●     Versión %3$s, %4$s     ●     PORT NO OFICIAL HECHO POR AFICIONADOS. SIN RELACIÓN CON KONAMI. USA TU PROPIA COPIA.     ●     tyohon Lhoucine</string>
     <string name="choose_source">Explorar el almacenamiento del móvil</string>
     <string name="begin_install">Instalar</string>
     <string name="no_source">Aún no has elegido nada.</string>
