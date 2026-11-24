@@ -5,9 +5,10 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/pes_page">
+    android:background="?attr/pesPage">
 
     <ImageView
+        android:id="@+id/hero_art"
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
         android:layout_gravity="end"
@@ -347,7 +348,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="@string/hud_off"
-                            android:textColor="@color/pes_text" />
+                            android:textColor="?attr/pesText" />
 
                         <RadioButton
                             android:id="@+id/hud_minimal"
@@ -355,7 +356,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="@string/hud_minimal"
-                            android:textColor="@color/pes_text" />
+                            android:textColor="?attr/pesText" />
 
                         <RadioButton
                             android:id="@+id/hud_normal"
@@ -363,7 +364,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="@string/hud_normal"
-                            android:textColor="@color/pes_text" />
+                            android:textColor="?attr/pesText" />
 
                         <RadioButton
                             android:id="@+id/hud_complete"
@@ -371,7 +372,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="@string/hud_complete"
-                            android:textColor="@color/pes_text" />
+                            android:textColor="?attr/pesText" />
 
                     </RadioGroup>
 
@@ -576,7 +577,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="@string/stick_mode_move"
-                            android:textColor="@color/pes_text" />
+                            android:textColor="?attr/pesText" />
 
                         <RadioButton
                             android:id="@+id/stick_mode_fixed"
@@ -584,7 +585,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="@string/stick_mode_fixed"
-                            android:textColor="@color/pes_text" />
+                            android:textColor="?attr/pesText" />
                     </RadioGroup>
 
                     <TextView
@@ -612,7 +613,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="@string/button_style_playstation"
-                            android:textColor="@color/pes_text" />
+                            android:textColor="?attr/pesText" />
 
                         <RadioButton
                             android:id="@+id/button_style_xbox"
@@ -620,7 +621,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="@string/button_style_xbox"
-                            android:textColor="@color/pes_text" />
+                            android:textColor="?attr/pesText" />
 
                     </RadioGroup>
 
@@ -810,7 +811,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="@string/arena_auto"
-                            android:textColor="@color/pes_text" />
+                            android:textColor="?attr/pesText" />
 
                         <RadioButton
                             android:id="@+id/arena_128"
@@ -818,7 +819,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="128"
-                            android:textColor="@color/pes_text" />
+                            android:textColor="?attr/pesText" />
 
                         <RadioButton
                             android:id="@+id/arena_192"
@@ -826,7 +827,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="192"
-                            android:textColor="@color/pes_text" />
+                            android:textColor="?attr/pesText" />
 
                         <RadioButton
                             android:id="@+id/arena_256"
@@ -834,7 +835,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="256"
-                            android:textColor="@color/pes_text" />
+                            android:textColor="?attr/pesText" />
 
                         <RadioButton
                             android:id="@+id/arena_320"
@@ -842,7 +843,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="320"
-                            android:textColor="@color/pes_text" />
+                            android:textColor="?attr/pesText" />
 
                     </RadioGroup>
 
@@ -972,7 +973,7 @@
                         style="@style/SettingHint"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:textColor="@color/pes_text"
+                        android:textColor="?attr/pesText"
                         android:textSize="12sp" />
 
                     <TextView
@@ -980,7 +981,7 @@
                         style="@style/SettingHint"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:textColor="@color/pes_text"
+                        android:textColor="?attr/pesText"
                         android:textSize="12sp" />
 
                     <Button
@@ -1025,7 +1026,7 @@
                         style="@style/SettingHint"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:textColor="@color/pes_text"
+                        android:textColor="?attr/pesText"
                         android:textSize="12sp" />
 
                     <Button
@@ -1063,7 +1064,7 @@
                         style="@style/SettingHint"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:textColor="@color/pes_text"
+                        android:textColor="?attr/pesText"
                         android:textSize="12sp" />
 
                     <Button
@@ -1105,7 +1106,7 @@
         android:singleLine="true"
         android:ellipsize="end"
         android:text="@string/settings_help_strip"
-        android:textColor="@color/pes_on_dark"
+        android:textColor="?attr/pesTickerText"
         android:textSize="12sp"
         android:fontFamily="sans-serif-condensed" />
 </LinearLayout>

@@ -5,7 +5,7 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/pes_page">
+    android:background="?attr/pesPage">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -57,7 +57,7 @@
                         android:paddingTop="6dp"
                         android:paddingBottom="8dp"
                         android:text="@string/game_files_warning"
-                        android:textColor="@color/pes_red"
+                        android:textColor="?attr/pesAccentText"
                         android:textSize="12sp"
                         android:textStyle="bold" />
                 </LinearLayout>
@@ -87,7 +87,7 @@
                             android:paddingTop="8dp"
                             android:paddingBottom="8dp"
                             android:text="@string/game_files_source_none"
-                            android:textColor="@color/pes_text"
+                            android:textColor="?attr/pesText"
                             android:textSize="12sp"
                             android:fontFamily="monospace" />
 
@@ -137,7 +137,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
                             android:text="@string/game_files_scanning"
-                            android:textColor="@color/pes_blue"
+                            android:textColor="?attr/pesInfoText"
                             android:textSize="14sp"
                             android:textStyle="bold|italic"
                             android:textAllCaps="true"
@@ -175,7 +175,7 @@
                             android:paddingStart="10dp"
                             android:paddingEnd="10dp"
                             android:paddingTop="8dp"
-                            android:textColor="@color/pes_text"
+                            android:textColor="?attr/pesText"
                             android:textSize="13sp"
                             android:textStyle="bold"
                             android:fontFamily="sans-serif-condensed" />
@@ -206,7 +206,7 @@
                             style="@style/SettingHint"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:textColor="@color/pes_red"
+                            android:textColor="?attr/pesAccentText"
                             android:visibility="gone" />
                     </LinearLayout>
 
@@ -249,7 +249,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:text="@string/game_files_installing"
-                            android:textColor="@color/pes_blue"
+                            android:textColor="?attr/pesInfoText"
                             android:textSize="14sp"
                             android:textStyle="bold|italic"
                             android:textAllCaps="true"
@@ -314,7 +314,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
-                            android:textColor="@color/pes_navy"
+                            android:textColor="?attr/pesText"
                             android:textSize="22sp"
                             android:textStyle="bold|italic"
                             android:textAllCaps="true"
@@ -324,7 +324,7 @@
                             android:id="@+id/game_files_result_body"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:textColor="@color/pes_text"
+                            android:textColor="?attr/pesText"
                             android:textSize="13sp"
                             android:lineSpacingExtra="2dp"
                             android:fontFamily="sans-serif" />

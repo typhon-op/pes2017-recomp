@@ -4,6 +4,9 @@
 <resources>
     <string name="check_updates">التحقق من التحديثات</string>
     <string name="quit_launcher">خروج</string>
+    <!-- The launcher's Dark Mode entry: the label carries the state. -->
+    <string name="dark_mode_on">الوضع الداكن \u00b7 مفعّل</string>
+    <string name="dark_mode_off">الوضع الداكن \u00b7 متوقف</string>
     <string name="up_to_date">هذه أحدث نسخة منشورة (%1$s).</string>
     <string name="graphics_driver">برنامج تشغيل الرسوميات</string>
     <string name="settings">الإعدادات</string>
@@ -604,8 +607,8 @@
     <string name="patch_import_warn_dp_order">أولويات DpFileList.bin ليست تنازلية.</string>
     <string name="stick_switch">مفتاح العصا</string>
     <string name="stick_switch_auto">تلقائي</string>
-    <string name="stick_switch_auto_detail">MATCH عند بداية المباراة، وMENU في القوائم وعند الإيقاف</string>
+    <string name="stick_switch_auto_detail">MATCH عند بداية المباراة، وMENU في القوائم والإيقاف وقائمة المباراة</string>
     <string name="stick_switch_manual">يدوي</string>
     <string name="stick_switch_manual_detail">تختارها بزر MATCH/MENU</string>
-    <string name="stick_switch_hint">عصا MATCH تركض عندما يبلغ الإبهام الحافة. وعصا MENU لا ترسل R1 أبدًا، فلا يمكن أن تُمرَّر قائمة بها. في الوضع التلقائي يتحرك المفتاح وحده؛ ولمسة على الزر تجاوز ذلك حتى بداية المباراة التالية أو الإيقاف التالي.</string>
+    <string name="stick_switch_hint">عصا MATCH تركض عندما يبلغ الإبهام الحافة. وعصا MENU لا ترسل R1 أبدًا، فلا يمكن أن تُمرَّر قائمة بها. في الوضع التلقائي يتحرك المفتاح وحده؛ ولمسة على الزر تجاوز ذلك حتى بداية المباراة التالية أو الإيقاف التالي أو القائمة التالية.</string>
 </resources>

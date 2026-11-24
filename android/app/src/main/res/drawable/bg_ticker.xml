@@ -3,7 +3,7 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="@color/pes_highlight" />
+            <solid android:color="?attr/pesTicker" />
         </shape>
     </item>
     <item android:gravity="top" android:height="2dp">

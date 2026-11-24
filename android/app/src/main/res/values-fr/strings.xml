@@ -4,6 +4,9 @@
 <resources>
     <string name="check_updates">RECHERCHER LES MISES À JOUR</string>
     <string name="quit_launcher">QUITTER</string>
+    <!-- The launcher's Dark Mode entry: the label carries the state. -->
+    <string name="dark_mode_on">Mode sombre \u00b7 activé</string>
+    <string name="dark_mode_off">Mode sombre \u00b7 désactivé</string>
     <string name="up_to_date">Ceci est la dernière version publiée (%1$s).</string>
     <string name="graphics_driver">Pilote graphique</string>
     <string name="settings">Paramètres</string>
@@ -604,8 +607,8 @@
     <string name="patch_import_warn_dp_order">Les priorités de DpFileList.bin ne sont pas décroissantes.</string>
     <string name="stick_switch">Bascule du stick</string>
     <string name="stick_switch_auto">Auto</string>
-    <string name="stick_switch_auto_detail">MATCH au coup d’envoi, MENU dans les menus et en pause</string>
+    <string name="stick_switch_auto_detail">MATCH au coup d’envoi, MENU dans les menus, en pause et dans le menu du match</string>
     <string name="stick_switch_manual">Manuel</string>
     <string name="stick_switch_manual_detail">Vous choisissez avec la pastille MATCH/MENU</string>
-    <string name="stick_switch_hint">Le stick MATCH sprinte quand le pouce atteint le bord. Le stick MENU n’envoie jamais R1 : un menu ne peut donc pas défiler par erreur. En auto, la bascule se fait seule ; un appui sur la pastille la force jusqu’au prochain coup d’envoi ou à la pause suivante.</string>
+    <string name="stick_switch_hint">Le stick MATCH sprinte quand le pouce atteint le bord. Le stick MENU n’envoie jamais R1 : un menu ne peut donc pas défiler par erreur. En auto, la bascule se fait seule ; un appui sur la pastille la force jusqu’au prochain coup d’envoi, à la pause ou au menu suivant.</string>
 </resources>

@@ -1181,8 +1181,10 @@ class GameActivity : AppCompatActivity(), NativeListener {
 
     /**
      * Auto or manual for the MATCH/MENU switch above the movement socket. Auto
-     * follows the title -- MATCH from kick-off, MENU in its menus and MENU while
-     * this menu or the editor has the game paused -- and a tap on the pill is a
+     * follows the title -- MATCH from kick-off, MENU in its menus, MENU while
+     * this menu or the editor has the game paused, and MENU while the title's
+     * own in-match menu is open (TouchOverlayView follows START for that, since
+     * the engine keeps calling the flow a match) -- and a tap on the pill is a
      * one-off override that lasts until the next of those changes. Manual is
      * what the pad shipped with.
      */
@@ -1354,6 +1356,16 @@ class GameActivity : AppCompatActivity(), NativeListener {
         trackMenuChord(event)
         if (started && !overlay.editing && pads.onKey(event)) {
             if (event.action == KeyEvent.ACTION_DOWN) hideTouchForPad()
+            // A pad's START is the same key as the on-screen one: it opens the
+            // title's in-match menu, and the overlay follows it for the auto
+            // MATCH/MENU switch. Only the first DOWN, or a held Start would
+            // toggle the latch on every repeat.
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 &&
+                (event.keyCode == KeyEvent.KEYCODE_BUTTON_START ||
+                    event.keyCode == KeyEvent.KEYCODE_MENU)
+            ) {
+                overlay.noteStartPressed()
+            }
             return true
         }
         return super.dispatchKeyEvent(event)

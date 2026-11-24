@@ -66,7 +66,10 @@ object DialogActions {
                     setPadding(dp(context, 18), dp(context, 8), dp(context, 18), dp(context, 8))
                 } else {
                     setBackgroundResource(outlined.resourceId)
-                    setTextColor(ContextCompat.getColor(context, R.color.pes_blue))
+                    // The theme's info ink: blue on the light dialog, the pale
+                    // blue on the dark one, so a text action never sinks into
+                    // the surface behind it.
+                    setTextColor(WrapperTheme.color(context, R.attr.pesInfoText, R.color.pes_blue))
                     textSize = 13f
                     minHeight = dp(context, 34)
                     setPadding(dp(context, 10), dp(context, 4), dp(context, 10), dp(context, 4))

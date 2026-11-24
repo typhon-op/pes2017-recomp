@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The wrapper's own palette as theme attributes, so every screen can be drawn
+  in either the light menu (the original look) or the dark one without a second
+  copy of every layout. A layout or a style says `?attr/pesText`, not
+  `@color/pes_text`, and Theme.PES17 / Theme.PES17.Dark answer with the colour
+  that belongs to the mode the player chose.
+
+  The blue bars, gold cursor and red highlight are accents and stay the same in
+  both modes: only the surfaces, the ink and the quiet copy move.
+-->
+<resources>
+    <!-- The page behind every wrapper screen. -->
+    <attr name="pesPage" format="color" />
+    <!-- A flat area inside the page (a driver's status line, a captures box). -->
+    <attr name="pesPanel" format="color" />
+    <!-- The translucent panel the settings pages and the launcher's detail sit on. -->
+    <attr name="pesPanelSurface" format="color" />
+    <!-- A card holding a group of settings. -->
+    <attr name="pesCard" format="color" />
+    <!-- Its hairline edge, and the line under a row. -->
+    <attr name="pesCardBorder" format="color" />
+    <attr name="pesDivider" format="color" />
+    <!-- One setting row's band: a soft vertical gradient. -->
+    <attr name="pesRowTop" format="color" />
+    <attr name="pesRowBottom" format="color" />
+    <!-- Ink: menu labels and setting names, then helper copy and status lines. -->
+    <attr name="pesText" format="color" />
+    <attr name="pesMuted" format="color" />
+    <!-- Coloured ink that must stay readable on both pages. -->
+    <attr name="pesAccentText" format="color" />
+    <attr name="pesInfoText" format="color" />
+    <!-- The help/footer strip along the foot of a page, and its scrolling ink. -->
+    <attr name="pesTicker" format="color" />
+    <attr name="pesTickerText" format="color" />
+    <!-- The left edge of the launcher's artwork scrim: the page's own colour. -->
+    <attr name="pesScrimStart" format="color" />
+</resources>

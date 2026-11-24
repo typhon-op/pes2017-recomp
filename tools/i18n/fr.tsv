@@ -1,5 +1,7 @@
 check_updates	RECHERCHER LES MISES À JOUR
 quit_launcher	QUITTER
+dark_mode_on	Mode sombre · activé
+dark_mode_off	Mode sombre · désactivé
 up_to_date	Ceci est la dernière version publiée (%1$s).
 graphics_driver	Pilote graphique
 settings	Paramètres

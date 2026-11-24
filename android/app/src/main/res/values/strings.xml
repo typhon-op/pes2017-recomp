@@ -3,6 +3,9 @@
     <!-- app_name is set in build.gradle.kts. -->
     <string name="check_updates">CHECK FOR UPDATES</string>
     <string name="quit_launcher">QUIT</string>
+    <!-- The launcher's Dark Mode entry: the label carries the state. -->
+    <string name="dark_mode_on">Dark mode \u00b7 on</string>
+    <string name="dark_mode_off">Dark mode \u00b7 off</string>
     <string name="up_to_date">This is the newest published version (%1$s).</string>
 
     <!-- launcher -->
@@ -830,8 +833,8 @@
     <string name="toggle_player_movement">Player Movement: LS</string>
     <string name="stick_switch">Stick switch</string>
     <string name="stick_switch_auto">Auto</string>
-    <string name="stick_switch_auto_detail">MATCH at kick-off, MENU in menus and pause</string>
+    <string name="stick_switch_auto_detail">MATCH at kick-off, MENU in menus, pause and the in-match menu</string>
     <string name="stick_switch_manual">Manual</string>
     <string name="stick_switch_manual_detail">You pick with the MATCH/MENU pill</string>
-    <string name="stick_switch_hint">The MATCH stick sprints when your thumb reaches the rim. The MENU stick sends no R1, so a menu cannot be scrolled by it. Auto moves the switch by itself; a tap on the pill overrides it until the next kick-off or pause.</string>
+    <string name="stick_switch_hint">The MATCH stick sprints when your thumb reaches the rim. The MENU stick sends no R1, so a menu cannot be scrolled by it. Auto moves the switch by itself; a tap on the pill overrides it until the next kick-off, pause or menu.</string>
 </resources>
