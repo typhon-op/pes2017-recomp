@@ -371,7 +371,6 @@
     <string name="skill_wheel">Rueda de recursos</string>
     <string name="skill_wheel_sector">%1$s: %2$s</string>
     <string name="skill_wheel_sector_title">Recurso para esta dirección</string>
-    <string name="skill_wheel_exit">luego empuja el stick izquierdo</string>
     <string name="skill_sector_up_right">Arriba a la derecha</string>
     <string name="skill_sector_up_left">Arriba a la izquierda</string>
     <string name="skill_sector_down_left">Abajo a la izquierda</string>

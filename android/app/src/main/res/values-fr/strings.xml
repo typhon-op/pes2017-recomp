@@ -371,7 +371,6 @@
     <string name="skill_wheel">Roue de gestes</string>
     <string name="skill_wheel_sector">%1$s : %2$s</string>
     <string name="skill_wheel_sector_title">Geste pour cette direction</string>
-    <string name="skill_wheel_exit">puis poussez le stick gauche</string>
     <string name="skill_sector_up_right">Haut droite</string>
     <string name="skill_sector_up_left">Haut gauche</string>
     <string name="skill_sector_down_left">Bas gauche</string>

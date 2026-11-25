@@ -362,6 +362,19 @@ action diamond and clear of both the shoot-to-pass drag and the skill stick,
 match only), because eight named buttons beside the shoot diamond is a lot of
 screen for something used a few times a match.
 
+The table behind it is the **verified PES 2017 catalogue** (fifteen entries):
+the eight original moves plus inside feint, hocus pocus, reverse elastico,
+reverse step over, multiple step overs, sombrero and nutmeg. Several PES names
+share one entry where their right-stick halves are identical and only the
+player's left stick differs. [docs/skill-moves.md](skill-moves.md) has the full
+53-row verification table, the timelines, the ability gates and the list of
+proposed moves that are **not** in PES 2017. The mapping evidence is the
+title's command list **and** the internal `FEINT_KIND_*` enumeration recovered
+from the supplied `default.xex`, which is what showed High Speed Scissors and
+Draw/Open to be real commands and Cross Over Turn, Scoop Turn, Flick Up and
+Drag Back Dummy to be absent from this build. No entry has been played inside
+the title yet: the mappings are source-verified, the timings provisional.
+
 - **How it fires.** Hold the control. After `TrickWheel.HOLD_MS` (120 ms) a ring
   of eight sectors opens **around the thumb's landing point**, not around the
 drawn button, so the ring comes to the thumb. Slide to a sector (25% of the
@@ -371,13 +384,17 @@ on) and **lift**: the move bound to that sector plays. A quick tap does
 - **What it plays.** The move index goes to `nativeSkillPlay`, and the runtime
   plays it from `runtime/skill_moves.h` one guest frame at a time: the right
   stick only, or buttons (the rainbow is two R3 clicks), and never the left
-  stick. The wheel picks; the runtime owns the input until the last frame.
+  stick. Each play logs the move's left-stick hint and ability gate to the
+  runtime log (`LOGI`, the `touch:` line), and the editor's move picker shows
+  the same two strings beside the name (both come from the move table). The
+  wheel picks; the runtime owns the input until the last frame.
 - **Exit direction.** Several moves end by asking for a left-stick direction
   the player chooses ("then push left stick"). The wheel plays the first half
   and stops; the left thumb supplies the exit. The editor says so beside the
   move's name, and the ring does not drive LS at all, so movement is never
   frozen by a skill.
-- **Defaults.** One move per sector, all eight moves reachable out of the box:
+- **Defaults.** One move per sector, eight of the fifteen reachable out of the
+  box (the rest are one binding away in the editor):
 
   | Sector | Direction | Move (index) |
   |---|---|---|
@@ -395,7 +412,8 @@ on) and **lift**: the move bound to that sector plays. A quick tap does
   an index it does not know. Indices 0 and 4 used to be the same script (left
   then right, which made the palette's double touch and body feint the same
   press); they are now distinct -- double touch flicks up, body feint down --
-  which the sheet allows for both.
+  which the sheet allows for both. Indices 8-14 are the moves the verification
+  pass added; the eight default sectors keep their old indices.
 - **Rainbow Flick is the pad's 2x R3.** The move is a button script
   (`ButtonSeq`), not a stick deflection: R3, release, R3, release, played in
   whole frames and merged into whatever the pad is already holding. A mirror of
@@ -620,12 +638,13 @@ unchanged; this only changes when the control is drawn and hit-testable.
   consumed pair, every compound sequence (modifier lead, trigger axis, double
   tap, ending clear, mid-sequence clear), the wheel's hold and sector
   arithmetic, and the sprint tap cadence behind the 2x RB speed burst.
-- `SkillWheelTest`: the eight moves in the table, the exit hints, every default
+- `SkillWheelTest`: the fifteen named moves, the exit hints, every default
   sector bound and unique, the default wheel's sector order, and that a bad
   index is not stored.
-- `tests/skill_moves_test.cpp` (host, passing): eight moves, every move ends,
-  the two feints are distinct, the step over is continuous, the rainbow is two
-  R3 clicks with a release between them, and the button sequencer clears.
+- `tests/skill_moves_test.cpp` (host, passing): fifteen moves, every move ends,
+  the directions and continuity of each verified script, the sombrero's R3 hold,
+  the nutmeg's two RB presses with a release between them, the rainbow's two R3
+  clicks, and the button sequencer clears.
 - `SwipeBindingsTest`: all 16 default combinations, the primary bits behind
   them, independence and unbound cases.
 - `DefensiveLayoutTest`: the near-thumb switch ships on the right

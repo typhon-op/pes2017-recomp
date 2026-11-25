@@ -1,11 +1,13 @@
-// The one-tap skill moves (runtime/skill_moves.h): what each palette button
+// The one-tap skill moves (runtime/skill_moves.h): what each wheel sector
 // sends, played through the real sequencer.
 //
 // What is checked here is the shape of a move -- that every entry is playable,
 // that a rotation stays continuous while a two-part feint keeps its gap, that a
-// hold is actually held, and that an index the app gets wrong is refused rather
+// hold is actually held, that the verified directions are the ones the title's
+// command list names, and that an index the app gets wrong is refused rather
 // than read past the end of the table. The frame counts themselves are a guess
-// until a device says otherwise; what must not be a guess is the structure.
+// until a device says otherwise (docs/skill-moves.md); what must not be a guess
+// is the structure and the direction of every input.
 #include "skill_moves.h"
 #include "stick_pulses.h"
 
@@ -44,6 +46,22 @@ namespace
         return frames;
     }
 
+    /** The frames a button script would send, one per sample, ending clear. */
+    std::vector<std::uint16_t> PlayClicks(const skill::Move& move)
+    {
+        skill::ButtonSeq clicks;
+        clicks.Play(move.buttons, move.buttonCount);
+        std::vector<std::uint16_t> sent;
+        for (int i = 0; i < 400; i++)
+        {
+            std::uint16_t bits = 0;
+            const bool active = clicks.Sample(bits);
+            sent.push_back(bits);
+            if (!active) break;
+        }
+        return sent;
+    }
+
     bool NonZero(const std::pair<int, int>& frame)
     {
         return frame.first != 0 || frame.second != 0;
@@ -55,13 +73,22 @@ namespace
         for (size_t i = 0; i < frames.size(); i++) if (NonZero(frames[i])) last = i;
         return last;
     }
+
+    bool Continuous(const std::vector<std::pair<int, int>>& frames)
+    {
+        const size_t last = LastNonZero(frames);
+        for (size_t i = 0; i < last; i++) if (!NonZero(frames[i])) return false;
+        return true;
+    }
 }
 
 int main()
 {
     // ---- the table itself ----------------------------------------------------
 
-    Check(skill::kMoveCount == 8, "the wheel has the eight moves the app binds");
+    // 0-7 are the original eight the wheel binds; 8-14 are the moves the
+    // verification added. The count is a contract with SkillMoves.kt.
+    Check(skill::kMoveCount == 15, "the table carries the eight original moves and the seven verified ones");
     Check(skill::At(-1) == nullptr, "a negative index is refused");
     Check(skill::At(skill::kMoveCount) == nullptr, "one past the end is refused");
     Check(skill::At(0) != nullptr, "the first is there");
@@ -84,6 +111,41 @@ int main()
         }
         Check(named, "every move is named");
         Check(unique, "and no two share a name");
+    }
+
+    {
+        // The metadata the log and the editor show. Every move that leaves an
+        // exit says which one; the closed circles and the rainbow say nothing
+        // because there is nothing to say.
+        bool hinted = true;
+        for (int i = 0; i < skill::kMoveCount; i++)
+        {
+            const skill::Move& move = skill::kMoves[i];
+            if (!move.leavesExitToPlayer) continue;
+            if (move.exitHint == nullptr || move.exitHint[0] == '\0') hinted = false;
+        }
+        Check(hinted, "every move that leaves an exit says what the player owes");
+        Check(skill::kMoves[2].exitHint == nullptr, "the rainbow has no exit to hint at");
+        Check(skill::kMoves[11].exitHint == nullptr, "the reverse step over is closed");
+        Check(skill::kMoves[12].exitHint == nullptr, "the multiple step overs are closed");
+
+        auto names = [](const skill::Move& move, const char* text) {
+            return move.ability != nullptr &&
+                   std::string(move.ability).find(text) != std::string::npos;
+        };
+        Check(names(skill::kMoves[7], "Flip Flap"), "the elastico names Flip Flap");
+        Check(names(skill::kMoves[8], "Scotch"), "the inside family names Scotch Move");
+        Check(names(skill::kMoves[13], "Sombrero"), "the sombrero names Sombrero");
+        Check(skill::kMoves[14].ability == nullptr, "the nutmeg needs no ability");
+    }
+
+    {
+        // The bit values the button scripts use are the pad's own. The test
+        // keeps this header free of Android headers, so the values are pinned
+        // here instead (runtime/android/android.h: kRightThumb 0x0080,
+        // kRightShoulder 0x0200).
+        Check(skill::ButtonSeq::kR3 == 0x0080, "R3 is the pad's right-stick click");
+        Check(skill::ButtonSeq::kRB == 0x0200, "RB is the pad's right bumper");
     }
 
     {
@@ -145,18 +207,19 @@ int main()
             for (size_t f = 0; f + 1 < frames.size(); f++) if (NonZero(frames[f])) allSend = true;
         }
         Check(allFinish, "every move ends rather than playing for ever");
-        Check(allSend, "and every move actually deflects the stick");
+        Check(allSend, "and the stick moves actually deflect the stick");
     }
 
     {
         // Double Touch: one flick up, then the window the player's exit lands
-        // in. It used to be left-then-right, the same script as the body feint.
+        // in. The title also allows down; up is what this entry sends.
         const skill::Move* move = skill::At(0);
         const auto frames = PlayOut(*move);
         Check(move->leavesExitToPlayer, "the Double Touch leaves the exit to the player");
         Check(frames[0].first == 0 && frames[0].second > 0, "it flicks the stick up");
         Check(NonZero(frames[1]) && !NonZero(frames[2]),
               "and then holds a neutral window for the exit");
+        Check(move->exitHint != nullptr, "and says which left-stick direction finishes it");
     }
 
     {
@@ -183,25 +246,13 @@ int main()
     }
 
     {
-        // Rainbow Flick: the same direction twice, which only reads as two if
-        // the gap is there.
-        //
-        // The rainbow is not a stick gesture any more: it is the sheet's 2x R3,
-        // played as button clicks, so it deflects nothing.
+        // Rainbow Flick: the sheet's 2x R3, played as button clicks, so it
+        // deflects nothing. Only a release between the clicks makes it two.
         const skill::Move* move = skill::At(2);
         Check(move->count == 0, "the rainbow flick leaves the stick alone");
         Check(move->buttonCount == 4, "and is four button frames long");
 
-        skill::ButtonSeq clicks;
-        clicks.Play(move->buttons, move->buttonCount);
-        std::vector<std::uint16_t> sent;
-        for (int i = 0; i < 40; i++)
-        {
-            std::uint16_t bits = 0;
-            const bool active = clicks.Sample(bits);
-            sent.push_back(bits);
-            if (!active) break;
-        }
+        const auto sent = PlayClicks(*move);
         int presses = 0;
         int gaps = 0;
         for (size_t i = 0; i < sent.size(); i++)
@@ -211,25 +262,25 @@ int main()
         }
         Check(presses == 2, "the rainbow is two R3 clicks");
         Check(gaps >= 1, "with a release between them, so they read as two");
-        Check(sent.back() == 0, "and it ends with everything let go");
-        Check(!clicks.Active(), "and does not stay armed");
+        Check(!sent.empty() && sent.back() == 0, "and it ends with everything let go");
     }
 
     {
-        // Drag Back: a hold, not a flick.
+        // Drag Back: a flick, then the player's LS left. It used to be a long
+        // hold with no exit, which was neither what the title asks for nor a
+        // different press from the body feint.
         const skill::Move* move = skill::At(3);
         const auto frames = PlayOut(*move);
-        int held = 0;
-        for (const auto& frame : frames) if (frame.second < 0) held++;
-        Check(held >= 6, "the drag back is held, not tapped");
         Check(frames[0].second < 0 && frames[0].first == 0, "straight back, with no sideways component");
+        Check(frames.size() <= 8, "as a flick, not a hold");
+        Check(move->leavesExitToPlayer, "and the left stick finishes it");
+        Check(move->exitHint != nullptr, "with the direction written down");
     }
 
     {
-        // Body Feint: one flick down, and it is not the Double Touch's script.
+        // Body Feint: one flick down, no exit required.
         const skill::Move* move = skill::At(4);
         const auto frames = PlayOut(*move);
-        Check(move->leavesExitToPlayer, "the body feint leaves the exit to the player");
         Check(frames[0].first == 0 && frames[0].second < 0, "it flicks the stick down");
         Check(frames[0].second != PlayOut(*skill::At(0))[0].second,
               "and so is a different press from the Double Touch");
@@ -242,26 +293,116 @@ int main()
         const auto frames = PlayOut(*move);
         Check(move->count == 3, "the step over is three legs");
         Check(frames[0].first > 0 && frames[0].second == 0, "starting to the right");
-        bool continuous = true;
-        for (size_t i = 0; i < LastNonZero(frames); i++) if (!NonZero(frames[i])) continuous = false;
-        Check(continuous, "with no gap between the legs");
+        Check(Continuous(frames), "with no gap between the legs");
         Check(move->steps[2].x == 0 && move->steps[2].y > 0, "and finishing upward");
     }
 
     {
-        // Ronaldo Chop: one flick right.
+        // Ronaldo Chop: one flick right, the exit is the player's.
         const skill::Move* move = skill::At(6);
         const auto frames = PlayOut(*move);
         Check(frames[0].first > 0 && frames[0].second == 0, "the chop flicks the stick right");
         Check(frames.size() <= 5, "once, and not for long");
+        Check(move->ability == nullptr, "with no ability gate");
     }
 
     {
-        // Elastico: one flick down-right.
+        // Elastico: one flick down-right, Flip Flap required.
         const skill::Move* move = skill::At(7);
         const auto frames = PlayOut(*move);
         Check(frames[0].first > 0 && frames[0].second < 0, "the elastico flicks down-right");
         Check(move->leavesExitToPlayer, "and leaves the exit to the player");
+        Check(move->ability != nullptr, "and names Flip Flap");
+    }
+
+    {
+        // Inside Feint family: one flick left, then the LS picks Inside Bounce,
+        // Drag and Close, Draw and Close, L-Feint or Scotch Move.
+        const skill::Move* move = skill::At(8);
+        const auto frames = PlayOut(*move);
+        Check(frames[0].first < 0 && frames[0].second == 0, "the inside family flicks the stick left");
+        Check(move->leavesExitToPlayer, "and the player's left stick chooses the move");
+        Check(move->ability != nullptr, "and names the Scotch Move gate");
+    }
+
+    {
+        // Hocus Pocus: up-left, then LS down-right, Flip Flap.
+        const skill::Move* move = skill::At(9);
+        const auto frames = PlayOut(*move);
+        Check(frames[0].first < 0 && frames[0].second > 0, "hocus pocus flicks up-left");
+        Check(move->leavesExitToPlayer, "and waits for the left stick");
+    }
+
+    {
+        // Reverse Elastico: up-right, then LS down-right, Flip Flap.
+        const skill::Move* move = skill::At(10);
+        const auto frames = PlayOut(*move);
+        Check(frames[0].first > 0 && frames[0].second > 0, "reverse elastico flicks up-right");
+        Check(move->ability != nullptr, "and names Flip Flap");
+    }
+
+    {
+        // Reverse Step Over: the quarter circle the other way, down through
+        // down-right to right, continuous.
+        const skill::Move* move = skill::At(11);
+        const auto frames = PlayOut(*move);
+        Check(move->count == 3, "reverse step over is three legs");
+        Check(frames[0].first == 0 && frames[0].second < 0, "starting down");
+        Check(Continuous(frames), "with no gap between the legs");
+        Check(move->steps[2].x > 0 && move->steps[2].y == 0, "and finishing right");
+    }
+
+    {
+        // Multiple Step Overs: right-down quarter then the down-right-up half
+        // circle, all one sweep.
+        const skill::Move* move = skill::At(12);
+        const auto frames = PlayOut(*move);
+        Check(move->count == 7, "multiple step overs are seven legs");
+        Check(Continuous(frames), "with no gap inside it");
+        bool down = false, up = false, right = false;
+        for (const auto& frame : frames)
+        {
+            if (frame.second < 0) down = true;
+            if (frame.second > 0) up = true;
+            if (frame.first > 0) right = true;
+        }
+        Check(down && up && right, "and sweeps down, right and up");
+    }
+
+    {
+        // Sombrero: hold R3, then the player pushes LS. The click has to be
+        // held, not tapped, or the title never sees the sombrero.
+        const skill::Move* move = skill::At(13);
+        Check(move->count == 0, "the sombrero drives no stick direction itself");
+        Check(move->buttonCount == 1, "and is one button step");
+        Check(move->buttons[0].buttons == skill::ButtonSeq::kR3, "an R3 click");
+        const auto sent = PlayClicks(*move);
+        int held = 0;
+        for (auto bits : sent) if (bits == skill::ButtonSeq::kR3) held++;
+        Check(held >= 20, "held long enough for a thumb to reach the stick");
+        Check(!sent.empty() && sent.back() == 0, "and released at the end");
+        Check(move->leavesExitToPlayer, "with the left stick left to the player");
+        Check(move->ability != nullptr, "and names Sombrero");
+    }
+
+    {
+        // Nutmeg: RB twice with a release between, then the player's LS.
+        const skill::Move* move = skill::At(14);
+        Check(move->count == 0, "the nutmeg drives no stick direction itself");
+        const auto sent = PlayClicks(*move);
+        int presses = 0;
+        int gaps = 0;
+        for (size_t i = 0; i < sent.size(); i++)
+        {
+            // Count presses, not frames: each press is held for two frames.
+            if (sent[i] == skill::ButtonSeq::kRB && (i == 0 || sent[i - 1] != skill::ButtonSeq::kRB))
+                presses++;
+            if (sent[i] == 0 && i + 1 < sent.size()) gaps++;
+        }
+        Check(presses == 2, "it is two RB presses");
+        Check(gaps >= 1, "with a release between them");
+        Check(!sent.empty() && sent.back() == 0, "and it ends clear");
+        Check(move->leavesExitToPlayer, "and the left stick is the player's");
     }
 
     {

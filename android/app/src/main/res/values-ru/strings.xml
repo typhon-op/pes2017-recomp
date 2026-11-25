@@ -371,7 +371,6 @@
     <string name="skill_wheel">Колесо финтов</string>
     <string name="skill_wheel_sector">%1$s: %2$s</string>
     <string name="skill_wheel_sector_title">Финт для этого направления</string>
-    <string name="skill_wheel_exit">затем толкните левый стик</string>
     <string name="skill_sector_up_right">Вверх-вправо</string>
     <string name="skill_sector_up_left">Вверх-влево</string>
     <string name="skill_sector_down_left">Вниз-влево</string>

@@ -432,7 +432,6 @@
     <string name="skill_wheel">Skill wheel</string>
     <string name="skill_wheel_sector">%1$s: %2$s</string>
     <string name="skill_wheel_sector_title">Skill for this direction</string>
-    <string name="skill_wheel_exit">then push left stick</string>
     <string name="skill_sector_up_right">Up-right</string>
     <string name="skill_sector_up_left">Up-left</string>
     <string name="skill_sector_down_left">Down-left</string>

@@ -371,7 +371,6 @@
     <string name="skill_wheel">Roda de fintas</string>
     <string name="skill_wheel_sector">%1$s: %2$s</string>
     <string name="skill_wheel_sector_title">Finta para esta direção</string>
-    <string name="skill_wheel_exit">e depois empurra o stick esquerdo</string>
     <string name="skill_sector_up_right">Cima à direita</string>
     <string name="skill_sector_up_left">Cima à esquerda</string>
     <string name="skill_sector_down_left">Baixo à esquerda</string>

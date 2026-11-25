@@ -137,7 +137,7 @@ checks are standalone `main()` programs, so no CMake is needed here):
 | `input_pulses_test` | 9 checks, 0 failed |
 | `log_repeat_test` | 19 checks, 0 failures |
 | `look_scale_test` | 7 checks, 0 failed |
-| `skill_moves_test` | 40 checks, 0 failed (eight moves, distinct feints, R3 rainbow, button sequencer) |
+| `skill_moves_test` | 79 checks, 0 failed (fifteen moves, distinct feints, R3 rainbow, button sequencer, exit hints and ability gates) |
 | `skill_stick_test` | 47 checks, 0 failed |
 | `stick_arrows_test` | 15 checks, 0 failed |
 | `stick_curve_test` | 25 checks, 0 failed |
@@ -249,3 +249,96 @@ Built with the extracted engine (`:app:assembleDebug -PprebuiltNative=...`) and
 `StickSwitchTest` run on the JVM. No device was available: the title's menu
 transition, the dark/light look on a phone and dialogs at large font sizes were
 not viewed on a device.
+
+## tfix5 (2026-11-24): the 53 skill mappings
+
+### Engine in the linked APK
+
+The APK at `https://files.catbox.moe/pwdg20.apk` (58,671,890 bytes) was
+downloaded and unpacked. Its `lib/arm64-v8a/libpes17.so` is SHA-256
+`1133fa0b9309b802fbaa8e074b1decde8f5a7912599be409937807ac6478eb69`, byte-identical
+to `ENGINE_SO_SHA256` in `tools/engine_pin.sh`. The container's own hash
+(`05930d89...d8140`) is not `ENGINE_APK_SHA256`, but the engine inside it is the
+pinned one, so the pin was left alone: it names the GitHub release that
+`tools/fetch_engine.sh` downloads, and this branch already packages exactly that
+engine. The supplied `default.xex` is 32,493,568 bytes, SHA-256
+`b914ec9a...779e6`.
+
+### What was verified
+
+The 53 proposed mappings were checked against PES 2017's own command list (the
+skill tutorials transcribed in the Steam guide *Tutorial - All skills*), the
+official Xbox 360 manual's control scheme, and the PES 2016 skill list where the
+2017 list is silent. `docs/skill-moves.md` is the result: a 53-row verification
+table with a verdict per row, the timings as macro timelines, the ability and
+context gates, the corrections, and the removed names with reasons.
+
+Result after the executable pass: 24 correct, 11 partly, 6 duplicates
+(identical right-stick half), 8 wrong (input, step count, control name or
+category), 4 not in 2017 / not in this build. The main
+errors in the proposal were systematic: *Scissors Feint* and *Cross Over Turn*
+are abilities/later-game names, not 2017 commands; *Hold RS 360* is a rotation,
+not a hold; the sombrero/juggling family is **R3** (stick click), not a stick
+direction; the Ronaldo Chop is one RS input, not two; and several names (In and
+Out, Out and In, Elastico to Diagonal, McGeady Spin, the sombrero variants, the
+stationary fake shot, Riquelme's nutmeg) are the same press as another name with
+a different left stick.
+
+### Primary source: the executable itself
+
+The first pass leaned on the 2017 tutorial-list transcript for both names and
+inputs. That is now backed by the title's own binary: the supplied
+`default.xex` was decompressed (XEX2, retail AES, LZX normal compression) to a
+34,471,936-byte image with the vendored XenonRecomp LZX path and searched for
+its internal identifiers. That recovered the `FEINT_KIND_*` enumeration and the
+player-skill entry points, and it changed seven verdicts:
+
+- **Real, not absent:** High Speed Scissors (`SCISSORS_OUT_HIGHSPEED` /
+  `_LOOP_HIGHSPEED`), Scissors/Reverse Scissors (the `SCISSORS_OUT/IN` family
+  that the English list calls Step Over / Reverse Step Over), and Draw and Open
+  (`PLAY_DATA_DRAW_OPEN`, `FEINT_KIND_DRAWOPENCLOSE`).
+- **Absent from this build:** Cross Over Turn (no `CROSSOVER` kind; a 2019
+  skill), Flick Up (`FLICK_UP`), Drag Back Dummy (no `DUMMY`/`DRAG_BACK` kind),
+  and Scoop Turn (only the goalkeeper `ANIME_KP_SCOOP_OUT`).
+- **Reclassified:** "Dummy Through the Legs / Dummy Burst" is a conflation —
+  `FEINT_KIND_BURST` is the RB ×2 speed burst, and "through the legs" is the
+  pre-reception RB hold. "Dummy Fake Shot" is the shot cancel
+  (`FEINT_KIND_KICKCANCEL`), i.e. the Fancy Fake Shot.
+
+The executable proves existence, not input order or timing; those still come
+from the command list and remain provisional. The full internal-name-to-row
+table is in `docs/skill-moves.md`.
+
+### Metadata in the log and the editor
+
+`Move::exitHint` and `Move::ability` are now used rather than inert:
+`PlaySkill` writes both to the runtime log (the left-stick half the player owes
+and the ability gate, on the `touch:` line), and
+`ControlEditPanel.pickSkillMove` shows them beside the move name. `SkillMoves.kt` mirrors the two arrays for the picker; the C++
+table stays authoritative and the host test pins its values.
+
+### What changed in code
+
+- `runtime/skill_moves.h`: the catalogue grew from 8 to 15 entries (appended,
+  never reordered: a saved layout stores indices). New: inside feint (RS left,
+  covering inside bounce / drag and close / draw and close / L-feint / Scotch),
+  hocus pocus, reverse elastico, reverse step over, multiple step overs,
+  sombrero (R3 hold) and nutmeg (RB twice). Each entry gained `exitHint` and
+  `ability`. The drag back was corrected from a 10-frame hold with no exit to a
+  flick with the LS left that the title actually asks for.
+- `SkillMoves.kt`: COUNT 15, the names/short labels and the exit flags.
+- `tests/skill_moves_test.cpp`: 79 checks, 0 failed, run on the host
+  (`g++ -std=c++20 -I runtime`), covering each verified direction, continuity
+  of the circles, the sombrero hold, the nutmeg double press, the exit hints and
+  ability gates, and the lockout.
+- `SkillWheelTest`: updated to fifteen named moves and the new exit flags (JVM
+  not available here, so it was not executed).
+- `docs/touch-controls.md`: the wheel section points at the verification table
+  and the new counts.
+
+### Not verified
+
+No macro was played inside the title: this workspace has no Android device and
+no Vulkan runtime, so the timings are provisional. The device checklist at the
+end of `docs/skill-moves.md` is what turns each entry into "working"; nothing
+here should be described as fully functional before that run.

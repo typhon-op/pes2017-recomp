@@ -545,18 +545,23 @@ class ControlEditPanel(
     }
     /**
      * One sector's move: none, or any move the runtime's table carries. The
-     * hint is part of the name because the wheel deliberately stops where the
-     * player's left stick takes over.
+     * hint and the ability ride beside the name because the wheel deliberately
+     * stops where the player's left stick takes over, and because a move the
+     * player's squad cannot do looks identical to a move that is broken. Both
+     * strings come from the move table (SkillMoves mirrors runtime/skill_moves.h)
+     * and are technical labels rather than translated prose, like the names.
      */
     private fun pickSkillMove(element: ControlElement, sector: Int) {
         val labels = (0..SkillMoves.COUNT).map { index ->
             if (index == 0) activity.getString(R.string.button_none)
             else {
-                val name = SkillMoves.name(index - 1)
-                if (SkillMoves.leavesExit(index - 1)) {
-                    name + " (" + activity.getString(R.string.skill_wheel_exit) + ")"
-                } else {
-                    name
+                val move = index - 1
+                val hint = SkillMoves.hint(move)
+                val needs = SkillMoves.ability(move)
+                buildString {
+                    append(SkillMoves.name(move))
+                    if (hint.isNotEmpty()) append(" — ").append(hint)
+                    if (needs.isNotEmpty()) append(" (").append(needs).append(')')
                 }
             }
         }

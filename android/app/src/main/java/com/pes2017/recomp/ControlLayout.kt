@@ -1358,9 +1358,9 @@ class ControlLayout private constructor(
         /**
          * The wheel's eight starting moves, one per sector, in the wheel's own
          * order: right, up-right, up, up-left, left, down-left, down,
-         * down-right. Every move in the table is reachable from the ring out
-         * of the box, and no two sectors share one, so the default wheel can
-         * be used without opening the editor at all.
+         * down-right. No two sectors share one, so the default wheel can be
+         * used without opening the editor at all; the rest of the verified
+         * catalogue (docs/skill-moves.md) is one binding away in the editor.
          */
         private fun applyDefaultTrick(pad: ControlLayout) {
             val element = pad.find("trick") ?: return

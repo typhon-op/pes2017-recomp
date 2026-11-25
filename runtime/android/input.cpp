@@ -348,8 +348,16 @@ bool android::input::PlaySkill(int index)
     if (move->count == 0) g_skillPulses.Clear();
     const int taken = g_skillPulses.Play(move->steps, move->count);
     g_skillButtons.Play(move->buttons, move->buttonCount);
-    LOGI("touch: skill '%s', %d steps, %d clicks,%s", move->id, taken, move->buttonCount,
-         move->leavesExitToPlayer ? " the left stick is the player's" : " no exit to supply");
+    // The log is where a move that "does nothing" is diagnosed, so it carries
+    // the two things the app cannot show in a pad: which half the player still
+    // has to supply, and which ability the title needs before it will play the
+    // animation. Both live in the move table (runtime/skill_moves.h) and are
+    // printed here rather than duplicated as prose in the app's log line.
+    LOGI("touch: skill '%s', %d steps, %d clicks,%s | next: %s | needs: %s",
+         move->id, taken, move->buttonCount,
+         move->leavesExitToPlayer ? " the left stick is the player's" : " no exit to supply",
+         move->exitHint ? move->exitHint : "-",
+         move->ability ? move->ability : "none");
     return taken > 0 || move->buttonCount > 0;
 }
 

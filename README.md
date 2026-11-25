@@ -104,6 +104,7 @@ Game files go to `Android/data/com.pes2017.recomp/files/game/` (about 6.5 GB; pl
 | [docs/RECOMP_RESEARCH.md](docs/RECOMP_RESEARCH.md) | recompiler findings and pipeline options |
 | [docs/runtime.md](docs/runtime.md), [rendering](docs/rendering.md), [shaders](docs/shaders.md), [textures](docs/textures.md), [audio](docs/audio.md), [d3d9-seam](docs/d3d9-seam.md) | how the runtime stands in for the console |
 | [docs/switches.md](docs/switches.md) | `PES17_*` runtime switches |
+| [docs/skill-moves.md](docs/skill-moves.md) | the 53 proposed skill mappings verified against the title, with timelines |
 | [docs/pillars/](docs/pillars/README.md) | the mobile performance roadmap |
 | [.claude/docs/](.claude/docs/) | Claude session handovers and research notes: device setup, tools, open issues |
 
