@@ -614,12 +614,26 @@ layout stores indices, and the runtime refuses an index it does not know.
 - **The app mirror.** `SkillMoves.hint`/`SkillMoves.ability` carry the same text
   for the picker; `runtime/skill_moves.h` stays authoritative and
   `tests/skill_moves_test.cpp` pins the native values. Changing a hint or a gate
-  means changing both, like `COUNT` and the names.
+  means changing both, like `COUNT` and the names -- and `ctest`'s
+  `skill-mirror` test reads `SkillMoves.kt` and fails when the two disagree on
+  the count, the exit flags, a hint or an ability.
 
 ## What a device must still prove
 
 This is the checklist that turns "source-verified" into "working". None of it
 can be done in this workspace.
+
+`tools/skill_replay.cpp` prints one `PES17_INPUT_SCRIPT` per entry with the
+table's frame counts, so a gesture can be replayed without a thumb and compared
+with the wheel's:
+
+```
+g++ -std=c++20 -I runtime -o skill_replay tools/skill_replay.cpp
+./skill_replay --fps 60 --at 20        # or --index 13 --fps 30
+```
+
+Set `--fps` to the rate the match is drawn at: the script is wall-clock, not
+frame-counted.
 
 1. Auto-Feint off; a player with no abilities; confirm each right-stick entry
    produces its named animation and not a different one.

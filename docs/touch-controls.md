@@ -641,6 +641,9 @@ unchanged; this only changes when the control is drawn and hit-testable.
 - `SkillWheelTest`: the fifteen named moves, the exit hints, every default
   sector bound and unique, the default wheel's sector order, and that a bad
   index is not stored.
+- `tests/skill_mirror_test.cpp` (host, passing): `SkillMoves.kt`'s count, exit
+  flags, left-stick hints and ability gates against `runtime/skill_moves.h`,
+  so the app's copy cannot drift from the table the runtime plays.
 - `tests/skill_moves_test.cpp` (host, passing): fifteen moves, every move ends,
   the directions and continuity of each verified script, the sombrero's R3 hold,
   the nutmeg's two RB presses with a release between them, the rainbow's two R3

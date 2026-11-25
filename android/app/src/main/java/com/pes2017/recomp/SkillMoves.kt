@@ -17,7 +17,9 @@ package com.pes2017.recomp
  *
  * None of these has been played inside the title. The mappings match the
  * game's command list; the frame counts are provisional until the device
- * checklist in docs/skill-moves.md is filled in.
+ * checklist in docs/skill-moves.md is filled in. tests/skill_mirror_test.cpp
+ * compares COUNT, LEAVES_EXIT, HINTS and ABILITIES here against the runtime's
+ * table, so a change on one side that is not made on the other fails ctest.
  */
 object SkillMoves {
 

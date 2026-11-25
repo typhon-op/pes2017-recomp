@@ -129,6 +129,7 @@ if(WIN32)
     target_link_options(volume-test PRIVATE -static)
     target_link_options(version-test PRIVATE -static)
     target_link_options(xmp-test PRIVATE -static)
+    target_link_options(skill-mirror-test PRIVATE -static)
 endif()
 
 # ---- the dynamic scene scale -------------------------------------------------
@@ -225,3 +226,17 @@ add_executable(skill-moves-test
     "${CMAKE_CURRENT_SOURCE_DIR}/skill_moves_test.cpp")
 target_include_directories(skill-moves-test PRIVATE "${PES17_RUNTIME}")
 add_test(NAME skill-moves COMMAND skill-moves-test)
+
+# ---- the app's copy of the move table --------------------------------------
+# SkillMoves.kt repeats what the runtime's table says (count, exit flags,
+# left-stick hints, ability gates) because the app is compiled against a
+# prebuilt engine and cannot ask it. Repeating it is what can drift, and a
+# drift is silent: the wheel would play one move while the picker named
+# another. The Kotlin file is read as text, so neither side needs the other's
+# toolchain -- only the source tree.
+add_executable(skill-mirror-test
+    "${CMAKE_CURRENT_SOURCE_DIR}/skill_mirror_test.cpp")
+target_include_directories(skill-mirror-test PRIVATE "${PES17_RUNTIME}")
+target_compile_definitions(skill-mirror-test PRIVATE
+    "PES17_SKILL_KT=\"${CMAKE_CURRENT_SOURCE_DIR}/../android/app/src/main/java/com/pes2017/recomp/SkillMoves.kt\"")
+add_test(NAME skill-mirror COMMAND skill-mirror-test)
