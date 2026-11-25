@@ -370,12 +370,13 @@ The cloud workspace was given JDK 17 (Temurin) and Android SDK 35 (platform
 35, build-tools 35.0.0) for this pass, so the Kotlin tests ran for the first
 time on this branch. `RsDpadTest` (new), `TouchGeometryTest` -- which caught the
 first default position overlapping the d-pad --, `ControlLayoutPhaseTest` and
-`LayoutSerializationTest` pass. `:app:testDebugUnitTest` is 355 tests, **354
-pass**; the one failure,
-`SkillWheelTest.anUnboundSectorPlaysNothingAndABadIndexIsRefused`, is
-pre-existing and unrelated (`ControlElement.trickMove` bounds by
-`SkillMoves.COUNT` instead of the wheel's eight sectors); neither that code nor
-its test was touched here.
+`LayoutSerializationTest` pass. `:app:testDebugUnitTest` is 355 tests, **all
+passing**. The suite's one pre-existing failure
+(`SkillWheelTest.anUnboundSectorPlaysNothingAndABadIndexIsRefused`) was a real
+bug rather than a stale test: `ControlElement.trickMove`/`setTrickMove` bounded
+a sector by the move array's length (`SkillMoves.COUNT`) instead of the wheel's
+eight sectors, so an off-wheel index read back a bound move. The bound is now
+`TrickWheel.SECTORS`, and the test passes unchanged.
 
 ### Build
 
@@ -388,6 +389,33 @@ key). The engine packaged is the pinned `libpes17.so`
 `https://files.catbox.moe/pwdg20.apk`; the pinned GitHub V0.2.4 asset now
 returns 404 and the gofile link needs its site token, so neither could be used
 here. The APK's dex carries `rs_dpad` and `axes`.
+
+### On the phone: what to try
+
+1. **Placement.** Edit controls: `RS` draws eight spokes and an `RS` middle.
+   Move it, resize it, switch it off and on, then restart the app: it comes
+   back where it was left.
+2. **Both thumbs.** Hold the left stick at a diagonal and press `RS` up with a
+   second finger. The player keeps moving and the right-stick command plays;
+   lifting `RS` leaves the movement untouched, and lifting the stick never
+   leaves the right stick deflected.
+3. **The sign, first.** In a match, press `RS` up: the title must do the
+   *up* right-stick command. If it plays the down one, the guest axis is the
+   other way round on that build and `RsDpad.Direction`'s `y` needs its sign
+   back.
+4. **All eight.** Up, down, left, right and the four diagonals in a skill
+   context (e.g. the knock-on, the roulette, the chop). A diagonal must be the
+   diagonal, not one of its sides.
+5. **Sliding.** Hold `RS` and slide up → up-right → right without lifting. Each
+   change is immediate, nothing has to be re-pressed, and no old direction
+   stays behind.
+6. **Release.** Lift the finger: the stick returns to neutral with no spin, no
+   flick left running. Do it while the left thumb is still moving.
+7. **Cancellation.** Hold a direction, then open the pause menu, drop the
+   notification shade, or switch apps. Coming back, nothing is stuck and the
+   left stick still steers.
+8. **Hidden.** In the editor, switch `RS` off while it is being held: the right
+   stick releases rather than staying deflected.
 
 ### Not verified
 

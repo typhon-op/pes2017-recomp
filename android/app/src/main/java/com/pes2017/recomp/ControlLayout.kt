@@ -286,15 +286,24 @@ data class ControlElement(
      */
     var rightStickAxes: Boolean = false,
 ) {
+    /**
+     * The sectors a wheel has: the eight places on the ring, never a ninth
+     * because the move table grew. The array is one entry per move on purpose
+     * (a sector stores an index into runtime/skill_moves.h), so its length is
+     * not the wheel's shape -- bounding a sector by it let an off-wheel index
+     * read back as a sector, which the wheel's own test caught.
+     */
+    private val sectorCount: Int get() = min(trickMoves.size, TrickWheel.SECTORS)
+
     /** The move a wheel sector plays, or -1 for none and for a sector off the wheel. */
     fun trickMove(sector: Int): Int {
-        if (sector < 0 || sector >= trickMoves.size) return -1
+        if (sector < 0 || sector >= sectorCount) return -1
         return trickMoves[sector]
     }
 
     /** Binds one sector of the wheel; -1 leaves it empty. */
     fun setTrickMove(sector: Int, move: Int) {
-        if (sector < 0 || sector >= trickMoves.size) return
+        if (sector < 0 || sector >= sectorCount) return
         trickMoves[sector] = if (SkillMoves.valid(move)) move else -1
     }
     /** Whether it is on screen at all: the player's switch, the phase and the pad, all three. */
