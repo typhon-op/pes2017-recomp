@@ -333,6 +333,13 @@ class TouchOverlayView @JvmOverloads constructor(
     // lifting: sliding from up to right is one gesture and two states.
     private val dpadBits = HashMap<Int, Int>()                    // pointer id -> arms held
 
+    // The RS d-pad's direction per finger: the same idea as an arm, on an axis
+    // pair instead of a bit. A slide across the socket is a new direction rather
+    // than a new touch, so the map is the finger's state, not its press. Kept
+    // apart from dpadBits because these are not button bits -- an ordinal that
+    // happened to match one would be a bug nobody would find.
+    private val rsDirs = HashMap<Int, RsDpad.Direction>()          // pointer id -> direction
+
     // The d-pad's idle clock. In a match it fades out after four quiet seconds
     // and comes back on a touch; in the menus it is navigation and stays put.
     private val dpadAutoHide = DpadAutoHide()
@@ -878,7 +885,11 @@ class TouchOverlayView @JvmOverloads constructor(
             if (!showAll && !element.shownIn(gamePhase, stance)) continue
             // A faded d-pad is gone as far as a touch is concerned: the tap
             // falls through to the pitch, and the press that wakes it wakes it.
-            if (element.kind == ControlKind.DPAD && !showAll && dpadIsHidden()) continue
+            if (element.kind == ControlKind.DPAD && !element.rightStickAxes &&
+                !showAll && dpadIsHidden()
+            ) {
+                continue
+            }
             if (!hit(element, x, y)) continue
             val distance = hypot(centreX(element) - x, centreY(element) - y)
             if (distance < nearestDistance) {
@@ -914,6 +925,12 @@ class TouchOverlayView @JvmOverloads constructor(
         var leftY = 0f
         var rightX = 0f
         var rightY = 0f
+        // The RS d-pad's axes, gathered from its fingers: summed per axis and
+        // clamped below, so two thumbs on one socket cannot ask for more than
+        // the axis carries.
+        var rsX = 0f
+        var rsY = 0f
+        var rsHeld = false
 
         val now = SystemClock.uptimeMillis()
         // A grace that is over is let go here as well as by its own callback, so
@@ -927,7 +944,19 @@ class TouchOverlayView @JvmOverloads constructor(
             val on = claims.isHeld(element.id)
             when (element.kind) {
                 ControlKind.BUTTON -> if (on) buttons = buttons or element.value
-                ControlKind.DPAD -> buttons = buttons or dpadMaskFor(element)
+                ControlKind.DPAD -> if (element.rightStickAxes) {
+                    // Stated as axes, not bits: the right stick is the title's
+                    // other analogue input, and it is written below after the
+                    // shaping so the eight directions arrive exactly.
+                    for ((pointerId, direction) in rsDirs) {
+                        if (claims.elementFor(pointerId)?.id != element.id) continue
+                        rsX += direction.x
+                        rsY += direction.y
+                        rsHeld = true
+                    }
+                } else {
+                    buttons = buttons or dpadMaskFor(element)
+                }
                 ControlKind.TRIGGER -> {
                     val grace = triggerReleaseAt[element.id]
                     if (on || (grace != null && now < grace)) {
@@ -1032,6 +1061,16 @@ class TouchOverlayView @JvmOverloads constructor(
                 rx = combo.flick.x
                 ry = combo.flick.y
             }
+        }
+        // The RS d-pad states the right stick exactly, so it is written after
+        // the shaping and after a swiped throw: a deadzone or a curve is a
+        // preference about a thumb's throw, and these eight directions are
+        // values the title reads (RsDpad). Only the right stick is stated --
+        // the left stick, the buttons and the triggers are untouched, and a
+        // physical pad still merges with this state in the runtime.
+        if (rsHeld) {
+            rx = rsX.coerceIn(-1f, 1f)
+            ry = rsY.coerceIn(-1f, 1f)
         }
         // Sprint from the MATCH stick's rim: a thumb all the way out runs until
         // it comes back inside the latch's release point. The switch above the
@@ -1177,6 +1216,7 @@ class TouchOverlayView @JvmOverloads constructor(
         // on: the jockey button starts off again on the next kick-off.
         claims.clearAll()
         dpadBits.clear()
+        rsDirs.clear()
         swipeClassifier.clear()
         pendingSwipes = 0
         lookPointers.clear()
@@ -1225,7 +1265,9 @@ class TouchOverlayView @JvmOverloads constructor(
 
     /** Whether a d-pad of the player's own is on screen in this phase. */
     private fun dpadOnScreen(): Boolean =
-        layout.elements.any { it.kind == ControlKind.DPAD && it.shownIn(gamePhase, stance) }
+        layout.elements.any {
+            it.kind == ControlKind.DPAD && !it.rightStickAxes && it.shownIn(gamePhase, stance)
+        }
 
     // ---- the d-pad's idle fade ----------------------------------------------
 
@@ -1354,8 +1396,22 @@ class TouchOverlayView @JvmOverloads constructor(
                             }
                         }
                         ControlKind.DPAD -> {
-                            val arm = dpadArm(element, x, y)
-                            if (dpadBits[id] != arm) { dpadBits[id] = arm; changed = true }
+                            // Changing direction under a held finger is the
+                            // point of both of these: the new arm (or the new
+                            // pair of axes) replaces the old one immediately,
+                            // and nothing waits for a lift.
+                            if (element.rightStickAxes) {
+                                val direction = RsDpad.of(
+                                    x - centreX(element), y - centreY(element), radius(element),
+                                )
+                                if (rsDirs[id] != direction) {
+                                    rsDirs[id] = direction
+                                    changed = true
+                                }
+                            } else {
+                                val arm = dpadArm(element, x, y)
+                                if (dpadBits[id] != arm) { dpadBits[id] = arm; changed = true }
+                            }
                         }
                         ControlKind.SWIPE -> {
                             feedSwipeHistory(event, index)
@@ -1467,7 +1523,7 @@ class TouchOverlayView @JvmOverloads constructor(
             // title's pause key, so it must not move the switch either way.
             noteStartPressed()
         }
-        if (element.kind == ControlKind.DPAD) wakeDpad()
+        if (element.kind == ControlKind.DPAD && !element.rightStickAxes) wakeDpad()
         // Pressed again inside its grace, a trigger is held, not released.
         if (element.kind == ControlKind.TRIGGER) triggerReleaseAt.remove(element.id)
         // A bounce of the sprint button is still a hold; it just does not need
@@ -1502,7 +1558,16 @@ class TouchOverlayView @JvmOverloads constructor(
                 }
                 else -> moveStick(element, x, y, pointerId, fromPress = true)
             }
-            ControlKind.DPAD -> dpadBits[pointerId] = dpadArm(element, x, y)
+            // The eight-way RS d-pad is the same shape with another meaning: a
+            // direction states the right stick's axes instead of holding one of
+            // the d-pad's bits.
+            ControlKind.DPAD -> if (element.rightStickAxes) {
+                rsDirs[pointerId] = RsDpad.of(
+                    x - centreX(element), y - centreY(element), radius(element),
+                )
+            } else {
+                dpadBits[pointerId] = dpadArm(element, x, y)
+            }
             ControlKind.SWIPE -> swipeClassifier.begin(
                 pointerId, x, y, SystemClock.uptimeMillis(), SwipeClassifier.CARDINAL_DOMINANCE,
             )
@@ -1587,6 +1652,7 @@ class TouchOverlayView @JvmOverloads constructor(
         markReleased(released.element)
         val pressedAt = pressAt.remove(pointerId)
         dpadBits.remove(pointerId)
+        rsDirs.remove(pointerId)
         // The stage belongs to this finger and goes with it; another thumb's
         // share of the same socket is not disturbed.
         twoStage.release(pointerId)
@@ -1597,7 +1663,7 @@ class TouchOverlayView @JvmOverloads constructor(
         }
         // The lift counts as activity too: a long hold should not make the
         // d-pad vanish the instant it is let go.
-        if (released.element.kind == ControlKind.DPAD) wakeDpad()
+        if (released.element.kind == ControlKind.DPAD && !released.element.rightStickAxes) wakeDpad()
         // A steering run ends with the thumb; a new one starts its own clock.
         if (released.element.kind == ControlKind.STICK && released.element.id == MOVE_STICK) {
             steerHeldSince = 0L
@@ -2483,12 +2549,26 @@ class TouchOverlayView @JvmOverloads constructor(
             val alpha = ControlOffState.alpha(stanceAlpha, off, editing)
             // The d-pad's own fade multiplies its layout alpha; everything
             // else is untouched, so no other control can flicker with it.
-            val dpadFade = if (element.kind == ControlKind.DPAD && !editing) dpadAlpha() else 1f
-            if (element.kind == ControlKind.DPAD && dpadFade <= 0.01f) continue
+            val dpadFade = if (element.kind == ControlKind.DPAD && !element.rightStickAxes &&
+                !editing
+            ) {
+                dpadAlpha()
+            } else {
+                1f
+            }
+            if (element.kind == ControlKind.DPAD && !element.rightStickAxes &&
+                dpadFade <= 0.01f
+            ) {
+                continue
+            }
             when (element.kind) {
                 ControlKind.LOOK -> drawLook(canvas, element, faded)
                 ControlKind.STICK -> drawStick(canvas, element, alpha, faded)
-                ControlKind.DPAD -> drawDpad(canvas, element, alpha * dpadFade, faded)
+                ControlKind.DPAD -> if (element.rightStickAxes) {
+                    drawRsDpad(canvas, element, alpha, faded)
+                } else {
+                    drawDpad(canvas, element, alpha * dpadFade, faded)
+                }
                 ControlKind.SWIPE -> drawSwipe(canvas, element, alpha, faded)
                 ControlKind.TACTICAL -> drawTactical(canvas, element, alpha, faded)
                 ControlKind.BUTTON, ControlKind.TRIGGER, ControlKind.SKILL, ControlKind.CUSTOM,
@@ -3569,6 +3649,56 @@ class TouchOverlayView @JvmOverloads constructor(
         // The middle is where the thumb rests, not a fifth direction.
         fill.color = Color.argb((alpha * fadeFactor * 150).toInt().coerceIn(0, 255), 40, 48, 60)
         canvas.drawCircle(cx, cy, r * 0.16f, fill)
+    }
+
+    /**
+     * The RS d-pad: the d-pad's socket with eight spokes instead of four arms.
+     *
+     * A right-stick command is one of eight directions, so the control has to
+     * show which one the thumb is on -- the lit spoke is the direction being
+     * sent, and it changes as the thumb slides without lifting. The middle says
+     * which stick it is, because there are now two d-pads on the pad and one of
+     * them navigates menus.
+     */
+    private fun drawRsDpad(canvas: Canvas, element: ControlElement, alpha: Float, faded: Boolean) {
+        val r = radius(element)
+        val cx = centreX(element)
+        val cy = centreY(element)
+        val fadeFactor = if (faded) 0.45f else 1f
+        val held = rsDirectionFor(element)
+
+        fill.color = Color.argb((alpha * fadeFactor * 75).toInt().coerceIn(0, 255), 16, 20, 26)
+        canvas.drawCircle(cx, cy, r, fill)
+        stroke.color = Color.argb((alpha * fadeFactor * 130).toInt().coerceIn(0, 255), 45, 55, 70)
+        stroke.strokeWidth = max(1.5f, r * 0.035f)
+        canvas.drawCircle(cx, cy, r - stroke.strokeWidth * 0.5f, stroke)
+
+        val axisLength = r * 0.76f
+        val diagonalLength = r * 0.52f
+        notchPaint.strokeWidth = max(3f, r * 0.11f)
+        for (direction in RsDpad.DIRECTIONS) {
+            val on = held == direction
+            val level = if (on) 245 else 110
+            notchPaint.color =
+                Color.argb((alpha * fadeFactor * level).toInt().coerceIn(0, 255), 235, 238, 242)
+            val reach = if (direction.x != 0f && direction.y != 0f) diagonalLength else axisLength
+            canvas.drawLine(cx, cy, cx + direction.x * reach, cy + direction.y * reach, notchPaint)
+        }
+
+        text.color = Color.argb((alpha * fadeFactor * 210).toInt().coerceIn(0, 255), 235, 238, 242)
+        text.textSize = max(9f, r * 0.30f)
+        val label = ControlLayout.labelFor(element, playStation)
+        canvas.drawText(label, cx, cy - (text.descent() + text.ascent()) / 2f, text)
+    }
+
+    /** The direction every finger on this RS d-pad is asking for, or NONE. */
+    private fun rsDirectionFor(element: ControlElement): RsDpad.Direction {
+        var held = RsDpad.Direction.NONE
+        for ((pointerId, direction) in rsDirs) {
+            if (direction == RsDpad.Direction.NONE) continue
+            if (claims.elementFor(pointerId)?.id == element.id) held = direction
+        }
+        return held
     }
 
     /**

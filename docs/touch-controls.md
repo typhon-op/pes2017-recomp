@@ -709,6 +709,56 @@ of the way by itself:
 The four bits it holds, the stick stand-in and the menu behaviour are
 unchanged; this only changes when the control is drawn and hit-testable.
 
+## The RS d-pad (eight directions)
+
+`rs_dpad` is the d-pad's shape with another meaning: a direction states the
+**right stick's axes** instead of holding one of the four d-pad bits, so the
+title's right-stick commands are a thumb away while the left thumb keeps its own
+analogue movement. It is one element of the same layout -- `ControlKind.DPAD`
+with `rightStickAxes`, saved as `"axes": true` -- so it inherits the editor
+(move, resize, opacity, show/hide, undo, profiles, saved slots), the pointer
+claims and the layout file. The factory element is `480, 290` at 84 dp, in the
+free band under the skill stick and left of the near-thumb LB, clear of every
+control that is on screen by default (`TouchGeometryTest` checks it); it can be
+moved, resized, turned off or removed like any other control.
+
+| direction | RS X | RS Y |
+|---|---|---|
+| up | 0 | -1 |
+| down | 0 | +1 |
+| left | -1 | 0 |
+| right | +1 | 0 |
+| up-left | -1 | -1 |
+| up-right | +1 | -1 |
+| down-left | -1 | +1 |
+| down-right | +1 | +1 |
+| neutral / release | 0 | 0 |
+
+- The eight sectors are equal 45-degree wedges (the diagonal band is
+tan 22.5°), with the d-pad's own 30 % resting zone in the middle; a thumb past
+the rim is still read. The mapping is `RsDpad`, pure and pinned by
+`RsDpadTest`.
+- The values are stated **after** the app's stick shaping, so a deadzone or a
+curve set for a thumb's throw cannot bend the eight directions. The runtime's
+own shaping (`runtime/stick_curve.h`) normalises a vector longer than 1, so on
+a build that has it a diagonal arrives as ±0.707 rather than ±1; the packaged
+engine predates it, so diagonals there are exact.
+- Multitouch: a direction belongs to the finger that pressed it, tracked by
+Android pointer id. A slide across the socket is the same finger's new
+direction (no lift, no repeat dispatch), a second finger adds its axes
+(clamped), and a lift removes only its own. The left stick and every other
+source are untouched by all of it.
+- Release: `ACTION_UP`/`ACTION_POINTER_UP` drop that pointer's direction,
+`ACTION_CANCEL`, a phase or stance change, the editor, the pause menu, window
+focus loss and `releaseEverything` clear every direction, and a control that
+is hidden or switched off is skipped by `pushState`. The right stick is then
+(0, 0) with no other source reset.
+- Signs: this port's sticks are up-positive (`StickVector`, `StickAxesTest`),
+while this table is screen-signed (up is -1), exactly as specified. The values
+are sent unchanged; if the title reads an up press as the down-flick on a
+device, the one-line change is `y` in `RsDpad.Direction`.
+- Not device-tested.
+
 ## Verification
 
 - `PadGesturesTest`: the sprint latch, the pass double tap's window and its
