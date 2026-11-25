@@ -172,7 +172,15 @@ object LeftStickFeel {
             // engine did the shaping, what arrives is already that throw.
             val out = (min(magnitude, 1f) * s.sensitivity).coerceAtMost(1f)
             val k = out / magnitude
-            return floatArrayOf(x * k, y * k)
+            val sx = x * k
+            val sy = y * k
+            // The shipped path threw sub-pixel wobble away before sending, and
+            // Default is that path, so keep the same cut. An engine-shaped
+            // runtime already sent its own output untouched, so it is left.
+            if (plain && !shapedByEngine && hypot(sx, sy) < 0.002f) {
+                return floatArrayOf(0f, 0f)
+            }
+            return floatArrayOf(sx, sy)
         }
 
         // Past the deadzone the remaining travel is rescaled from zero to the

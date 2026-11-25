@@ -55,6 +55,80 @@ class LeftStickFeelTest {
         assertEquals(0f, out[1], 0f)
     }
 
+    // ---- the golden sweep: Default is byte-for-byte the shipped path ----------
+
+    /**
+     * The shipped arithmetic, exactly as `TouchOverlayView` called it before
+     * this screen existed: the stored defaults (no host deadzone, no curve) and
+     * the title's own floor. This is the oracle the Default profile must match.
+     */
+    private fun shipped(x: Float, y: Float): FloatArray = StickShape.apply(
+        x, y, Prefs.DEFAULT_STICK_DEADZONE, Prefs.DEFAULT_STICK_CURVE, StickShape.GUEST_FLOOR,
+    )
+
+    /**
+     * Every point of the grid, plus the awkward ones: the centre, the rim, a
+     * throw past the rim, and two sub-pixel wobbles the shipped path discarded.
+     */
+    private val GOLDEN_POINTS: List<Pair<Float, Float>> = buildList {
+        for (i in -24..24) for (j in -24..24) add(i * 0.05f to j * 0.05f)
+        add(0f to 0f)
+        add(1f to 0f)
+        add(-1f to 0f)
+        add(0f to 1f)
+        add(0f to -1f)
+        add(1.2f to 1.2f)     // past the rim: the throw is clamped, the angle kept
+        add(-1.5f to 0.3f)
+        add(1e-7f to 0f)      // nothing at all
+        add(0.001f to 0f)     // sub-pixel wobble, discarded by the shipped path
+        add(0.0009f to -0.0009f)
+        add(0.0019f to 0f)
+    }
+
+    /**
+     * The proof that Default *is* the shipped stick, without a device.
+     *
+     * The whole grid goes through both paths -- the old `StickShape.apply` call
+     * and the Default profile's `shape` plus the (identity) smoothing the send
+     * path now always runs -- and every component must be equal to the last
+     * bit, not merely close. A tolerance here would hide the one thing this
+     * profile promises: that choosing Default changes no frame.
+     */
+    @Test
+    fun defaultIsBitIdenticalToTheShippedShapeOnAGoldenGrid() {
+        val s = LeftStickFeel.preset(LeftStickFeel.PRESET_DEFAULT)
+        assertEquals(0f, s.deadzone, 0f)
+        assertEquals(1f, s.sensitivity, 0f)
+        assertEquals(Prefs.DEFAULT_STICK_DEADZONE, s.deadzone, 0f)
+        assertEquals(Prefs.DEFAULT_STICK_CURVE, LeftStickFeel.exponent(s.curve), 0f)
+
+        val smoother = LeftStickFeel.Smoother()
+        var compared = 0
+        for ((x, y) in GOLDEN_POINTS) {
+            val golden = shipped(x, y)
+            val shaped = LeftStickFeel.shape(x, y, s)
+            assertEquals("shape x at ($x, $y)", golden[0], shaped[0], 0f)
+            assertEquals("shape y at ($x, $y)", golden[1], shaped[1], 0f)
+
+            val sent = smoother.apply(shaped[0], shaped[1], s.smoothing)
+            assertEquals("sent x at ($x, $y)", golden[0], sent[0], 0f)
+            assertEquals("sent y at ($x, $y)", golden[1], sent[1], 0f)
+            compared++
+        }
+        assertTrue("the sweep covered a real grid, not a handful of points", compared >= 2400)
+    }
+
+    @Test
+    fun theGoldenGridStillFindsTheOldSubPixelCut() {
+        val s = LeftStickFeel.preset(LeftStickFeel.PRESET_DEFAULT)
+        // 0.001 is a nudge the shipped path never sent, and Default must not
+        // start sending it just because a profile now sits in front.
+        assertEquals(0f, shipped(0.001f, 0f)[0], 0f)
+        assertEquals(0f, LeftStickFeel.shape(0.001f, 0f, s)[0], 0f)
+        // Past the cut both paths send the thumb's own throw.
+        assertEquals(shipped(0.01f, 0f)[0], LeftStickFeel.shape(0.01f, 0f, s)[0], 0f)
+    }
+
     // ---- the presets' exact values --------------------------------------------
 
     @Test
