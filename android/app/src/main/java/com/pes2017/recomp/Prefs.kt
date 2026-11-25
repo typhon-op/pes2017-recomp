@@ -452,6 +452,87 @@ class Prefs(context: Context) {
         get() = store.getFloat(KEY_RIGHT_STICK_CURVE, DEFAULT_RIGHT_STICK_CURVE)
         set(value) = store.edit().putFloat(KEY_RIGHT_STICK_CURVE, value.coerceIn(0.7f, 2.5f)).apply()
 
+    // ---- the left stick's feel (LeftStickFeel) ------------------------------
+
+    /**
+     * The profile the movement stick is on, one of LeftStickFeel's PRESET_
+     * names. [LeftStickFeel.PRESET_DEFAULT] is the stick this build shipped
+     * with; the other presets are new numbers, and Reset always returns here.
+     */
+    var leftStickPreset: String
+        get() = LeftStickFeel.presetName(
+            store.getString(KEY_LEFT_STICK_PRESET, LeftStickFeel.PRESET_DEFAULT),
+        )
+        set(value) = store.edit()
+            .putString(KEY_LEFT_STICK_PRESET, LeftStickFeel.presetName(value))
+            .apply()
+
+    /** 0-25% of the throw sends nothing. 0 is the shipped stick. */
+    var leftStickDeadzone: Float
+        get() = store.getFloat(KEY_LEFT_STICK_DEADZONE, 0f)
+            .coerceIn(0f, LeftStickFeel.DEADZONE_MAX)
+        set(value) = store.edit()
+            .putFloat(KEY_LEFT_STICK_DEADZONE, value.coerceIn(0f, LeftStickFeel.DEADZONE_MAX))
+            .apply()
+
+    /** 70-140%: how much of the throw reaches full pace. 1 is the shipped stick. */
+    var leftStickSensitivity: Float
+        get() = store.getFloat(KEY_LEFT_STICK_SENSITIVITY, 1f)
+            .coerceIn(LeftStickFeel.SENSITIVITY_MIN, LeftStickFeel.SENSITIVITY_MAX)
+        set(value) = store.edit().putFloat(
+            KEY_LEFT_STICK_SENSITIVITY,
+            value.coerceIn(LeftStickFeel.SENSITIVITY_MIN, LeftStickFeel.SENSITIVITY_MAX),
+        ).apply()
+
+    /** Linear, Soft Dribble or Snappy (LeftStickFeel); Linear is the shipped stick. */
+    var leftStickCurve: String
+        get() = LeftStickFeel.curveName(store.getString(KEY_LEFT_STICK_CURVE, LeftStickFeel.CURVE_LINEAR))
+        set(value) = store.edit()
+            .putString(KEY_LEFT_STICK_CURVE, LeftStickFeel.curveName(value))
+            .apply()
+
+    /** Off, Low or Medium (LeftStickFeel); Off is the shipped stick. */
+    var leftStickSmoothing: String
+        get() = LeftStickFeel.smoothingName(
+            store.getString(KEY_LEFT_STICK_SMOOTHING, LeftStickFeel.SMOOTHING_OFF),
+        )
+        set(value) = store.edit()
+            .putString(KEY_LEFT_STICK_SMOOTHING, LeftStickFeel.smoothingName(value))
+            .apply()
+
+    /** 70-95% of the throw: where the MATCH stick starts a run. 0.92 is shipped. */
+    var leftStickSprint: Float
+        get() = store.getFloat(KEY_LEFT_STICK_SPRINT, LeftStickFeel.SHIPPED_SPRINT)
+            .coerceIn(LeftStickFeel.SPRINT_MIN, LeftStickFeel.SPRINT_MAX)
+        set(value) = store.edit()
+            .putFloat(KEY_LEFT_STICK_SPRINT, value.coerceIn(LeftStickFeel.SPRINT_MIN, LeftStickFeel.SPRINT_MAX))
+            .apply()
+
+    /** The five settings as one validated value, with the stored preset name. */
+    fun leftStickFeel(): LeftStickFeel.Settings = LeftStickFeel.sanitize(
+        LeftStickFeel.Settings(
+            preset = leftStickPreset,
+            deadzone = leftStickDeadzone,
+            sensitivity = leftStickSensitivity,
+            curve = leftStickCurve,
+            smoothing = leftStickSmoothing,
+            sprint = leftStickSprint,
+        ),
+    )
+
+    /** Writes a whole profile at once, so a preset can never be half applied. */
+    fun setLeftStickFeel(settings: LeftStickFeel.Settings) {
+        val clean = LeftStickFeel.sanitize(settings)
+        store.edit()
+            .putString(KEY_LEFT_STICK_PRESET, clean.preset)
+            .putFloat(KEY_LEFT_STICK_DEADZONE, clean.deadzone)
+            .putFloat(KEY_LEFT_STICK_SENSITIVITY, clean.sensitivity)
+            .putString(KEY_LEFT_STICK_CURVE, clean.curve)
+            .putString(KEY_LEFT_STICK_SMOOTHING, clean.smoothing)
+            .putFloat(KEY_LEFT_STICK_SPRINT, clean.sprint)
+            .apply()
+    }
+
     /**
      * Read the skill stick as a flick: the direction is the thumb's travel from
      * where it landed, quantised to eight, with a real neutral between flicks
@@ -707,6 +788,14 @@ class Prefs(context: Context) {
         private const val KEY_RIGHT_STICK_DEADZONE = "rightStickDeadzone"
         private const val KEY_RIGHT_STICK_CURVE = "rightStickCurve"
         private const val KEY_FLICK_SKILL_STICK = "flickSkillStick"
+        // The left stick's customizations. New keys: an install from before
+        // them reads the shipped values and behaves exactly as it did.
+        private const val KEY_LEFT_STICK_PRESET = "leftStickPreset"
+        private const val KEY_LEFT_STICK_DEADZONE = "leftStickDeadzone"
+        private const val KEY_LEFT_STICK_SENSITIVITY = "leftStickSensitivity"
+        private const val KEY_LEFT_STICK_CURVE = "leftStickCurve"
+        private const val KEY_LEFT_STICK_SMOOTHING = "leftStickSmoothing"
+        private const val KEY_LEFT_STICK_SPRINT = "leftStickSprint"
         private const val KEY_STICK_TRAVEL_KNOB = "stickTravelMatchesKnob"
         private const val KEY_HAPTICS = "haptics"
         private const val KEY_STICK_MODE = "stickMode"

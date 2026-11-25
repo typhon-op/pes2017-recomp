@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The left stick's feel: four profiles, a live preview, and the five
+     numbers behind them. A wrapper screen like Settings, so Light and Dark
+     Mode are the theme's values and nothing here is drawn twice. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/pesPage"
+    android:orientation="vertical">
+
+    <include layout="@layout/view_back_bar" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="18dp">
+
+            <TextView
+                style="@style/SectionHeading"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/left_stick_title" />
+
+            <LinearLayout style="@style/SettingGroup">
+
+                <TextView
+                    android:id="@+id/left_stick_profile"
+                    style="@style/SettingLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <RadioGroup
+                    android:id="@+id/left_stick_presets"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <RadioButton
+                        android:id="@+id/preset_default"
+                        style="@style/SettingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                    <RadioButton
+                        android:id="@+id/preset_balanced"
+                        style="@style/SettingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                    <RadioButton
+                        android:id="@+id/preset_tight"
+                        style="@style/SettingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                    <RadioButton
+                        android:id="@+id/preset_quick"
+                        style="@style/SettingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+                </RadioGroup>
+
+                <TextView
+                    style="@style/SettingHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/left_stick_presets_hint" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/SectionHeading"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/left_stick_preview" />
+
+            <com.pes2017.recomp.LeftStickPreviewView
+                android:id="@+id/left_stick_preview"
+                android:layout_width="match_parent"
+                android:layout_height="220dp"
+                android:layout_marginTop="4dp"
+                android:background="@drawable/bg_setting_group" />
+
+            <TextView
+                style="@style/SettingHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/left_stick_preview_hint" />
+
+            <TextView
+                style="@style/SectionHeading"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/left_stick_feel" />
+
+            <LinearLayout style="@style/SettingGroup">
+
+                <TextView
+                    android:id="@+id/left_stick_deadzone_label"
+                    style="@style/SettingLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <SeekBar
+                    android:id="@+id/left_stick_deadzone"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <TextView
+                    style="@style/SettingHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/left_stick_deadzone_hint" />
+
+                <TextView
+                    android:id="@+id/left_stick_sensitivity_label"
+                    style="@style/SettingLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <SeekBar
+                    android:id="@+id/left_stick_sensitivity"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <TextView
+                    style="@style/SettingHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/left_stick_sensitivity_hint" />
+
+                <TextView
+                    style="@style/SettingLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/left_stick_curve" />
+
+                <RadioGroup
+                    android:id="@+id/left_stick_curve_group"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <RadioButton
+                        android:id="@+id/curve_linear"
+                        style="@style/SettingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/curve_linear" />
+
+                    <RadioButton
+                        android:id="@+id/curve_soft"
+                        style="@style/SettingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/curve_soft" />
+
+                    <RadioButton
+                        android:id="@+id/curve_snappy"
+                        style="@style/SettingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/curve_snappy" />
+                </RadioGroup>
+
+                <TextView
+                    style="@style/SettingHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/left_stick_curve_hint" />
+
+                <TextView
+                    style="@style/SettingLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/left_stick_smoothing" />
+
+                <RadioGroup
+                    android:id="@+id/left_stick_smoothing_group"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <RadioButton
+                        android:id="@+id/smoothing_off"
+                        style="@style/SettingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/smoothing_off" />
+
+                    <RadioButton
+                        android:id="@+id/smoothing_low"
+                        style="@style/SettingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/smoothing_low" />
+
+                    <RadioButton
+                        android:id="@+id/smoothing_medium"
+                        style="@style/SettingSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/smoothing_medium" />
+                </RadioGroup>
+
+                <TextView
+                    style="@style/SettingHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/left_stick_smoothing_hint" />
+
+                <TextView
+                    android:id="@+id/left_stick_sprint_label"
+                    style="@style/SettingLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <SeekBar
+                    android:id="@+id/left_stick_sprint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <TextView
+                    style="@style/SettingHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/left_stick_sprint_hint" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/left_stick_reset"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/left_stick_reset" />
+
+            <TextView
+                style="@style/SettingHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/left_stick_reset_hint" />
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

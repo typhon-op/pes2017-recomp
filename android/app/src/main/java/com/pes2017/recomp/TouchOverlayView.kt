@@ -130,6 +130,9 @@ class TouchOverlayView @JvmOverloads constructor(
      */
     private val twoStage = TwoStageStick()
 
+    /** The left stick's angle smoothing memory (LeftStickFeel). */
+    private val leftSmoothing = LeftStickFeel.Smoother()
+
     /** The finger whose throw is in the sprint ring, and whether it is in it. */
     private var twoStagePointer = -1
     private var twoStageSprint = false
@@ -993,13 +996,28 @@ class TouchOverlayView @JvmOverloads constructor(
         // runtime's copies are never asked. Whichever side has it, it is done
         // once -- the check is the same one that keeps those calls from being
         // made at all.
-        if (!NativeBridge.stickSettings) {
-            val left = StickShape.apply(
-                lx, ly, prefs.stickDeadzone, prefs.stickCurve, StickShape.GUEST_FLOOR,
-            )
-            lx = left[0]; ly = left[1]
+        // The left stick's feel (LeftStickFeel). Its Default numbers are the
+        // ones this build always sent -- no host deadzone, no curve, no
+        // smoothing, the thumb's throw as the deflection -- so an untouched
+        // profile takes the identical arithmetic. The deadzone and curve are
+        // done here only for the packaged engine; a runtime that has
+        // stick_curve.h is given them in nativeStickSettings instead.
+        val feel = prefs.leftStickFeel()
+        val engineShaped = NativeBridge.stickSettings
+        val left = LeftStickFeel.shape(lx, ly, feel, shapedByEngine = engineShaped)
+        lx = left[0]; ly = left[1]
+        if (!engineShaped) {
             val right = StickShape.apply(rx, ry, prefs.rightStickDeadzone, prefs.rightStickCurve)
             rx = right[0]; ry = right[1]
+        }
+        // Angle smoothing moves the direction only, and only on a sharp turn:
+        // a one-frame spike is damped while a steady push keeps its pace and a
+        // deliberate reversal still arrives in a frame or two.
+        if (combo.flick == SwipeFlick.NONE) {
+            val smoothed = leftSmoothing.apply(lx, ly, feel.smoothing)
+            lx = smoothed[0]; ly = smoothed[1]
+        } else {
+            leftSmoothing.reset()
         }
         // A swiped stick throw: a synthetic full deflection, so it goes on after
         // the shaping -- a deadzone in front of a command the player asked for
@@ -1024,6 +1042,10 @@ class TouchOverlayView @JvmOverloads constructor(
         // skill stick keep their own throws.
         val sprintThrow = stickPositions[MOVE_STICK]
         if (prefs.stickStage == Prefs.STAGE_ONE && sprintThrow != null) {
+            // The ring is the profile's, with the shipped latch kept as its own
+            // Default (see LeftStickFeel.sprintRelease). Read from the raw
+            // throw, so a curve or a deadzone never moves where a run starts.
+            sprintLatch.thresholds(feel.sprint, LeftStickFeel.sprintRelease(feel))
             sprintLatch.update(sprintThrow[0], sprintThrow[1])
         } else {
             sprintLatch.reset()
@@ -1146,6 +1168,7 @@ class TouchOverlayView @JvmOverloads constructor(
         skillReleaseUntil.clear()
         resetTwoStage()
         sprintLatch.reset()
+        leftSmoothing.reset()
         sprintHeld = false
         cancelCombo()
         // Everything up is everything up, latches included. A pause, a reset or

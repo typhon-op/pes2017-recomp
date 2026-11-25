@@ -110,6 +110,16 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
+        <!-- LEFT STICK CUSTOMIZATIONS: opened below Edit controls in the pause
+             menu. A wrapper screen, so its theme comes from WrapperTheme. -->
+        <activity
+            android:name=".LeftStickActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:screenOrientation="fullUser"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+
         <activity
             android:name=".ControlGuideActivity"
             android:exported="false"

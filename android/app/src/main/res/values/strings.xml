@@ -158,6 +158,43 @@
     <string name="resume">Carry on</string>
     <string name="edit_controls">Edit controls</string>
     <string name="edit_controls_short">Edit</string>
+
+    <!-- Left stick customizations (LeftStickFeel). Default is the stick this
+         build shipped with; the other presets are new numbers. -->
+    <string name="left_stick_menu">Left stick customizations</string>
+    <string name="left_stick_title">Left stick</string>
+    <string name="left_stick_profile">Profile: %1$s</string>
+    <string name="left_stick_presets_hint">A preset writes all five settings at once. Moving any of them afterwards makes the profile Custom.</string>
+    <string name="preset_default">Default (current stick)</string>
+    <string name="preset_balanced">Balanced</string>
+    <string name="preset_tight">Tight Dribble</string>
+    <string name="preset_quick">Quick Sprint</string>
+    <string name="left_stick_preset_row">%1$s\n%2$s</string>
+    <string name="left_stick_values">%1$d%% deadzone · %2$d%% sensitivity · %3$s · smoothing %4$s · sprint %5$d%%</string>
+    <string name="left_stick_preview">Preview</string>
+    <string name="left_stick_preview_hint">Drag the dot to feel the profile. The green line is what the match stick sends; this preview never presses anything in the game.</string>
+    <string name="left_stick_preview_readout">Output %1$d%% · %2$s</string>
+    <string name="left_stick_preview_run">run</string>
+    <string name="left_stick_preview_walk">walk</string>
+    <string name="left_stick_feel">Stick feel</string>
+    <string name="left_stick_deadzone">Inner deadzone: %1$d%%</string>
+    <string name="left_stick_deadzone_hint">A resting thumb inside this circle sends nothing. The rest of the throw is rescaled smoothly from the edge to full pace.</string>
+    <string name="left_stick_sensitivity">Sensitivity: %1$d%%</string>
+    <string name="left_stick_sensitivity_hint">How much thumb travel reaches full pace. Above 100% reaches it sooner; below 100% needs more of the throw.</string>
+    <string name="left_stick_curve">Response curve</string>
+    <string name="curve_linear">Linear</string>
+    <string name="curve_soft">Soft Dribble</string>
+    <string name="curve_snappy">Snappy</string>
+    <string name="left_stick_curve_hint">Linear is the original mapping. Soft Dribble is finer around the middle for close control; Snappy answers sooner on a small push.</string>
+    <string name="left_stick_smoothing">Angle smoothing</string>
+    <string name="smoothing_off">Off</string>
+    <string name="smoothing_low">Low</string>
+    <string name="smoothing_medium">Medium</string>
+    <string name="left_stick_smoothing_hint">Damps a one-frame direction spike on a sharp reversal. Pace is never smoothed, so the stick keeps answering.</string>
+    <string name="left_stick_sprint">Sprint ring: %1$d%%</string>
+    <string name="left_stick_sprint_hint">MATCH mode only: pushing past this ring runs, and the run lets go a few points sooner. MENU mode never sprints.</string>
+    <string name="left_stick_reset">Reset to default</string>
+    <string name="left_stick_reset_hint">Default is the stick this build shipped with, not Balanced: no host deadzone, no curve, no smoothing, sprint at 92%.</string>
     <string name="hide_touch_controls">Hide the on-screen controls</string>
     <string name="show_touch_controls">Show the on-screen controls</string>
     <string name="disable_gamepad">Ignore physical controllers</string>

@@ -960,8 +960,13 @@ class GameActivity : AppCompatActivity(), NativeListener {
         // the left stick is lifted to the title's own 14% floor, so a shaped
         // throw never stacks a second deadzone under it.
         if (NativeBridge.stickSettings) {
+            // The movement stick's shape is the left-stick profile's (the
+            // Default profile is the shipped 0/1), so a runtime that shapes
+            // for itself and the app's own path agree. Sensitivity and angle
+            // smoothing are not part of the engine's shape and stay app-side.
+            val feel = prefs.leftStickFeel()
             NativeBridge.nativeStickSettings(
-                prefs.stickDeadzone, prefs.stickCurve,
+                feel.deadzone, LeftStickFeel.exponent(feel.curve),
                 prefs.rightStickDeadzone, prefs.rightStickCurve,
             )
         }
@@ -1106,6 +1111,14 @@ class GameActivity : AppCompatActivity(), NativeListener {
         val rows = ArrayList<PesMenu.Row>()
         rows += PesMenu.Row(getString(R.string.resume)) { it.closeMenu() }
         rows += PesMenu.Row(getString(R.string.edit_controls)) { editControls() }
+        // Below Edit controls, and its own screen for the same reason: the
+        // match stays paused under it and closing it returns here.
+        rows += PesMenu.Row(getString(R.string.left_stick_menu)) {
+            editingFromMenu = true
+            menu?.dismissNow()
+            menu = null
+            startActivity(Intent(this, LeftStickActivity::class.java))
+        }
         // The row names the mode in use, so the setting can be seen to have
         // taken without opening it again.
         rows += PesMenu.Row(

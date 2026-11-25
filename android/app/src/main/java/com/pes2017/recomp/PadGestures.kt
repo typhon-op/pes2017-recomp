@@ -343,19 +343,34 @@ class DoubleTap(private val windowMs: Long = WINDOW_MS) {
  *
  * Only the match stick reads this: the MENU stage, Stick 2 and the skill stick
  * never sprint, and the pad only asks while a match is on screen, so a run can
- * never press R1 at the title's menus. Free of Android types, so
+ * never press R1 at the title's menus. The two points are the shipped 92/82
+ * until the left-stick customization names others. Free of Android types, so
  * [PadGesturesTest] can walk it without a phone.
  */
 class SprintLatch(
-    private val pressAt: Float = 0.92f,
-    private val releaseAt: Float = 0.82f,
+    pressAt: Float = 0.92f,
+    releaseAt: Float = 0.82f,
 ) {
     /** Whether the movement stick is running right now. */
     var active = false
         private set
 
-    private val press = pressAt.coerceIn(0.1f, 1f)
-    private val release = releaseAt.coerceIn(0f, press - 0.01f)
+    private var press = 0f
+    private var release = 0f
+
+    init {
+        thresholds(pressAt, releaseAt)
+    }
+
+    /**
+     * Move the ring, as the left-stick customization does. The latched state is
+     * kept: a run in progress continues until the thumb comes back inside the
+     * new release point, exactly as it would have under the old one.
+     */
+    fun thresholds(pressAt: Float, releaseAt: Float) {
+        press = pressAt.coerceIn(0.1f, 1f)
+        release = releaseAt.coerceIn(0f, press - 0.01f)
+    }
 
     /** One sample of the stick's throw, from -1..1 on each axis. Returns [active]. */
     fun update(x: Float, y: Float): Boolean {

@@ -210,6 +210,83 @@ stick. It belongs to the MATCH half of the switch alone; the MENU half is the
 same control drawn with the two-stage throw and sends no RB, so it never lights,
 and neither Stick 2 nor the skill stick has one.
 
+## Left stick customizations
+
+Pause menu > **Left stick customizations**, directly below Edit controls. It is
+a wrapper screen (Light and Dark Mode both), writes each change as it is made,
+and never moves a control: it only changes the numbers the movement stick reads.
+
+### The shipped stick, recorded
+
+The Default profile is not an invented 10%/100%/Linear baseline. These are the
+values the build actually used, from `TouchOverlayView.sendPad`, `Prefs` and
+`SprintLatch`:
+
+| Setting | Shipped behaviour |
+|---|---|
+| Inner deadzone | **0%** on the host (`DEFAULT_STICK_DEADZONE = 0`); the title's own ~14% floor (`StickShape.GUEST_FLOOR`) is the only deadzone |
+| Sensitivity | **100%**: the thumb's throw is the deflection, clamped at the socket rim |
+| Response curve | **Linear**: `DEFAULT_STICK_CURVE = 1`, the unshaped branch of `StickShape.apply` |
+| Angle smoothing | **Off**: the direction is sent as sampled, every frame |
+| Sprint | **92% press, 82% release** (`SprintLatch` defaults) of the raw throw, MATCH stage only, and only while a thumb is on the stick |
+| MENU mode | The two-stage stick: movement inside the rim, **no sprint at all**, unchanged |
+
+So the mapping into the new settings is the identity: deadzone 0%, sensitivity
+100%, Linear, smoothing Off, sprint 92%. The release point is the one place the
+new model has to carry an old asymmetry: Default keeps the shipped ten-point
+gap (92/82); every other profile uses the four-point hysteresis the screen
+promises (e.g. 82 -> 78).
+
+`LeftStickFeel.shape` short-circuits on those Default numbers to the same
+arithmetic as before (`min(magnitude, 1)` and the same 0.002 residual rule), and
+`LeftStickFeel.smooth` returns its input when smoothing is Off, so Default --
+and **Reset to default** -- cannot change a frame. The two-stage (MENU) stick,
+the skill stick, Stick 2 and every control's coordinates and touch handling are
+untouched.
+
+### Presets
+
+| Preset | Deadzone | Sensitivity | Curve | Smoothing | Sprint |
+|---|---|---|---|---|---|
+| Default (current stick) | 0% | 100% | Linear | Off | 92% |
+| Balanced | 10% | 100% | Linear | Off | 82% |
+| Tight Dribble | 12% | 90% | Soft Dribble | Low | 88% |
+| Quick Sprint | 8% | 120% | Snappy | Off | 75% |
+
+A preset writes all five at once; moving any slider or option afterwards marks
+the profile **Custom** (the sprint latch then uses its four-point gap).
+
+### Where it runs
+
+`sendPad`, after `StickVector.of` and before the swipe-flick override:
+
+1. `LeftStickFeel.shape` applies the deadzone (rescaled from the edge to the
+   rim and lifted to the title's floor, so there is no jump into dead travel),
+   the curve (`t^1.45` Soft, `t^0.72` Snappy, both through (0,0) and (1,1)) and
+   the sensitivity (70-140%, clamped at full pace);
+2. `LeftStickFeel.smooth` damps a turn sharper than 45 degrees by a share of
+   the turn (Low 30%, Medium 55%), keeping the sample's magnitude, so only
+   direction spikes are softened;
+3. the existing swipe flick goes on top, unchanged;
+4. the sprint latch reads the **raw** pre-shape throw against the profile's
+   ring, so a deadzone or curve never moves where a run starts, and it still
+   only exists on the MATCH stage (MENU resets it, as before).
+
+If a runtime was built with `runtime/stick_curve.h`, the deadzone and curve are
+sent through `nativeStickSettings` instead and only sensitivity and smoothing
+are done in the app (one side shapes, as the rest of that path already
+promises). The packaged engine predates those entry points, so the shipped path
+is the app's.
+
+### Storage and preview
+
+Six new `Prefs` keys (`leftStickPreset`, `leftStickDeadzone`,
+`leftStickSensitivity`, `leftStickCurve`, `leftStickSmoothing`,
+`leftStickSprint`), each clamped on read and write; a missing or unknown value
+falls back to the shipped numbers, and no existing Match/Menu key is touched.
+The preview is its own view on its own screen: it shares no touch stream with
+the pad.
+
 ## The two-stage stick
 
 The switch above the socket (`stick_mode`) picks which throw the movement stick
