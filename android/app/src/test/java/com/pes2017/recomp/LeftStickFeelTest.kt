@@ -129,6 +129,86 @@ class LeftStickFeelTest {
         assertEquals(shipped(0.01f, 0f)[0], LeftStickFeel.shape(0.01f, 0f, s)[0], 0f)
     }
 
+    // ---- the golden sweep: Default's sprint latch is the shipped latch -------
+
+    /** A unit diagonal, for sweeping throws that are not on one axis. */
+    private val DIAGONAL = 1f / kotlin.math.sqrt(2f)
+
+    /**
+     * The sprint half of "Default = the shipped stick".
+     *
+     * [SprintLatch]'s own constructor defaults are the shipped 92/82; the latch
+     * the send path builds for the Default profile is fed the profile's numbers
+     * instead. The two must be the same latch, so the same ramp out and back --
+     * which crosses both points and therefore both transitions -- has to give
+     * the same answer at every sample, on an axis and on a diagonal.
+     */
+    @Test
+    fun defaultSprintLatchIsTheShippedLatchAcrossTheWholeRamp() {
+        val s = LeftStickFeel.preset(LeftStickFeel.PRESET_DEFAULT)
+        assertEquals("the shipped ring starts at 92%", 0.92f, s.sprint, 0f)
+        assertEquals("the shipped ring lets go at 82%", 0.82f, LeftStickFeel.sprintRelease(s), 0f)
+
+        val shipped = SprintLatch()   // the shipped constants
+        val default = SprintLatch(s.sprint, LeftStickFeel.sprintRelease(s))
+
+        // Out past the press point and back in under the release point, then
+        // out again: the sweep has to start and stop a run, not just sit on it.
+        val ramp = ArrayList<Float>()
+        var m = 0.60f
+        while (m <= 1.0f + 1e-6f) { ramp.add(m); m += 0.001f }
+        m = 1.0f
+        while (m >= 0.60f - 1e-6f) { ramp.add(m); m -= 0.001f }
+        m = 0.60f
+        while (m <= 1.0f + 1e-6f) { ramp.add(m); m += 0.001f }
+
+        var compared = 0
+        for (throwLength in ramp) {
+            for ((ux, uy) in listOf(1f to 0f, 0f to 1f, DIAGONAL to DIAGONAL, -DIAGONAL to DIAGONAL)) {
+                val x = throwLength * ux
+                val y = throwLength * uy
+                assertEquals(
+                    "run state at throw $throwLength along ($ux, $uy)",
+                    shipped.update(x, y), default.update(x, y),
+                )
+                compared++
+            }
+        }
+        assertTrue("the ramp crossed the boundary many times", compared > 4000)
+    }
+
+    /**
+     * The two points themselves, with the latch's inclusive edges: a run starts
+     * at the press point, survives down to the release point, and needs a fresh
+     * push past the press point to come back after it lets go. This is the
+     * behaviour the shipped build had; a profile that quietly used the custom
+     * four-point gap would fail the 0.87 sample.
+     */
+    @Test
+    fun defaultSprintStartsAtNinetyTwoAndLetsGoUnderEightyTwo() {
+        val s = LeftStickFeel.preset(LeftStickFeel.PRESET_DEFAULT)
+        val latch = SprintLatch(s.sprint, LeftStickFeel.sprintRelease(s))
+
+        assertFalse("below 92% nothing starts", latch.update(0.9199f, 0f))
+        assertTrue("92% starts a run", latch.update(0.92f, 0f))
+        assertTrue("a run survives inside the press ring", latch.update(0.90f, 0f))
+        assertTrue("a run survives at 0.87, where a four-point gap would have let go",
+            latch.update(0.87f, 0f))
+        assertTrue("82% still runs", latch.update(0.82f, 0f))
+        assertFalse("just under 82% lets go", latch.update(0.8199f, 0f))
+        assertFalse("a stopped run does not restart below 92%", latch.update(0.9199f, 0f))
+        assertTrue("it takes a fresh push past 92%", latch.update(0.9201f, 0f))
+
+        // The shipped latch, fed the same samples directly, agrees at every one.
+        val shipped = SprintLatch()
+        val shippedStates = listOf(0.9199f, 0.92f, 0.90f, 0.87f, 0.82f, 0.8199f, 0.9199f, 0.9201f)
+            .map { shipped.update(it, 0f) }
+        assertEquals(
+            listOf(false, true, true, true, true, false, false, true),
+            shippedStates,
+        )
+    }
+
     // ---- the presets' exact values --------------------------------------------
 
     @Test
