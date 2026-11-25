@@ -25,6 +25,7 @@ import android.view.Gravity
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
@@ -517,7 +518,10 @@ class GameActivity : AppCompatActivity(), NativeListener {
 
         surfaceView = SurfaceView(this)
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
-            override fun surfaceCreated(holder: SurfaceHolder) = Unit
+            override fun surfaceCreated(holder: SurfaceHolder) {
+                // API 30+: declare the match's fixed rate to the compositor.
+                applySurfaceFrameRate(matchFrameRateHint())
+            }
 
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
                 // The renderer draws at a fraction of the screen and the
@@ -532,6 +536,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
                     return
                 }
                 NativeBridge.nativeSurfaceChanged(holder.surface, width, height, refreshHz())
+                // The hint belongs to this surface; set it again after the
+                // renderer has taken the new size.
+                applySurfaceFrameRate(matchFrameRateHint())
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -841,7 +848,17 @@ class GameActivity : AppCompatActivity(), NativeListener {
      */
     private fun requestedRefresh(): Float {
         if (prefs.frameGeneration) return 60f
-        if (prefs.matchRefresh && prefs.fpsLimit == 30) return 30f
+        if (prefs.fpsLimit == 30) {
+            // The frame-pacing option's refresh preference. Prefer 60 Hz keeps
+            // 30 FPS on every second refresh, which is what display-timing
+            // pacing schedules on; System default leaves the two existing
+            // choices (match the screen, or the 60 Hz lock) exactly as they were.
+            if (FramePacingOptions.requests60For30(
+                    prefs.framePacingRefresh, prefs.matchRefresh, prefs.prefer60Hz,
+                )) return 60f
+            if (prefs.matchRefresh) return 30f
+            return if (prefs.prefer60Hz) 60f else 0f
+        }
         return if (prefs.prefer60Hz) 60f else 0f
     }
 
@@ -855,6 +872,44 @@ class GameActivity : AppCompatActivity(), NativeListener {
         displayObj?.supportedModes
             ?.filter { it.refreshRate >= target && kotlin.math.abs(it.refreshRate % target) < 1f }
             ?.minByOrNull { it.refreshRate }
+
+    /**
+     * The compositor's frame-rate hint (API 30+, Surface.setFrameRate). A 30 FPS
+     * match is declared FIXED_SOURCE so the panel/compositor keep it on a steady
+     * doubled refresh. Every other limit -- and a window on its way out -- clears
+     * the hint with 0, so the launcher is never left locked to 30.
+     *
+     * This is only a hint; the guest's own pacing is runtime/pacing.h. It is
+     * re-applied on resume and after a surface change, and reset in onPause.
+     */
+    private fun applySurfaceFrameRate(rate: Float) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        if (!::surfaceView.isInitialized) return
+        val surface = surfaceView.holder.surface ?: return
+        if (!surface.isValid) return
+        try {
+            surface.setFrameRate(
+                rate,
+                if (rate > 0f) Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE
+                else Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
+            )
+        } catch (_: Throwable) {
+            // A driver or panel that refuses the hint is not a failed run; the
+            // guest pacer below it is still in charge.
+        }
+    }
+
+    /**
+     * The rate the window actually presents at, for [applySurfaceFrameRate].
+     * Frame generation turns a 30 FPS source into two presents a refresh, so
+     * the compositor must be told 60, not the source rate; a plain 30 FPS match
+     * is the fixed 30 the hint exists for.
+     */
+    private fun matchFrameRateHint(): Float = when {
+        prefs.frameGeneration -> 60f
+        prefs.fpsLimit == 30 -> 30f
+        else -> 0f
+    }
 
     // ---- what the runtime is told before it starts -----------------------------
 
@@ -912,6 +967,10 @@ class GameActivity : AppCompatActivity(), NativeListener {
         // The title's own anisotropic request, capped (PES17_MAX_ANISO). Android's
         // default is 4x; a phone that cannot hold the frame can go lower.
         NativeBridge.nativeSetOption("PES17_MAX_ANISO", prefs.maxAniso.toString())
+        // Presentation pacing for the 30 FPS limit (runtime/pacing.h). It is
+        // read once as the run starts, like every other PES17_* switch; both
+        // Settings pages say the change takes effect at the next match.
+        NativeBridge.nativeSetOption("PES17_PACING", prefs.framePacing)
         // Both caches live in the app's own folder and make the second start
         // of a level far quicker than the first.
         val extDir = getExternalFilesDir(null)
@@ -1545,6 +1604,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
         goFullscreen()
         warnIfPowerSaving()
         if (!started) return
+        // The surface may have survived the trip out; the hint is per-window
+        // and is cleared in onPause, so it is set again here.
+        applySurfaceFrameRate(matchFrameRateHint())
         // A menu still open across a trip out of the app stays a pause: its own
         // dismissal is what starts the match again. So does quick graphics.
         // A run that is quitting never resumes, whatever brings this window back.
@@ -1573,6 +1635,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
 
     override fun onPause() {
         super.onPause()
+        // Clear the compositor hint before the window goes away, so the panel
+        // is not left at a fixed 30 Hz for the launcher or another app.
+        applySurfaceFrameRate(0f)
         if (!started) return
         // Nothing is presented while the activity is away, the mixer is
         // muted, and the touch pad lets go of whatever was held -- a trigger
@@ -1862,6 +1927,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
     }
 
     override fun onDestroy() {
+        applySurfaceFrameRate(0f)
         stopWatchingThermalStatus()
         try { unregisterReceiver(macroControl) } catch (_: Throwable) {}
         Macro.stopPlayback()

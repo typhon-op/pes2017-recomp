@@ -28,11 +28,14 @@ object QuickGraphics {
     private const val X_ANISO = "gfx_aniso"
     private const val X_REFRESH = "gfx_refresh"
     private const val X_PRESET = "gfx_preset"
+    private const val X_PACING = "gfx_pacing"
+    private const val X_PACING_REFRESH = "gfx_pacing_refresh"
 
     private class Values(
         var scene: Int, var scale: Int, var msaa: Boolean, var fsr: Boolean, var fps: Int,
         var heat: Boolean, var loadScale: Boolean, var crowd: Boolean, var lowMemory: Boolean,
         var aniso: Int, var refresh: Boolean, var preset: String,
+        var pacing: String, var pacingRefresh: String,
     )
 
     /**
@@ -51,6 +54,7 @@ object QuickGraphics {
             prefs.sceneScalePercent, prefs.renderScale, prefs.multisampling, prefs.fsr, prefs.fpsLimit,
             prefs.heatScale, prefs.loadScale, prefs.crowd, prefs.lowMemory,
             prefs.maxAniso, prefs.matchRefresh, prefs.preset,
+            prefs.framePacing, prefs.framePacingRefresh,
         )
         private val tiers = DeviceProfile.Tier.values()
 
@@ -146,6 +150,29 @@ object QuickGraphics {
             toggle(activity.getString(R.string.qg_lowmem), { v.lowMemory }) { v.lowMemory = it }
             toggle(activity.getString(R.string.match_refresh), { v.refresh }) { v.refresh = it }
 
+            // Frame pacing lives on its own keys, shared with SettingsActivity.
+            // It is not a preset setting, so these rows do not call touched():
+            // moving one must not change the selected preset or the other
+            // values. The page's note says they apply as the next match starts.
+            rows += PesMenu.Row(
+                activity.getString(R.string.frame_pacing_mode),
+                detail = activity.getString(FramePacingOptions.modeLabel(v.pacing)),
+                onAdjust = { m, d ->
+                    v.pacing = FramePacingOptions.stepMode(v.pacing, d)
+                    prefs.framePacing = v.pacing
+                    m.refresh()
+                },
+            )
+            rows += PesMenu.Row(
+                activity.getString(R.string.frame_pacing_refresh),
+                detail = activity.getString(FramePacingOptions.refreshLabel(v.pacingRefresh)),
+                onAdjust = { m, d ->
+                    v.pacingRefresh = FramePacingOptions.stepRefresh(v.pacingRefresh, d)
+                    prefs.framePacingRefresh = v.pacingRefresh
+                    m.refresh()
+                },
+            )
+
             rows += PesMenu.Row(activity.getString(R.string.qg_apply)) { m ->
                 m.dismissNow()
                 launch()
@@ -169,6 +196,8 @@ object QuickGraphics {
                 .putExtra(X_LOWMEM, v.lowMemory).putExtra(X_ANISO, v.aniso)
                 .putExtra(X_REFRESH, v.refresh)
                 .putExtra(X_PRESET, v.preset)
+                .putExtra(X_PACING, v.pacing)
+                .putExtra(X_PACING_REFRESH, v.pacingRefresh)
             activity.startActivity(intent)
             onApply()
         }
@@ -195,6 +224,8 @@ object QuickGraphics {
             prefs.maxAniso = intent.getIntExtra(X_ANISO, prefs.maxAniso)
             prefs.matchRefresh = intent.getBooleanExtra(X_REFRESH, prefs.matchRefresh)
             prefs.preset = intent.getStringExtra(X_PRESET) ?: prefs.preset
+            prefs.framePacing = intent.getStringExtra(X_PACING) ?: prefs.framePacing
+            prefs.framePacingRefresh = intent.getStringExtra(X_PACING_REFRESH) ?: prefs.framePacingRefresh
         }
         return true
     }

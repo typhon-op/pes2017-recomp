@@ -424,3 +424,97 @@ right-stick command was played in the title, and position/size/visibility
 persistence was checked by the layout tests and the editor's shared path, not
 by restarting the app on a phone. The Y flip is reasoned from the port's own
 axis convention and pinned by a test, not observed on hardware.
+
+## tfix5 (2026-11-25): 30 FPS frame pacing and both Settings menus
+
+All seven audit findings were re-checked in this tree and still applied. The
+change is presentation timing only: no draw, pass, upscaler, shader, texture,
+resolution, audio or lifecycle path was changed.
+
+### Implementation
+
+- `runtime/pacing.h` (new, header-only): Auto/Smooth/Compatibility strategy,
+  display-timing vs phase-locked-FIFO choice, even-boundary deadline, divisor
+  and phase-error arithmetic, bounded-queue policy. No Vulkan/Android/env, so
+  it is host-testable.
+- `runtime/display_clock.h` (new): the measured display phase written by the
+  presenter and read by `PaceSwap` and the guest vblank.
+- `presenter.cpp`: enables optional `VK_GOOGLE_display_timing`, puts the next
+  even boundary in `VkPresentTimesInfoGOOGLE` for 30 FPS presents, and reads
+  `vkGetPastPresentationTimingGOOGLE` for actual timestamps/phase. The
+  swapchain stays FIFO. Without the extension, Auto/Smooth use
+  `VK_KHR_present_wait` timings. Compatibility and every non-30 limit add no
+  timing chain and keep the original newest-wins drop.
+- `DrawOneFrame`: Auto/Smooth at 30 present every valid frame in order from a
+  queue capped at 3; `ShowImage` applies bounded backpressure instead of
+  letting a backlog grow.
+- `frame_rate.h::PaceSwap`: waits for the display's measured next even boundary
+  with a 1.5 ms lead, so 59.94 Hz accumulates the panel's period rather than
+  33.333 ms. Compatibility keeps the independent clock.
+- `gpu.cpp::VBlankWorker`: period already followed the display; the next blank
+  is now moved onto the measured phase once, and only in the smooth modes.
+- Both limiters remain: the title's own limiter and `PaceSwap`. Neither was
+  removed; no measurement justified a change.
+- `GameActivity`: `Surface.setFrameRate(30f, FIXED_SOURCE)` on API 30+ for a
+  30 FPS/frame-generation run, cleared with `0/DEFAULT` in `onPause` and
+  `onDestroy`, reapplied on resume and surface changes.
+- `PES17_TRACE_PACING` (any value but 0) logs mode/strategy and, every 120 presents,
+  interval mean/min/max, 1/2/3/4-blank counts and phase error.
+
+### Settings, in both menus
+
+`FramePacingOptions` (new) holds the option lists and the shared keys; `Prefs`
+stores `framePacing` and `framePacingRefresh`. Neither is a `DeviceProfile`
+preset field and no pacing listener calls `presetTouched()`, so a pacing change
+cannot flip the preset to Custom or rewrite a preset setting.
+
+- Main menu: Settings -> GRAPHICS & PERFORMANCE -> Frame pacing (under Frame
+  rate): Frame pacing mode (Auto / Smooth 30 FPS / Compatibility) and Display
+  refresh preference (System default / Prefer 60 Hz for 30 FPS gameplay).
+- In-game: pause menu -> Graphics & performance -> the same two rows, value in
+  the right-hand column. Both pages read/write the same `Prefs` keys, and the
+  in-game relaunch intent carries both values as well.
+- Saved immediately. The runtime reads `PES17_PACING` at match start; both
+  pages say so (in-game Apply & restart does it at once). System default keeps
+  the existing "match the screen" / 60 Hz-lock choices; Prefer 60 Hz asks for
+  60 Hz at a 30 FPS limit. The refresh choice is disabled and dimmed while
+  frame generation is on, which requires 60 Hz.
+
+### Tests and build actually completed
+
+- `tests/frame_pacing_test.cpp`: **56 checks, 0 failed** with
+  `g++ -std=c++20 -I runtime`; also registered in `tests/CMakeLists.txt` as
+  `frame-pacing`. Covers strategies/fallbacks, Compatibility restoration,
+  ordering and newest-wins, queue ceiling/backpressure, 60/59.94 Hz deadlines
+  and drift, phase error and divisors.
+- `:app:testDebugUnitTest`: **365 tests in 34 classes, 0 failures, 0 errors**
+  (JDK 17, Android SDK 35). `FramePacingOptionsTest` checks the shared-key
+  round trip both ways, preset isolation, cycling, mode switching and API
+  helpers. The first run had one failure in that new test (a wrong backward
+  step expectation); it was corrected and the full suite rerun clean.
+- `:app:assembleRelease -PprebuiltNative=... -x lint -x lintVitalRelease`:
+  **succeeded** (1m30s standalone; the final run with the unit tests took
+  1m55s; the first attempt was SIGKILLed by the host). APK:
+  `android/app/build/outputs/apk/release/app-release.apk`, 50,180,677 bytes,
+  debug key. New pacing resources are in `resources.arsc`.
+- The packaged `libpes17.so` is the pinned engine from
+  `https://files.catbox.moe/pwdg20.apk` (`1133fa0b...`). **That engine predates
+  this change**, so the APK carries the new Settings but not the new presenter,
+  pacer or vblank code. A native build needs the recompiled guest tree
+  (`ppc_recomp_shared.h`) and the NDK, neither of which is in this workspace;
+  the native sources were reviewed and the header arithmetic tested, not
+  compiled into an APK.
+
+### Remaining issues and device gap
+
+No Android device or Vulkan runtime was available, so present intervals at
+59.94/60 Hz, extension presence, `Surface.setFrameRate` acceptance, input
+latency and battery/heat were **not measured**. `PES17_TRACE_PACING` is the
+check: in a 30 FPS match the 2-blank count should dominate and phase error stay
+within a few milliseconds; Perfetto or `dumpsys SurfaceFlinger --latency` can
+cross-check. Without `VK_GOOGLE_display_timing`, a phase needs
+`VK_KHR_present_wait`; with neither, the original independent clock remains.
+The guest vblank is aligned once, not every blank. A 30 Hz panel uses divisor
+1, and 30 on 90/120 Hz uses 3/4. No CPU/GPU/render workload was added: one
+driver timing query per 50 ms only on the display-timing path, three queue
+slots, and logging only under `PES17_TRACE_PACING`.

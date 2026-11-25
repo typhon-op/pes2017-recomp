@@ -302,6 +302,41 @@ class Prefs(context: Context) {
         set(value) = store.edit().putBoolean(KEY_MATCH_REFRESH, value).apply()
 
     /**
+     * Frame pacing for the 30 FPS limit (PES17_PACING): Auto, Smooth 30 FPS or
+     * Compatibility, from FramePacingOptions. Both Graphics & performance pages
+     * read and write this one value. It is not a preset setting -- presets never
+     * read or write these keys -- so changing it cannot flip the selected preset
+     * or rewrite a setting a preset owns.
+     */
+    var framePacing: String
+        get() = FramePacingOptions.normalizeMode(
+            store.getString(FramePacingOptions.KEY_MODE, FramePacingOptions.MODE_AUTO),
+        )
+        set(value) = store.edit()
+            .putString(FramePacingOptions.KEY_MODE, FramePacingOptions.normalizeMode(value))
+            .apply()
+
+    /**
+     * The panel rate a 30 FPS match prefers (FramePacingOptions.REFRESH_*).
+     * System default keeps the existing 60 Hz lock / match-the-screen choices;
+     * Prefer 60 Hz keeps 30 FPS on every second refresh of a 60 Hz screen. Read
+     * at the next match start, like the frame limit it belongs to.
+     */
+    var framePacingRefresh: String
+        get() = FramePacingOptions.normalizeRefresh(
+            store.getString(FramePacingOptions.KEY_REFRESH, FramePacingOptions.REFRESH_SYSTEM),
+        )
+        set(value) = store.edit()
+            .putString(FramePacingOptions.KEY_REFRESH, FramePacingOptions.normalizeRefresh(value))
+            .apply()
+
+    /** Both pacing values as one, so a reader cannot see half a change. */
+    fun framePacingValues(): FramePacingOptions.Values = FramePacingOptions.read(
+        store.getString(FramePacingOptions.KEY_MODE, null),
+        store.getString(FramePacingOptions.KEY_REFRESH, null),
+    )
+
+    /**
      * The cap on the title's anisotropic filtering (PES17_MAX_ANISO, one of
      * GraphicsOptions.MAX_ANISO). 4 is Android's own default (perf.cpp); lower is
      * cheaper where the pitch runs to the horizon, higher is sharper.

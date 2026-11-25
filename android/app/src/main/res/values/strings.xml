@@ -33,7 +33,7 @@
     <string name="qg_crowd">Crowd</string>
     <string name="qg_lowmem">Low memory mode (no shadow buffer)</string>
     <string name="qg_apply">Apply &amp; restart</string>
-    <string name="qg_note">The picture settings are read as a match starts, so applying them restarts the game (about as long as starting it). Your saves are kept.</string>
+    <string name="qg_note">The picture and frame-pacing settings are read as a match starts, so applying them restarts the game (about as long as starting it). Pacing changes also take effect at the next match start on their own. Your saves are kept.</string>
     <string name="done">Done</string>
     <string name="share">Share</string>
     <string name="status_library_missing">The runtime could not be loaded:\n%1$s</string>
@@ -295,6 +295,7 @@
     <string name="section_display">Display</string>
     <string name="section_image_quality">Image quality</string>
     <string name="section_frame_rate">Frame rate</string>
+    <string name="section_frame_pacing">Frame pacing</string>
     <string name="section_thermal">Heat &amp; battery</string>
     <string name="section_rendering">Rendering</string>
     <string name="section_memory">Memory &amp; loading</string>
@@ -372,6 +373,15 @@
     <string name="fps_limit_off">Frame rate limit: off (60 FPS)</string>
     <string name="match_refresh">Match the screen to the frame limit</string>
     <string name="match_refresh_hint">Asks the display for the rate the match is paced at: a 30 fps limit on a 30 Hz mode is one screen tick per frame, so the phone stops showing every frame twice and the picture arrives a little sooner. Phones with no such mode keep the one they are on. Ignored while frame generation is on, which needs 60 Hz.</string>
+    <string name="frame_pacing_mode">Frame pacing mode</string>
+    <string name="pacing_auto">Auto</string>
+    <string name="pacing_smooth">Smooth 30 FPS</string>
+    <string name="pacing_compatibility">Compatibility (original)</string>
+    <string name="frame_pacing_hint">Auto picks the best this phone supports. At a 30 FPS limit, Smooth schedules every frame on an even display refresh: display timing (VK_GOOGLE_display_timing) where the driver offers it, otherwise a pacer locked to the display phase measured from presented frames. Compatibility restores the original presentation. Applies when the next match starts; a frame-pacing change never alters the quality preset or its settings.</string>
+    <string name="frame_pacing_refresh">Display refresh preference</string>
+    <string name="pacing_refresh_system">System default</string>
+    <string name="pacing_refresh_prefer60">Prefer 60 Hz for 30 FPS gameplay</string>
+    <string name="frame_pacing_refresh_hint">Only affects a 30 FPS match. System default keeps the choices above: match the screen to the frame limit, or the 60 Hz lock. Prefer 60 Hz keeps 30 FPS on every second refresh of a 60 Hz screen, which is what display-timing pacing schedules on. Disabled while frame generation is on, which needs 60 Hz.</string>
     <string name="aniso">Texture sharpening (anisotropic): %1$dx</string>
     <string name="aniso_label_short">Texture sharpening (anisotropic)</string>
     <string name="aniso_value">%1$dx</string>

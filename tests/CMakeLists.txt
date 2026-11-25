@@ -132,6 +132,15 @@ if(WIN32)
     target_link_options(skill-mirror-test PRIVATE -static)
 endif()
 
+# ---- 30 fps presentation pacing ---------------------------------------------
+# The strategy a mode and device allow, the even refresh boundary at 60 and
+# 59.94 Hz, the phase error of a present, and the bounded present queue's
+# order and backpressure (runtime/pacing.h). Header-only, no device.
+add_executable(frame-pacing-test
+    "${CMAKE_CURRENT_SOURCE_DIR}/frame_pacing_test.cpp")
+target_include_directories(frame-pacing-test PRIVATE "${PES17_RUNTIME}")
+add_test(NAME frame-pacing COMMAND frame-pacing-test)
+
 # ---- the dynamic scene scale -------------------------------------------------
 # The policy that lowers the match's render scale when its GPU time runs over
 # the frame and when the phone reports heat, and raises it again when there is

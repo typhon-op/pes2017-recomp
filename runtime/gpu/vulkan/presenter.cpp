@@ -1,14 +1,18 @@
 #include "presenter.h"
 #include "../../diagnostics.h"
 #include "../../env.h"
+#include "../../display_clock.h"
 #include "../../frame_rate.h"
 #include "../../log.h"
+#include "../../pacing.h"
 #include "../../crash.h"
 #include "../../platform.h"
 #include "../../console.h"
 #include "../../stutters.h"
 #include "../../signin.h"
 #include "../../online/service.h"
+
+#include <cstdlib>
 
 #if !defined(PES17_HAVE_VULKAN) || (!defined(PES17_USE_SDL) && !defined(PES17_ANDROID))
 // Without a loader or a window system there is nothing to present to; the rest
@@ -176,6 +180,28 @@ namespace
         uint64_t behindCount[4]{};           // 0, 1, 2, 3+ frames behind at each
         std::atomic<uint64_t> guestPeriodNs{ 0 };
         std::atomic<int64_t> guestPeriodAt{ 0 };
+
+        // Pacing (tfix5, pacing.h). Display timing is optional: the measured
+        // clock in display_clock.h is the FIFO fallback, and 0 here means the
+        // driver was not asked. Read once as the run starts.
+        bool displayTiming = false;
+        PFN_vkGetRefreshCycleDurationGOOGLE getRefreshCycleDuration = nullptr;
+        PFN_vkGetPastPresentationTimingGOOGLE getPastPresentationTiming = nullptr;
+        double displayPeriodNs = 0;          // the driver's refresh cycle
+        int64_t timingPhaseNs = 0;           // an actual present, driver's clock
+        int64_t timingNextNs = 0;            // the boundary asked for last
+        int64_t timingPolledNs = 0;
+        bool timingTimebase = false;         // actual times match steady_clock
+        pacing::Mode pacingMode = pacing::Mode::Auto;
+        pacing::Strategy pacingStrategy = pacing::Strategy::Original;
+        bool tracePacing = false;
+        uint64_t traceCount = 0, traceLastId = 0;
+        int64_t traceLastNs = 0, traceGridNs = 0;
+        int64_t traceMinNs = 0, traceMaxNs = 0, traceSumNs = 0;
+        int64_t tracePhaseMin = 0, tracePhaseMax = 0;
+        uint64_t traceIntervals = 0;
+        uint64_t traceBlanks[5]{};
+        bool traceHaveGrid = false, traceHaveInterval = false, traceHavePhase = false;
     };
 
     Presenter g;
@@ -389,6 +415,12 @@ namespace
                 g.presentWait = true;
             }
         }
+        // VK_GOOGLE_display_timing (optional): the driver's own refresh cycle
+        // and the time a present actually reached the panel. It is what lets a
+        // 30 FPS frame ask for every second refresh instead of guessing.
+        const bool displayTimingOffered =
+            vk::pipeline::DeviceHasExtension(g.physical, VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME);
+        if (displayTimingOffered) extensions.push_back(VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME);
         void* device = nullptr;
         void* queue = nullptr;
         if (!vk::pipeline::CreateDevice(g.physical, g.queueFamily, extensions.data(),
@@ -396,6 +428,16 @@ namespace
             return false;
         g.device = static_cast<VkDevice>(device);
         g.queue = static_cast<VkQueue>(queue);
+        if (displayTimingOffered)
+        {
+            g.getRefreshCycleDuration = reinterpret_cast<PFN_vkGetRefreshCycleDurationGOOGLE>(
+                vkGetDeviceProcAddr(g.device, "vkGetRefreshCycleDurationGOOGLE"));
+            g.getPastPresentationTiming = reinterpret_cast<PFN_vkGetPastPresentationTimingGOOGLE>(
+                vkGetDeviceProcAddr(g.device, "vkGetPastPresentationTimingGOOGLE"));
+            g.displayTiming = g.getRefreshCycleDuration && g.getPastPresentationTiming;
+        }
+        if (!g.displayTiming)
+            LOGI("vulkan: no VK_GOOGLE_display_timing; 30 fps pacing follows the measured display clock");
         if (g.presentWait)
         {
             g.waitForPresent = reinterpret_cast<PFN_vkWaitForPresentKHR>(
@@ -508,6 +550,26 @@ namespace
         if (!ok) return false;
         g.swapchainsMade++;
 
+        // The exact refresh cycle, for the 30 FPS boundary. A remade swapchain
+        // starts a new grid: the phase and the asked-for boundary go with it.
+        g.displayPeriodNs = 0;
+        g.timingPhaseNs = 0;
+        g.timingNextNs = 0;
+        g.timingTimebase = false;
+        // Only the smooth modes use the driver's clock; Compatibility keeps
+        // the refresh rate the app reported, as it did before tfix5.
+        if (g.displayTiming && g.getRefreshCycleDuration && frame_rate::PresentInOrder())
+        {
+            VkRefreshCycleDurationGOOGLE duration{};
+            if (g.getRefreshCycleDuration(g.device, g.swapchain, &duration) == VK_SUCCESS &&
+                duration.refreshDuration > 0)
+            {
+                g.displayPeriodNs = double(duration.refreshDuration);
+                g.periodNs = g.displayPeriodNs;
+                LOGI("vulkan: display refresh cycle %.4f ms", g.displayPeriodNs / 1e6);
+            }
+        }
+
         uint32_t imageCount = 0;
         vkGetSwapchainImagesKHR(g.device, g.swapchain, &imageCount, nullptr);
         g.images.resize(imageCount);
@@ -593,7 +655,9 @@ namespace
         // the console's frame is a 60 Hz frame and a display at 90 shows
         // every other one twice.
         hz = android::RefreshHz();
-        g.exactRate = false;
+        // The swapchain's own refresh cycle is exact -- 59.94 included -- when
+        // the driver offers display timing; otherwise the app's reported rate.
+        g.exactRate = g.displayPeriodNs > 0;
 #else
         if (const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(g.window)))
         {
@@ -604,7 +668,8 @@ namespace
                              : double(mode->refresh_rate);
         }
 #endif
-        g.periodNs = 1e9 / (hz > 0 ? hz : 60.0);
+        g.periodNs = g.displayPeriodNs > 0 ? g.displayPeriodNs
+                                           : 1e9 / (hz > 0 ? hz : 60.0);
         if (!g.presentWait) return;
         if (hz >= 59.0 && hz <= 61.0)
         {
@@ -625,6 +690,135 @@ namespace
     {
         return std::chrono::duration_cast<std::chrono::nanoseconds>(
                    std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+
+    // ---- pacing (tfix5, pacing.h) -----------------------------------------
+
+    // What PES17_TRACE_PACING prints: the presents' spacing as the panel
+    // actually took them, and how far they sat from the even-boundary grid.
+    // A real device run is the only thing that can turn "scheduled" into
+    // "smooth"; this is the evidence it is read from.
+    void LogPacingTrace()
+    {
+        if (!g.traceIntervals) return;
+        LOGI("pacing: %llu presents, interval mean %.3f ms min %.3f max %.3f, "
+             "blanks 1:%llu 2:%llu 3:%llu 4:%llu, phase error %+.3f..%+.3f ms",
+             (unsigned long long)g.traceCount,
+             double(g.traceSumNs) / double(g.traceIntervals) / 1e6,
+             double(g.traceMinNs) / 1e6, double(g.traceMaxNs) / 1e6,
+             (unsigned long long)g.traceBlanks[1], (unsigned long long)g.traceBlanks[2],
+             (unsigned long long)g.traceBlanks[3], (unsigned long long)g.traceBlanks[4],
+             double(g.tracePhaseMin) / 1e6, double(g.tracePhaseMax) / 1e6);
+    }
+
+    void TracePresent(uint64_t id, int64_t at)
+    {
+        if (!g.tracePacing || g.periodNs <= 0) return;
+        if (g.traceLastId && id <= g.traceLastId) return;
+        // A driver reporting another epoch is not a present time to measure.
+        if (std::llabs(at - Nanoseconds()) > 1'000'000'000) return;
+        if (!g.traceHaveGrid) { g.traceGridNs = at; g.traceHaveGrid = true; }
+        if (g.traceLastNs > 0)
+        {
+            const int64_t gap = at - g.traceLastNs;
+            const long blanks = std::lround(double(gap) / g.periodNs);
+            if (blanks >= 0 && blanks < 5) g.traceBlanks[blanks]++;
+            if (!g.traceHaveInterval)
+            {
+                g.traceMinNs = g.traceMaxNs = gap;
+                g.traceHaveInterval = true;
+            }
+            else
+            {
+                g.traceMinNs = std::min(g.traceMinNs, gap);
+                g.traceMaxNs = std::max(g.traceMaxNs, gap);
+            }
+            g.traceSumNs += gap;
+            g.traceIntervals++;
+            const uint32_t divisor = pacing::DivisorForPeriod(uint64_t(g.periodNs), frame_rate::Limit());
+            const int64_t error = pacing::PhaseError(at, g.periodNs, g.traceGridNs, divisor);
+            if (!g.traceHavePhase)
+            {
+                g.tracePhaseMin = g.tracePhaseMax = error;
+                g.traceHavePhase = true;
+            }
+            else
+            {
+                g.tracePhaseMin = std::min(g.tracePhaseMin, error);
+                g.tracePhaseMax = std::max(g.tracePhaseMax, error);
+            }
+        }
+        g.traceLastNs = at;
+        g.traceLastId = id;
+        if (++g.traceCount % 120 == 0) LogPacingTrace();
+    }
+
+    // Asks the driver what has reached the panel since the last call. Only the
+    // presenter thread calls it: the timing query and the present beside it are
+    // not entered from two threads.
+    void PollDisplayTiming()
+    {
+        if (g.pacingStrategy != pacing::Strategy::DisplayTiming) return;
+        if (!g.displayTiming || !g.getPastPresentationTiming || !g.swapchain) return;
+        const int64_t now = Nanoseconds();
+        if (g.timingPolledNs && now - g.timingPolledNs < 50'000'000) return;
+        g.timingPolledNs = now;
+        VkPastPresentationTimingGOOGLE timings[8]{};
+        uint32_t count = 8;
+        const VkResult r = g.getPastPresentationTiming(g.device, g.swapchain, &count, timings);
+        if (r != VK_SUCCESS && r != VK_INCOMPLETE) return;
+        for (uint32_t i = 0; i < count; i++)
+        {
+            const int64_t at = int64_t(timings[i].actualPresentTime);
+            // The desired-present-time chain and these timestamps share one
+            // timebase on Android (CLOCK_MONOTONIC). A driver answering in
+            // another epoch would schedule frames into the future forever, so
+            // it is measured but not used.
+            if (std::llabs(at - now) > 1'000'000'000) continue;
+            g.timingTimebase = true;
+            g.timingPhaseNs = at;
+            if (g.periodNs > 0)
+            {
+                display_clock::Publish(uint64_t(g.periodNs), at, now);
+                TracePresent(timings[i].presentID, at);
+            }
+        }
+    }
+
+    // The desired present time for this frame: the next even display boundary.
+    // 0 is the driver's "no preference", which keeps the original FIFO present
+    // for the first frame before a phase has been measured and for a frame that
+    // is already too close to a boundary to be queued for it.
+    int64_t DesiredPresentNs(int64_t nowNs)
+    {
+        if (g.pacingStrategy != pacing::Strategy::DisplayTiming) return 0;
+        if (!g.timingTimebase || !g.timingPhaseNs || !(g.displayPeriodNs > 0)) return 0;
+        const uint32_t divisor = pacing::DivisorForPeriod(uint64_t(g.displayPeriodNs), frame_rate::Limit());
+        int64_t at;
+        if (g.timingNextNs > 0)
+            at = pacing::NextBoundary(g.timingNextNs + 1, g.displayPeriodNs, g.timingPhaseNs, divisor);
+        else
+            at = pacing::NextBoundary(nowNs, g.displayPeriodNs, g.timingPhaseNs, divisor);
+        if (at < nowNs)
+            at = pacing::NextBoundary(nowNs, g.displayPeriodNs, g.timingPhaseNs, divisor);
+        // Half a millisecond away: FIFO will put it on the next blank anyway,
+        // and asking for the one after would add a blank instead of removing one.
+        if (at - nowNs < 500'000) return 0;
+        g.timingNextNs = at;
+        return at;
+    }
+
+    // The mode the app saved, and what this device can do with it. Read once,
+    // as every PES17_* switch is; a change needs the next match.
+    void ChoosePacing()
+    {
+        g.pacingMode = frame_rate::PacingMode();
+        g.pacingStrategy = pacing::Choose(g.pacingMode, frame_rate::Limit() == 30,
+                                          { g.displayTiming, g.presentWait });
+        g.tracePacing = env::Flag("PES17_TRACE_PACING");
+        LOGI("pacing: mode %s, strategy %s, limit %u, display timing %d, present wait %d",
+             pacing::ModeName(g.pacingMode), pacing::StrategyName(g.pacingStrategy),
+             frame_rate::Limit(), int(g.displayTiming), int(g.presentWait));
     }
 
     // Frame `id` reached the screen at `at` (under waitLock). A frame held on
@@ -668,6 +862,13 @@ namespace
         (stretch > 0 ? g.stretched : g.shownOnTime)++;
         g.guestPeriodNs.store(uint64_t(g.periodNs * (1.0 + stretch)), std::memory_order_relaxed);
         g.guestPeriodAt.store(at, std::memory_order_relaxed);
+        // The software pacer and the guest's blank follow this phase; it is
+        // the only measured display clock on a driver without display timing.
+        // One clock owner: the driver's actual-present times when display
+        // timing is live, else present_wait's completion.
+        if (g.periodNs > 0 && !(g.displayTiming && g.timingTimebase))
+            display_clock::Publish(uint64_t(g.periodNs), at, Nanoseconds());
+        if (!g.displayTiming) TracePresent(id, at);
     }
 
     // Waits on each present in turn until it is on the screen. Its own thread,
@@ -713,6 +914,7 @@ namespace
         g.taken = std::max(g.taken, g.frameQueue.back().serial);
         g.frameQueue.clear();
         g.takenWake.notify_all();
+        g.spaceWake.notify_all();
     }
 
     // Shows the oldest queued frame, or with `idle` the window's own colour
@@ -975,7 +1177,22 @@ namespace
         VkPresentIdKHR id{ VK_STRUCTURE_TYPE_PRESENT_ID_KHR };
         id.swapchainCount = 1;
         id.pPresentIds = &presentId;
-        if (g.presentWait && presentId) present.pNext = &id;
+        // VK_GOOGLE_display_timing: ask for the next even boundary and let the
+        // driver report when the frame actually landed. 0 is "no preference",
+        // which is the first frame and the Compatibility/fallback path.
+        VkPresentTimesInfoGOOGLE times{ VK_STRUCTURE_TYPE_PRESENT_TIMES_INFO_GOOGLE };
+        VkPresentTimeGOOGLE time{};
+        if (g.pacingStrategy == pacing::Strategy::DisplayTiming && presentId)
+        {
+            const int64_t desired = DesiredPresentNs(Nanoseconds());
+            time.presentID = presentId;
+            time.desiredPresentTime = uint64_t(std::max<int64_t>(desired, 0));
+            times.swapchainCount = 1;
+            times.pPresentTimes = &time;
+            present.pNext = &times;
+            if (g.presentWait) times.pNext = &id;
+        }
+        else if (g.presentWait && presentId) present.pNext = &id;
         // Out of date and suboptimal here mean the window changed under the
         // present: the swapchain is remade before the next frame. Only a lost
         // device is a failure.
@@ -1019,21 +1236,44 @@ namespace
         if (!idle)
         {
             std::lock_guard lock(g.lock);
-            // Off the blank (PES17_FPS_LIMIT) the title finishes frames whenever
-            // it likes, and the display still takes one a blank: the newest is
+            // Compatibility -- and every limit that is not 30 -- keeps the
+            // original rule: off the blank the title finishes frames whenever
+            // it likes, and the display takes one a blank, so the newest is
             // shown and the ones before it are let go.
-            while (!frame_rate::Console() && g.frameQueue.size() > 1)
+            //
+            // Smooth/Auto at 30 show every valid frame in order instead. The
+            // renderer waits on WaitUntilTaken before drawing the next, so the
+            // queue is normally two deep; ExcessToDrop is a ceiling for a
+            // presenter that has stopped, not the normal path.
+            if (!frame_rate::PresentInOrder())
             {
-                g.taken = std::max(g.taken, g.frameQueue.front().serial);
-                g.frameQueue.pop_front();
-                g.droppedFrames.fetch_add(1, std::memory_order_relaxed);
-                g.takenWake.notify_all();
+                while (!frame_rate::Console() && g.frameQueue.size() > 1)
+                {
+                    g.taken = std::max(g.taken, g.frameQueue.front().serial);
+                    g.frameQueue.pop_front();
+                    g.droppedFrames.fetch_add(1, std::memory_order_relaxed);
+                    g.takenWake.notify_all();
+                }
+            }
+            else
+            {
+                const size_t excess = pacing::ExcessToDrop(
+                    g.frameQueue.size(), frame_rate::PacingMode(), true);
+                for (size_t i = 0; i < excess && !g.frameQueue.empty(); ++i)
+                {
+                    g.taken = std::max(g.taken, g.frameQueue.front().serial);
+                    g.frameQueue.pop_front();
+                    g.droppedFrames.fetch_add(1, std::memory_order_relaxed);
+                    g.takenWake.notify_all();
+                }
             }
             if (!g.frameQueue.empty())
             {
                 shown = g.frameQueue.front();
                 g.frameQueue.pop_front();
             }
+            // A producer waiting in ShowImage may continue.
+            g.spaceWake.notify_all();
         }
 
         VkImage image = g.images[imageIndex];
@@ -1283,6 +1523,7 @@ namespace
             g.ready = true;
             return;
         }
+        ChoosePacing();
         FollowTheDisplay();
         g.ready = true;
         LOGI("vulkan: presenter running");
@@ -1381,6 +1622,10 @@ namespace
                     g.remakeSwapchain = true;
 #endif  // PES17_ANDROID
 
+            // What reached the panel since the last time, for the phase the
+            // 30 FPS pacer and the trace use.
+            PollDisplayTiming();
+
             // A frame to show, or 16 ms to go round the events again. Until the
             // renderer has finished one, the window shows its own colour.
             bool queued = false;
@@ -1416,7 +1661,25 @@ bool vk::Start()
 void vk::ShowImage(void* image, uint32_t width, uint32_t height, uint64_t serial)
 {
     if (!g.running.load(std::memory_order_relaxed)) return;
-    std::lock_guard lock(g.lock);
+    std::unique_lock lock(g.lock);
+    if (frame_rate::PresentInOrder())
+    {
+        // Backpressure, not a drop: when the presenter already holds a full
+        // queue the renderer waits here instead of building a backlog that
+        // would only add input latency. The wait is bounded so a window that
+        // has stopped taking frames cannot hold the guest forever.
+        const size_t capacity = pacing::QueueCapacity(frame_rate::PacingMode(), true);
+        g.spaceWake.wait_for(lock, std::chrono::milliseconds(250), [&] {
+            return g.frameQueue.size() < capacity || !g.running.load(std::memory_order_relaxed);
+        });
+        while (g.frameQueue.size() >= capacity && g.running.load(std::memory_order_relaxed))
+        {
+            g.taken = std::max(g.taken, g.frameQueue.front().serial);
+            g.frameQueue.pop_front();
+            g.droppedFrames.fetch_add(1, std::memory_order_relaxed);
+            g.takenWake.notify_all();
+        }
+    }
     g.frameQueue.push_back({ static_cast<VkImage>(image), width, height, serial });
     g.lastQueued.store(serial, std::memory_order_relaxed);
     g.wake.notify_one();
@@ -1469,7 +1732,7 @@ void vk::StopPresenting()
 {
     if (!g.worker.joinable()) return;
     g.running = false;
-    { std::lock_guard lock(g.lock); g.wake.notify_all(); g.takenWake.notify_all(); }
+    { std::lock_guard lock(g.lock); g.wake.notify_all(); g.takenWake.notify_all(); g.spaceWake.notify_all(); }
     { std::lock_guard lock(g.waitLock); g.waitWake.notify_all(); }
     g.worker.join();
     if (g.waiter.joinable())
@@ -1480,8 +1743,8 @@ void vk::StopPresenting()
              " at the display's for %llu, longer for %llu",
              g.periodNs / 1000.0, (unsigned long long)g.behindCount[0],
              (unsigned long long)g.behindCount[1], (unsigned long long)g.behindCount[2],
-             (unsigned long long)g.behindCount[3], (unsigned long long)g.shownOnTime,
-             (unsigned long long)g.stretched);
+             (unsigned long long)g.behindCount[3],              (unsigned long long)g.shownOnTime, (unsigned long long)g.stretched);
+        if (g.tracePacing) LogPacingTrace();
     }
 }
 
@@ -1506,6 +1769,9 @@ std::string vk::PresenterReport()
         int(g.running.load()), (unsigned long long)g.swapchainsMade, g.images.size(), g.extent.width, g.extent.height);
     add("presenter: %u frames in flight, present_wait %d, suboptimal expected %d, fullscreen %d\n",
         kFramesInFlight, int(g.presentWait), int(g.suboptimalIsExpected), int(g.fullscreen));
+    add("pacing: mode %s, strategy %s, display timing %d, display period %.4f ms\n",
+        pacing::ModeName(g.pacingMode), pacing::StrategyName(g.pacingStrategy),
+        int(g.displayTiming), g.displayPeriodNs / 1e6);
     add("presents: %llu total, %llu through the upscaler, %llu through the plain blit, %llu with nothing to show, "
         "%llu frames let go unshown (newest-wins when the title is off the blank)\n",
         (unsigned long long)g.presented.load(), (unsigned long long)g.upscaledPresents.load(),

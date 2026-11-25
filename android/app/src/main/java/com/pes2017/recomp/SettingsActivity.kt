@@ -76,7 +76,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         switch(R.id.msaa, prefs.multisampling) { prefs.multisampling = it; presetTouched() }
         switch(R.id.fsr, prefs.fsr) { prefs.fsr = it; presetTouched() }
-        switch(R.id.frame_gen, prefs.frameGeneration) { prefs.frameGeneration = it }
+        switch(R.id.frame_gen, prefs.frameGeneration) { prefs.frameGeneration = it; showRefreshChoice(!it) }
         bar(R.id.aniso, R.id.aniso_label, GraphicsOptions.MAX_ANISO.size - 1,
             GraphicsOptions.MAX_ANISO.indexOf(prefs.maxAniso),
             { getString(R.string.aniso, GraphicsOptions.MAX_ANISO[it]) }) {
@@ -104,6 +104,26 @@ class SettingsActivity : AppCompatActivity() {
         }
         switch(R.id.prefer60, prefs.prefer60Hz) { prefs.prefer60Hz = it }
         switch(R.id.match_refresh, prefs.matchRefresh) { prefs.matchRefresh = it }
+        // Frame pacing: its own keys, shared with the in-match page
+        // (QuickGraphics). It is not a quality-preset setting, so these
+        // listeners never call presetTouched() and never mark the preset Custom.
+        val pacingIds = intArrayOf(R.id.pacing_auto, R.id.pacing_smooth, R.id.pacing_compat)
+        val pacing: android.widget.RadioGroup = findViewById(R.id.frame_pacing)
+        pacing.check(pacingIds[FramePacingOptions.MODES.indexOf(prefs.framePacing)])
+        pacing.setOnCheckedChangeListener { _, id ->
+            val index = pacingIds.indexOf(id)
+            if (index >= 0) prefs.framePacing = FramePacingOptions.MODES[index]
+        }
+        val refreshIds = intArrayOf(R.id.pacing_refresh_system, R.id.pacing_refresh_prefer60)
+        val pacingRefresh: android.widget.RadioGroup = findViewById(R.id.frame_pacing_refresh)
+        pacingRefresh.check(refreshIds[FramePacingOptions.REFRESHES.indexOf(prefs.framePacingRefresh)])
+        pacingRefresh.setOnCheckedChangeListener { _, id ->
+            val index = refreshIds.indexOf(id)
+            if (index >= 0) prefs.framePacingRefresh = FramePacingOptions.REFRESHES[index]
+        }
+        // Frame generation owns 60 Hz, so the 30 FPS refresh preference has
+        // nothing to choose while it is on (the hint says so as well).
+        showRefreshChoice(!prefs.frameGeneration)
         // Off / Minimal / Normal / Complete, in Prefs.HUD_* order.
         val hudChoices = intArrayOf(R.id.hud_off, R.id.hud_minimal, R.id.hud_normal, R.id.hud_complete)
         val hudLevel: android.widget.RadioGroup = findViewById(R.id.hud_level)
@@ -491,6 +511,18 @@ class SettingsActivity : AppCompatActivity() {
         view.isSaveEnabled = false
         view.isChecked = initial
         view.setOnCheckedChangeListener { _, checked -> onChange(checked) }
+    }
+
+    /**
+     * The 30 FPS refresh choice is disabled, not hidden, while frame generation
+     * owns 60 Hz: it stays visible so the setting is still discoverable, but it
+     * cannot look live when it is ignored.
+     */
+    private fun showRefreshChoice(enabled: Boolean) {
+        val group = findViewById<android.view.View>(R.id.frame_pacing_refresh)
+        group.alpha = if (enabled) 1f else 0.45f
+        val choices = group as? android.view.ViewGroup ?: return
+        for (i in 0 until choices.childCount) choices.getChildAt(i).isEnabled = enabled
     }
 
     /** The two methods nobody ever needs, out of the way. */

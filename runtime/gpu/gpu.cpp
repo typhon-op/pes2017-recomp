@@ -2,6 +2,9 @@
 // vertical blank, and the interrupts both raise into the title's handler.
 #include <ppc_recomp_shared.h>
 #include "title.h"
+#include "../display_clock.h"
+#include "../frame_rate.h"
+#include "../pacing.h"
 #include "../pacing_trace.h"
 #include "../stutters.h"
 #include "../report.h"
@@ -192,6 +195,12 @@ namespace
             return display ? std::chrono::nanoseconds(display) : kPeriod;
         };
         auto next = std::chrono::steady_clock::now() + kPeriod;
+        // The guest's blank follows the display's period above, but its phase
+        // started wherever this thread did. Once the presenter has measured a
+        // real present, move the next blank onto the display's own boundary --
+        // once, not every blank, so a jittery measurement cannot shake the
+        // guest's clock.
+        bool phaseAligned = false;
         while (g.running.load(std::memory_order_relaxed))
         {
             // The console's clock interrupt moves the time stamp bundle on every
@@ -203,6 +212,20 @@ namespace
             // did not change with it: the main thread waits for the swap anyway.
             kernel::UpdateTimeStampBundle();
             const auto now = std::chrono::steady_clock::now();
+            if (!phaseAligned && frame_rate::PresentInOrder())
+            {
+                uint64_t displayPeriod = 0;
+                int64_t phase = 0;
+                const int64_t nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    now.time_since_epoch()).count();
+                if (display_clock::Read(displayPeriod, phase, nowNs))
+                {
+                    const int64_t at = pacing::NextBoundary(
+                        nowNs + 200'000, double(displayPeriod), phase, 1);
+                    next = std::chrono::steady_clock::time_point(std::chrono::nanoseconds(at));
+                    phaseAligned = true;
+                }
+            }
             if (now < next)
             {
                 std::this_thread::sleep_for(std::min(next - now, std::chrono::steady_clock::duration(
