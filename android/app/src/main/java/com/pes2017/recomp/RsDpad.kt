@@ -16,27 +16,27 @@ import kotlin.math.min
  * one direction to the next without lifting, because each sample replaces the
  * last.
  *
- * The table is the one the branch was specified with, unchanged:
+ * The table the branch was specified with was screen-signed -- up was -1 --
+ * and this port's sticks are not: [StickVector] says "the guest's Y points up",
+ * a thumb pushed up the screen leaves the left stick at +1, and `StickAxesTest`
+ * pins that. So the Y is flipped once, here, and the control commands what its
+ * arrows say:
  *
  * | direction  | RS X | RS Y |
  * |------------|------|------|
- * | up         |  0   |  -1  |
- * | down       |  0   |  +1  |
+ * | up         |  0   |  +1  |
+ * | down       |  0   |  -1  |
  * | left       | -1   |   0  |
  * | right      | +1   |   0  |
- * | up-left    | -1   |  -1  |
- * | up-right   | +1   |  -1  |
- * | down-left  | -1   |  +1  |
- * | down-right | +1   |  +1  |
+ * | up-left    | -1   |  +1  |
+ * | up-right   | +1   |  +1  |
+ * | down-left  | -1   |  -1  |
+ * | down-right | +1   |  -1  |
  * | neutral    |  0   |   0  |
  *
- * Note on the sign convention, because the two halves of this codebase do not
- * agree: [StickVector] says "the guest's Y points up", and a thumb pushed up the
- * screen leaves the left stick at +1 (that is the console's own axis). This
- * table is written with the screen's Y (up is negative), which is how it was
- * requested. The values are therefore sent exactly as specified; if the title
- * plays the down-flick for an up press on a device, the one-line change is the
- * `y` of these constants (see docs/touch-controls.md).
+ * The classification below is still in screen coordinates (a thumb below the
+ * centre is "down"); the flip belongs to the values it returns, not to the
+ * geometry, so a slide and a sector never disagree with what is drawn.
  */
 object RsDpad {
 
@@ -47,14 +47,14 @@ object RsDpad {
      */
     enum class Direction(val x: Float, val y: Float) {
         NONE(0f, 0f),
-        UP(0f, -1f),
-        DOWN(0f, 1f),
+        UP(0f, 1f),
+        DOWN(0f, -1f),
         LEFT(-1f, 0f),
         RIGHT(1f, 0f),
-        UP_LEFT(-1f, -1f),
-        UP_RIGHT(1f, -1f),
-        DOWN_LEFT(-1f, 1f),
-        DOWN_RIGHT(1f, 1f),
+        UP_LEFT(-1f, 1f),
+        UP_RIGHT(1f, 1f),
+        DOWN_LEFT(-1f, -1f),
+        DOWN_RIGHT(1f, -1f),
     }
 
     /**

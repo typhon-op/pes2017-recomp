@@ -20,14 +20,16 @@ class RsDpadTest {
     private fun at(ux: Float, uy: Float) = RsDpad.of(ux * radius, uy * radius, radius)
 
     @Test
-    fun theEightDirectionsSendTheSpecifiedAxes() {
+    fun theEightDirectionsSendTheGuestAxes() {
+        // The guest's Y points up (StickVector, StickAxesTest), so an up press
+        // states +1: the control commands the direction it draws.
         assertEquals(RsDpad.Direction.UP, at(0f, -1f))
         assertEquals(0f, RsDpad.Direction.UP.x, 0f)
-        assertEquals(-1f, RsDpad.Direction.UP.y, 0f)
+        assertEquals(1f, RsDpad.Direction.UP.y, 0f)
 
         assertEquals(RsDpad.Direction.DOWN, at(0f, 1f))
         assertEquals(0f, RsDpad.Direction.DOWN.x, 0f)
-        assertEquals(1f, RsDpad.Direction.DOWN.y, 0f)
+        assertEquals(-1f, RsDpad.Direction.DOWN.y, 0f)
 
         assertEquals(RsDpad.Direction.LEFT, at(-1f, 0f))
         assertEquals(-1f, RsDpad.Direction.LEFT.x, 0f)
@@ -39,19 +41,19 @@ class RsDpadTest {
 
         assertEquals(RsDpad.Direction.UP_LEFT, at(-1f, -1f))
         assertEquals(-1f, RsDpad.Direction.UP_LEFT.x, 0f)
-        assertEquals(-1f, RsDpad.Direction.UP_LEFT.y, 0f)
+        assertEquals(1f, RsDpad.Direction.UP_LEFT.y, 0f)
 
         assertEquals(RsDpad.Direction.UP_RIGHT, at(1f, -1f))
         assertEquals(1f, RsDpad.Direction.UP_RIGHT.x, 0f)
-        assertEquals(-1f, RsDpad.Direction.UP_RIGHT.y, 0f)
+        assertEquals(1f, RsDpad.Direction.UP_RIGHT.y, 0f)
 
         assertEquals(RsDpad.Direction.DOWN_LEFT, at(-1f, 1f))
         assertEquals(-1f, RsDpad.Direction.DOWN_LEFT.x, 0f)
-        assertEquals(1f, RsDpad.Direction.DOWN_LEFT.y, 0f)
+        assertEquals(-1f, RsDpad.Direction.DOWN_LEFT.y, 0f)
 
         assertEquals(RsDpad.Direction.DOWN_RIGHT, at(1f, 1f))
         assertEquals(1f, RsDpad.Direction.DOWN_RIGHT.x, 0f)
-        assertEquals(1f, RsDpad.Direction.DOWN_RIGHT.y, 0f)
+        assertEquals(-1f, RsDpad.Direction.DOWN_RIGHT.y, 0f)
     }
 
     @Test
@@ -90,6 +92,17 @@ class RsDpadTest {
         // a thumb that is still pushing.
         assertEquals(RsDpad.Direction.UP, at(0f, -3f))
         assertEquals(RsDpad.Direction.DOWN_RIGHT, at(3f, 3f))
+    }
+
+    @Test
+    fun upIsUpAndDownIsDown() {
+        // The one thing a right-stick control can get wrong that play-testing
+        // names immediately: the thumb's side of the socket against the axis
+        // the guest reads. Above the centre is positive Y, below is negative.
+        assertTrue("a thumb above the centre is up", at(0f, -1f).y > 0f)
+        assertTrue("a thumb below the centre is down", at(0f, 1f).y < 0f)
+        assertEquals(0f, at(0f, -1f).x, 0f)
+        assertEquals(0f, at(0f, 1f).x, 0f)
     }
 
     @Test

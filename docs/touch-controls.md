@@ -724,14 +724,14 @@ moved, resized, turned off or removed like any other control.
 
 | direction | RS X | RS Y |
 |---|---|---|
-| up | 0 | -1 |
-| down | 0 | +1 |
+| up | 0 | +1 |
+| down | 0 | -1 |
 | left | -1 | 0 |
 | right | +1 | 0 |
-| up-left | -1 | -1 |
-| up-right | +1 | -1 |
-| down-left | -1 | +1 |
-| down-right | +1 | +1 |
+| up-left | -1 | +1 |
+| up-right | +1 | +1 |
+| down-left | -1 | -1 |
+| down-right | +1 | -1 |
 | neutral / release | 0 | 0 |
 
 - The eight sectors are equal 45-degree wedges (the diagonal band is
@@ -754,9 +754,10 @@ focus loss and `releaseEverything` clear every direction, and a control that
 is hidden or switched off is skipped by `pushState`. The right stick is then
 (0, 0) with no other source reset.
 - Signs: this port's sticks are up-positive (`StickVector`, `StickAxesTest`),
-while this table is screen-signed (up is -1), exactly as specified. The values
-are sent unchanged; if the title reads an up press as the down-flick on a
-device, the one-line change is `y` in `RsDpad.Direction`.
+and the table follows the guest, so an up press commands up. The branch's table
+was screen-signed (up was -1); the flip lives once, in `RsDpad.Direction`, and
+`RsDpadTest.upIsUpAndDownIsDown` pins it. The sector classification stays in
+screen coordinates, so the geometry and the values agree.
 - Not device-tested.
 
 ## Verification

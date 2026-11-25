@@ -342,3 +342,57 @@ No macro was played inside the title: this workspace has no Android device and
 no Vulkan runtime, so the timings are provisional. The device checklist at the
 end of `docs/skill-moves.md` is what turns each entry into "working"; nothing
 here should be described as fully functional before that run.
+
+## tfix5 (2026-11-25): the configurable RS d-pad
+
+`rs_dpad` is a second d-pad in the touch layout that states the right stick's
+axes instead of the four d-pad bits, so the title's right-stick commands are a
+thumb away while the left thumb keeps the analogue movement. It is
+`ControlKind.DPAD` with `rightStickAxes`, so the geometry, the hit test, the
+editor, the pointer claims and `controls.json` are the four-way d-pad's; the
+file gains one optional key, `"axes": true`. The factory place is `480, 290` at
+84 dp on the 800 x 360 design pad, clear of every control on screen by default.
+
+Eight equal 45-degree wedges with a 30 % resting zone, read from the thumb's
+offset in the socket and tracked per Android pointer id, so a slide changes
+direction without lifting. The axes are written after the app's stick shaping,
+so a deadzone or curve cannot bend them. **The Y sign is the guest's** (up is
++1, per `StickVector`/`StickAxesTest`); the table the branch was specified with
+was screen-signed, and that single flip lives in `RsDpad.Direction`, with
+`RsDpadTest.upIsUpAndDownIsDown` pinning it. Every release path -- the owner's
+lift, `ACTION_CANCEL`, a phase or stance change, the editor, the pause menu,
+focus loss, `releaseEverything` -- returns the axes to (0, 0), and a hidden or
+off control is skipped by `pushState`; no other source is reset.
+
+### Tests actually run
+
+The cloud workspace was given JDK 17 (Temurin) and Android SDK 35 (platform
+35, build-tools 35.0.0) for this pass, so the Kotlin tests ran for the first
+time on this branch. `RsDpadTest` (new), `TouchGeometryTest` -- which caught the
+first default position overlapping the d-pad --, `ControlLayoutPhaseTest` and
+`LayoutSerializationTest` pass. `:app:testDebugUnitTest` is 355 tests, **354
+pass**; the one failure,
+`SkillWheelTest.anUnboundSectorPlaysNothingAndABadIndexIsRefused`, is
+pre-existing and unrelated (`ControlElement.trickMove` bounds by
+`SkillMoves.COUNT` instead of the wheel's eight sectors); neither that code nor
+its test was touched here.
+
+### Build
+
+`:app:assembleRelease -PprebuiltNative=...` with
+`-Dorg.gradle.jvmargs="-Xmx1024m -XX:+UseSerialGC" --max-workers=1 --no-daemon`
+and `-x lint -x lintVitalRelease -x test`, exit 0;
+`android/app/build/outputs/apk/release/app-release.apk` (about 48 MiB, debug
+key). The engine packaged is the pinned `libpes17.so`
+(`1133fa0b...8eb69`), taken from the tfix5 engine APK at
+`https://files.catbox.moe/pwdg20.apk`; the pinned GitHub V0.2.4 asset now
+returns 404 and the gofile link needs its site token, so neither could be used
+here. The APK's dex carries `rs_dpad` and `axes`.
+
+### Not verified
+
+No device or emulator was available: the control was not drawn on a screen, no
+right-stick command was played in the title, and position/size/visibility
+persistence was checked by the layout tests and the editor's shared path, not
+by restarting the app on a phone. The Y flip is reasoned from the port's own
+axis convention and pinned by a test, not observed on hardware.
