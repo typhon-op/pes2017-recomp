@@ -518,3 +518,46 @@ The guest vblank is aligned once, not every blank. A 30 Hz panel uses divisor
 1, and 30 on 90/120 Hz uses 3/4. No CPU/GPU/render workload was added: one
 driver timing query per 50 ms only on the display-timing path, three queue
 slots, and logging only under `PES17_TRACE_PACING`.
+
+### Preservation and GoFile build (2026-11-25)
+
+- Branch: `tfix5`. Source commit: `e309841adf6c56ecc352698d3266b611a90b7e2f`
+  ("Pace the 30 FPS limit to the display and expose it in Settings"), pushed
+  to `origin/tfix5`. This preservation note is committed immediately after it,
+  so the tip of `tfix5` is its child; the tree is clean after that commit.
+- Tests actually run: host `frame_pacing_test` **56 checks, 0 failed**;
+  `:app:testDebugUnitTest` **365 tests, 0 failures, 0 errors**.
+- APK: `android/app/build/outputs/apk/release/app-release.apk`,
+  **50,180,677 bytes**, SHA-256
+  `1824e39c6bb311692534f49e3a1a95a8ff15cb0741f12c20e69000f52b4f9b02`.
+  Built with:
+  `JAVA_HOME=<jdk17> ANDROID_HOME=<sdk35> ANDROID_SDK_ROOT=<sdk35>
+  ./gradlew :app:assembleRelease -PprebuiltNative=/tmp/pes17-engine-gofile
+  --no-daemon --max-workers=1
+  -Dkotlin.compiler.execution.strategy=in-process
+  -Dorg.gradle.jvmargs="-Xmx1536m -XX:+UseSerialGC"
+  -x test -x lint -x lintVitalRelease`.
+- GoFile: file page https://gofile.io/d/rzQAqPvw in the public folder
+  https://gofile.io/d/78271946-1eec-4993-81d3-4341ca008bba. Uploaded as
+  `pes2017-recomp-tfix5-e309841.apk`; re-downloaded through the GoFile session
+  (50,180,677 bytes) and its SHA-256 matched the local APK. An anonymous
+  browser context opens the page and sees the APK and its Download button.
+- Engine provenance: `/tmp/pes17-engine-gofile/arm64-v8a/libpes17.so` was
+  extracted from the `app-release.apk` (50,265,889 bytes, MD5
+  `6372c251914d3045e4a77f6471a47ba9`) at https://gofile.io/d/jruoxGY8. Its
+  SHA-256 is `1133fa0b9309b802fbaa8e074b1decde8f5a7912599be409937807ac6478eb69`,
+  exactly `ENGINE_SO_SHA256` in `tools/engine_pin.sh`, and it contains no
+  tfix5 pacing strings. **This APK therefore carries the current app and
+  Settings but the pinned old prebuilt engine; the tfix5 presenter, pacer and
+  guest-vblank changes are not in its native code.**
+- Missing build inputs: the recompiled guest tree and its generated
+  `ppc_recomp_shared.h`, the matching generated translation units, and an
+  Android NDK/CMake toolchain. They are not in this repository or workspace,
+  which is why `-PprebuiltNative` was used; without that property
+  `android/app/build.gradle.kts` expects the full CMake build.
+- Next task: obtain the guest source tree matching this branch, rebuild
+  `libpes17.so` from the current native sources with `./build.sh` (NDK +
+  generated units), confirm the resulting library contains the `pacing:` and
+  `display-timing` strings, package it with `-PprebuiltNative`, then install
+  and check `PES17_TRACE_PACING` on a 30 FPS match (2-blank dominance, small
+  phase error) before claiming device smoothness.
