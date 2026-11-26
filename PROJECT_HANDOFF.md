@@ -475,3 +475,12 @@ ring strings); `rs_dpad` is no longer referenced.
   continuous rolling, the preview on real screen sizes, and pacing smoothness
   were not run in-game. The APK was not installed. What is verified is source,
   unit tests, host timing tests, the build, and the APK's contents.
+
+### This pass
+
+Commit `dcddc23` ("Fix the analogue RS, the rolling skill wheel, the stick
+preview and pace every FPS limit") on `tfix5`; working tree clean after it. The
+built APK was uploaded to GoFile: <https://gofile.io/d/sKnLytFB> (50,181,941
+bytes, md5 `d280909ff62409980ede33fe1d44a983`, the same file named
+`app-release.apk` in `android/app/build/outputs/apk/release/`).
+
