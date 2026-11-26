@@ -277,14 +277,6 @@ data class ControlElement(
      * a toggle the player has not assigned yet.
      */
     var toggleAction: ToggleAction = ToggleAction.NOTHING,
-    /**
-     * Whether this d-pad states the right stick's axes instead of holding the
-     * d-pad's four bits ([RsDpad]). The geometry, the hit test, the claims and
-     * the layout file are the four-way d-pad's; only what a direction sends --
-     * and how many directions there are -- differs. Off for the factory d-pad,
-     * so nothing about the menus' navigation changes.
-     */
-    var rightStickAxes: Boolean = false,
 ) {
     /**
      * The sectors a wheel has: the eight places on the ring, never a ninth
@@ -597,9 +589,6 @@ class ControlLayout private constructor(
             if (element.toggleAction != ToggleAction.NOTHING) {
                 item.put("toggleAction", element.toggleAction.name)
             }
-            // The RS d-pad, written only on the control that is one: every other
-            // d-pad keeps the file and the meaning it always had.
-            if (element.rightStickAxes) item.put("axes", true)
             array.put(item)
         }
         val root = JSONObject()
@@ -731,6 +720,12 @@ class ControlLayout private constructor(
             val array = root.optJSONArray("elements") ?: return
             for (i in 0 until array.length()) {
                 val item = array.optJSONObject(i) ?: continue
+                // The RS d-pad was removed. A pad saved while it existed names
+                // it `rs_dpad`, or marks any d-pad with "axes": true; both are
+                // dropped here rather than loaded as a second four-way d-pad,
+                // which would put a control on screen that the player never
+                // asked for and nothing can switch off.
+                if (item.optString("id") == "rs_dpad" || item.optBoolean("axes", false)) continue
                 // Only what the app still knows about: an element dropped in a
                 // later version is ignored rather than resurrected, and a new
                 // one keeps its default.
@@ -820,12 +815,6 @@ class ControlLayout private constructor(
                 // unassigned rather than holding a guess.
                 if (item.has("toggleAction")) {
                     element.toggleAction = ToggleAction.of(item.optString("toggleAction", ""))
-                }
-                // Optional: a layout written before the RS d-pad keeps the
-                // factory d-pad it has, and this build's new element arrives
-                // with its default from `defaults()`.
-                if (item.has("axes")) {
-                    element.rightStickAxes = item.optBoolean("axes", element.rightStickAxes)
                 }
                 item.optJSONArray("swipeActions")?.let { actions ->
                     for (index in 0 until min(DIRECTIONS.size, actions.length())) {
@@ -1061,12 +1050,11 @@ class ControlLayout private constructor(
                 x: Float, y: Float, size: Float, alpha: Float = 0.45f, visible: Boolean = true,
                 shownWhen: PhaseMask = PhaseMask.ALWAYS, sub: String = "", sub2: String = "",
                 toggle: Boolean = false, role: ControlRole = ControlRole.of(value),
-                axes: Boolean = false,
             ) = ControlElement(
                 id, kind, value, label,
                 (if (x >= 0f) x else w + x) / w, (if (y >= 0f) y else h + y) / h,
                 size, alpha, visible, toggle, shownWhen = shownWhen, sub = sub, sub2 = sub2,
-                role = role, rightStickAxes = axes,
+                role = role,
             )
 
             val centre = w / 2f
@@ -1172,18 +1160,6 @@ class ControlLayout private constructor(
                     // for a whole match. In the menus it never fades.
                     place("dpad", ControlKind.DPAD, 0, "D-PAD", 200f, -240f, 110f, 0.40f,
                         shownWhen = PhaseMask.ALWAYS),
-
-                    // The RS d-pad: eight directions stated as the right stick,
-                    // for the title's right-stick commands while the left thumb
-                    // keeps its own analogue movement. Same geometry and same
-                    // editor as the d-pad above; what a direction sends is the
-                    // only difference (`axes`). It sits in the free band under
-                    // the skill stick and left of the near-thumb LB -- clear of
-                    // the actions, the sockets, the mentality pair and the
-                    // d-pad itself (TouchGeometryTest checks it) -- and the
-                    // player can move, resize or hide it like any other control.
-                    place("rs_dpad", ControlKind.DPAD, 0, "RS", 480f, -70f, 84f, 0.45f,
-                        axes = true),
 
                     // Stick clicks: kept for the editor, hidden until wanted. R3
                     // sits out of the skill palette's column, which it used to
@@ -1444,7 +1420,6 @@ class ControlLayout private constructor(
                 "tg6" -> "TG6"
                 "sw1" -> "SW1"
                 "sw2" -> "ADV"
-                "rs_dpad" -> "R"
                 "start" -> "START"
                 "back" -> "SELECT"
                 else -> element.label
@@ -1466,7 +1441,6 @@ class ControlLayout private constructor(
             "back" -> "SELECT"
             "sw1" -> "SW1"
             "sw2" -> "ADV"
-            "rs_dpad" -> "RS"
             else -> id.uppercase()
         }
     }

@@ -199,7 +199,8 @@ namespace
         // started wherever this thread did. Once the presenter has measured a
         // real present, move the next blank onto the display's own boundary --
         // once, not every blank, so a jittery measurement cannot shake the
-        // guest's clock.
+        // guest's clock. This is the same for every limited rate: the title's
+        // blank is the panel's, whatever it is being paced at.
         bool phaseAligned = false;
         while (g.running.load(std::memory_order_relaxed))
         {

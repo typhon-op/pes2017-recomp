@@ -190,6 +190,7 @@ namespace
         double displayPeriodNs = 0;          // the driver's refresh cycle
         int64_t timingPhaseNs = 0;           // an actual present, driver's clock
         int64_t timingNextNs = 0;            // the boundary asked for last
+        int64_t timingTargetNs = 0;          // the frame timeline's last target
         int64_t timingPolledNs = 0;
         bool timingTimebase = false;         // actual times match steady_clock
         pacing::Mode pacingMode = pacing::Mode::Auto;
@@ -555,6 +556,7 @@ namespace
         g.displayPeriodNs = 0;
         g.timingPhaseNs = 0;
         g.timingNextNs = 0;
+        g.timingTargetNs = 0;
         g.timingTimebase = false;
         // Only the smooth modes use the driver's clock; Compatibility keeps
         // the refresh rate the app reported, as it did before tfix5.
@@ -735,8 +737,10 @@ namespace
             }
             g.traceSumNs += gap;
             g.traceIntervals++;
-            const uint32_t divisor = pacing::DivisorForPeriod(uint64_t(g.periodNs), frame_rate::Limit());
-            const int64_t error = pacing::PhaseError(at, g.periodNs, g.traceGridNs, divisor);
+            // The grid the error is measured against is the display's, so it
+            // means the same thing at 30, 45 and 55: how far this present was
+            // from a refresh boundary.
+            const int64_t error = pacing::PhaseError(at, g.periodNs, g.traceGridNs, 1);
             if (!g.traceHavePhase)
             {
                 g.tracePhaseMin = g.tracePhaseMax = error;
@@ -785,7 +789,11 @@ namespace
         }
     }
 
-    // The desired present time for this frame: the next even display boundary.
+    // The desired present time for this frame: the display boundary that the
+    // frame's own deadline lands on. The deadline advances by the exact frame
+    // period from an origin, never by the boundary that was asked for, so a
+    // limit that does not divide the panel (45 or 55 on 60 Hz) alternates the
+    // short and long gaps and does not slowly drift out of the selected rate.
     // 0 is the driver's "no preference", which keeps the original FIFO present
     // for the first frame before a phase has been measured and for a frame that
     // is already too close to a boundary to be queued for it.
@@ -793,14 +801,20 @@ namespace
     {
         if (g.pacingStrategy != pacing::Strategy::DisplayTiming) return 0;
         if (!g.timingTimebase || !g.timingPhaseNs || !(g.displayPeriodNs > 0)) return 0;
-        const uint32_t divisor = pacing::DivisorForPeriod(uint64_t(g.displayPeriodNs), frame_rate::Limit());
-        int64_t at;
-        if (g.timingNextNs > 0)
-            at = pacing::NextBoundary(g.timingNextNs + 1, g.displayPeriodNs, g.timingPhaseNs, divisor);
-        else
-            at = pacing::NextBoundary(nowNs, g.displayPeriodNs, g.timingPhaseNs, divisor);
-        if (at < nowNs)
-            at = pacing::NextBoundary(nowNs, g.displayPeriodNs, g.timingPhaseNs, divisor);
+        const int64_t framePeriod = pacing::FramePeriodNs(frame_rate::Limit());
+        if (framePeriod <= 0) return 0;
+
+        int64_t target = g.timingTargetNs > 0 ? g.timingTargetNs + framePeriod : nowNs;
+        // A stalled frame does not owe the ones it missed: move the timeline to
+        // the present instead of asking for a boundary that has already gone.
+        if (target + framePeriod < nowNs)
+            target += ((nowNs - target) / framePeriod) * framePeriod;
+
+        int64_t at = pacing::NextBoundary(target, g.displayPeriodNs, g.timingPhaseNs, 1);
+        // Two frames must never ask for the same boundary, or one is lost.
+        if (g.timingNextNs > 0 && at <= g.timingNextNs)
+            at = pacing::NextBoundary(g.timingNextNs + 1, g.displayPeriodNs, g.timingPhaseNs, 1);
+        g.timingTargetNs = target;
         // Half a millisecond away: FIFO will put it on the next blank anyway,
         // and asking for the one after would add a blank instead of removing one.
         if (at - nowNs < 500'000) return 0;
@@ -813,7 +827,7 @@ namespace
     void ChoosePacing()
     {
         g.pacingMode = frame_rate::PacingMode();
-        g.pacingStrategy = pacing::Choose(g.pacingMode, frame_rate::Limit() == 30,
+        g.pacingStrategy = pacing::Choose(g.pacingMode, frame_rate::Limit(),
                                           { g.displayTiming, g.presentWait });
         g.tracePacing = env::Flag("PES17_TRACE_PACING");
         LOGI("pacing: mode %s, strategy %s, limit %u, display timing %d, present wait %d",
@@ -1258,7 +1272,7 @@ namespace
             else
             {
                 const size_t excess = pacing::ExcessToDrop(
-                    g.frameQueue.size(), frame_rate::PacingMode(), true);
+                    g.frameQueue.size(), frame_rate::PacingMode(), frame_rate::Limited());
                 for (size_t i = 0; i < excess && !g.frameQueue.empty(); ++i)
                 {
                     g.taken = std::max(g.taken, g.frameQueue.front().serial);
@@ -1668,7 +1682,7 @@ void vk::ShowImage(void* image, uint32_t width, uint32_t height, uint64_t serial
         // queue the renderer waits here instead of building a backlog that
         // would only add input latency. The wait is bounded so a window that
         // has stopped taking frames cannot hold the guest forever.
-        const size_t capacity = pacing::QueueCapacity(frame_rate::PacingMode(), true);
+        const size_t capacity = pacing::QueueCapacity(frame_rate::PacingMode(), frame_rate::Limited());
         g.spaceWake.wait_for(lock, std::chrono::milliseconds(250), [&] {
             return g.frameQueue.size() < capacity || !g.running.load(std::memory_order_relaxed);
         });

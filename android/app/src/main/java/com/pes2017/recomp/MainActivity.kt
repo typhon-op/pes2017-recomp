@@ -179,6 +179,16 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.direct_launch_row).setOnClickListener {
             directLaunchSwitch.toggle()
         }
+        // The project's repository, under that row. The URL is the one in the
+        // Git remote, not a related-looking guess; a device with no browser
+        // gets a toast rather than a crash.
+        findViewById<View>(R.id.github_link_row).setOnClickListener {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_URL)))
+            } catch (_: Throwable) {
+                Toast.makeText(this, R.string.github_link_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
 
         play.setOnClickListener {
             // A fresh quit-return may still carry the finger or key that
@@ -1014,6 +1024,9 @@ class MainActivity : AppCompatActivity() {
  * long enough to swallow that one event.
  */
 private const val QUIT_INPUT_GUARD_MS = 700L
+
+/** The repository this build comes from, as `git remote -v` names it. */
+private const val GITHUB_URL = "https://github.com/typhon-op/pes2017-recomp"
 
 /** The end of a file, which is the part of a log anyone wants. */
 fun File.readTextTail(bytes: Int): String = try {

@@ -499,7 +499,10 @@ on) and **lift**: the move bound to that sector plays. A quick tap does
   array in `controls.json`; a layout from before the wheel keeps its defaults.
   Nothing is held while the wheel is open, so lift, `ACTION_CANCEL`, pause,
   focus loss and the editor all just close it; the runtime's own scripts end in
-  a released frame.
+  a released frame. Visibility is derived, not stored: `WheelGesture.isOpen`
+  answers from the owner pointer and the clock, so continuous rolling through
+  sectors can never drop the ring the way the old posted-open flag did. The
+  hold's one redraw tick is only a redraw; removing it cannot close the wheel.
 
 ## Camera (LOOK)
 
@@ -626,7 +629,7 @@ Two rules keep it honest:
 5. **Choosing the pad sends nothing** and does not release another thumb's
    button; controls that leave the pad simply stop being sent.
 6. **Nothing survives a cancel.** Pause, hide, focus loss and `ACTION_CANCEL`
-   cancel the wheel timer, combos, trigger grace, pulses and held arms.
+   cancel the wheel gesture, combos, trigger grace, pulses and held arms.
 
 ## Customizing the pad
 
@@ -709,56 +712,50 @@ of the way by itself:
 The four bits it holds, the stick stand-in and the menu behaviour are
 unchanged; this only changes when the control is drawn and hit-testable.
 
-## The RS d-pad (eight directions)
+## The right stick (RS)
 
-`rs_dpad` is the d-pad's shape with another meaning: a direction states the
-**right stick's axes** instead of holding one of the four d-pad bits, so the
-title's right-stick commands are a thumb away while the left thumb keeps its own
-analogue movement. It is one element of the same layout -- `ControlKind.DPAD`
-with `rightStickAxes`, saved as `"axes": true` -- so it inherits the editor
-(move, resize, opacity, show/hide, undo, profiles, saved slots), the pointer
-claims and the layout file. The factory element is `480, 290` at 84 dp, in the
-free band under the skill stick and left of the near-thumb LB, clear of every
-control that is on screen by default (`TouchGeometryTest` checks it); it can be
-moved, resized, turned off or removed like any other control.
+The right stick is one analogue control (`id: "rs"`), drawn as the pad's stick
+with `RS` in the middle, and it writes the Xbox 360 right stick's own axes --
+`thumbRX`/`thumbRY` at the runtime boundary, the pair a physical pad's RS
+writes. It is not a simulated d-pad and there is no second control for the same
+axes: the previously added `rs_dpad` element is gone from the layout, the
+editor, the saved-layout reader and this document. A layout saved while it
+existed still loads: the reader skips `"id": "rs_dpad"` and any d-pad marked
+`"axes": true` instead of drawing a control this build cannot honour.
 
-| direction | RS X | RS Y |
-|---|---|---|
-| up | 0 | +1 |
-| down | 0 | -1 |
-| left | -1 | 0 |
-| right | +1 | 0 |
-| up-left | -1 | +1 |
-| up-right | +1 | +1 |
-| down-left | -1 | -1 |
-| down-right | +1 | -1 |
-| neutral / release | 0 | 0 |
-
-- The eight sectors are equal 45-degree wedges (the diagonal band is
-tan 22.5°), with the d-pad's own 30 % resting zone in the middle; a thumb past
-the rim is still read. The mapping is `RsDpad`, pure and pinned by
-`RsDpadTest`.
-- The values are stated **after** the app's stick shaping, so a deadzone or a
-curve set for a thumb's throw cannot bend the eight directions. The runtime's
-own shaping (`runtime/stick_curve.h`) normalises a vector longer than 1, so on
-a build that has it a diagonal arrives as ±0.707 rather than ±1; the packaged
-engine predates it, so diagonals there are exact.
-- Multitouch: a direction belongs to the finger that pressed it, tracked by
-Android pointer id. A slide across the socket is the same finger's new
-direction (no lift, no repeat dispatch), a second finger adds its axes
-(clamped), and a lift removes only its own. The left stick and every other
-source are untouched by all of it.
-- Release: `ACTION_UP`/`ACTION_POINTER_UP` drop that pointer's direction,
-`ACTION_CANCEL`, a phase or stance change, the editor, the pause menu, window
-focus loss and `releaseEverything` clear every direction, and a control that
-is hidden or switched off is skipped by `pushState`. The right stick is then
-(0, 0) with no other source reset.
-- Signs: this port's sticks are up-positive (`StickVector`, `StickAxesTest`),
-and the table follows the guest, so an up press commands up. The branch's table
-was screen-signed (up was -1); the flip lives once, in `RsDpad.Direction`, and
-`RsDpadTest.upIsUpAndDownIsDown` pins it. The sector classification stays in
-screen coordinates, so the geometry and the values agree.
-- Not device-tested.
+- **The path.** `ACTION_DOWN`/`ACTION_POINTER_DOWN` on the socket claims the
+  element for that pointer id, `ACTION_MOVE` writes `stickPositions[element.id]`
+  from `StickVector.of(...)` (guest-signed: up is +1), and `pushState` reads that
+  vector for every `ControlKind.STICK` with a non-zero `value`. Right-stick
+  elements add into `rightX`/`rightY` and go to the runtime with the rest of the
+  pad state in one call; nothing presses a button or invents an axis.
+- **Scaling.** The app's own right-stick shaping (`StickShape.apply`, the Right
+  stick deadzone and curve in Settings -> Controls) runs once, in `pushState`,
+  and only when the packaged engine predates `runtime/stick_curve.h`. The
+  runtime's copy is used instead when it is there, so a throw is never shaped
+  twice. The default deadzone is 0, which is the arithmetic this build has
+  always sent.
+- **The skill flick rides on top.** With `flickSkillStick` on, the same thumb is
+  also classified by `SwipeClassifier` and its flick is played as
+  `nativeSkillPulses`; the analogue deflection is sent as well, every frame, so
+  the title sees a held right stick rather than only a pulse. The flick used to
+  suppress the axes (`flicked`), which is why the stick "did not respond": only
+  the pulses arrived.
+- **Multitouch.** Each stick's deflection belongs to the finger that claimed it,
+  by Android pointer id. LS and RS are separate claims: a second finger on RS
+  does not disturb LS and vice versa. `ACTION_POINTER_UP` releases only the
+  pointer that lifted (and only centres that stick when it was the last finger
+  on it), `ACTION_UP` ends the gesture, and `ACTION_CANCEL`, pause, focus loss,
+  the editor and `releaseEverything` clear every claim and every position. A
+  stick whose pointer is replaced is re-centred by that release; no other
+  element's state is touched, so no axis can stick.
+- **Simultaneous use** is the normal case this was fixed for: hold LS at a
+  diagonal with one thumb and push RS with the other; both arrive in the same
+  pad state, and lifting either leaves the other exactly where it was.
+- **Not device-tested.** The axis names and signs come from the runtime's
+  existing pad state (`runtime/input*` and `AndroidBridge`), and the mapping is
+  covered by the JVM stick tests; the in-game right-stick commands were not run
+  on a phone in this workspace.
 
 ## Verification
 

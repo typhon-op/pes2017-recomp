@@ -3,9 +3,7 @@ package com.pes2017.recomp
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.DashPathEffect
 import android.graphics.Paint
-import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
@@ -14,16 +12,18 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * The left stick, drawn small, so a setting can be felt before a match.
+ * The left stick, large, on its own fixed page.
  *
- * The thumb is the player's finger on the drawing; the circles are the profile:
- * the inner one is the deadzone, the amber ring is where a run starts in MATCH
- * mode and the dotted one just inside it is where the run lets go. The green
- * line is what the stick will actually send -- the direction and length after
- * the deadzone, the curve, the sensitivity and the smoothing.
+ * It is the same stick the match pad draws -- [StickArt] is the one drawing of
+ * it, with the same socket, notches, cap, dish and grip dots -- only at the
+ * radius this page can give it. A thumb on it goes through the very arithmetic
+ * the pad uses (`StickVector` then `LeftStickFeel.shape`, including the selected
+ * profile's deadzone, curve, sensitivity and smoothing) and the same sprint
+ * latch, so the output percentage and the walk/run state are what a match would
+ * receive rather than an illustration.
  *
- * It is a view on its own screen, not an overlay: it shares no touch stream
- * with the match pad and cannot press anything in the game.
+ * It shares no touch stream with the game: it is a view on a separate activity
+ * and never calls NativeBridge, so dragging it cannot press anything.
  */
 class LeftStickPreviewView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null,
@@ -32,11 +32,15 @@ class LeftStickPreviewView @JvmOverloads constructor(
     var settings: LeftStickFeel.Settings = LeftStickFeel.Settings()
         set(value) {
             field = LeftStickFeel.sanitize(value)
-            recompute()
+            smoother.reset()
             invalidate()
         }
 
     private val smoother = LeftStickFeel.Smoother()
+    private val sprintLatch = SprintLatch()
+
+    /** The finger that owns the preview: a second one cannot move the stick. */
+    private var pointerId = -1
     private var rawX = 0f
     private var rawY = 0f
     private var outX = 0f
@@ -46,70 +50,53 @@ class LeftStickPreviewView @JvmOverloads constructor(
     private val density = resources.displayMetrics.density
     private val ink = WrapperTheme.color(context, R.attr.pesText, Color.WHITE)
     private val muted = WrapperTheme.color(context, R.attr.pesMuted, Color.GRAY)
-
-    private val socket = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1.5f * density
-        color = muted
-    }
-    private val zone = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-        color = withAlpha(muted, 30)
-    }
-    private val deadzone = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1.5f * density
-        color = muted
-        pathEffect = DashPathEffect(floatArrayOf(5f * density, 4f * density), 0f)
-    }
-    private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 2.5f * density
-        color = RING
-    }
-    private val release = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1f * density
-        color = withAlpha(RING, 150)
-        pathEffect = DashPathEffect(floatArrayOf(3f * density, 4f * density), 0f)
-    }
-    private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ink }
-    private val response = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 2.5f * density
-        color = RESPONSE
-    }
-    private val responseDot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = RESPONSE }
-    private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val readout = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = ink
-        textSize = 11f * density
+        textAlign = Paint.Align.CENTER
+        textSize = 15f * density
+        isFakeBoldText = true
+    }
+    private val detail = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = muted
+        textAlign = Paint.Align.CENTER
+        textSize = 12f * density
     }
 
     init {
         isClickable = true
-        contentDescription = context.getString(R.string.left_stick_preview_hint)
+        contentDescription = context.getString(R.string.left_stick_preview_page_hint)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                val radius = radius()
-                if (radius <= 0f) return false
+            MotionEvent.ACTION_DOWN -> {
+                if (radius() <= 0f) return false
+                pointerId = event.getPointerId(0)
                 touched = true
-                rawX = ((event.x - width / 2f) / radius).coerceIn(-1.15f, 1.15f)
-                rawY = (-(event.y - height / 2f) / radius).coerceIn(-1.15f, 1.15f)
-                recompute()
-                invalidate()
+                sample(event.x, event.y)
                 return true
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                touched = false
-                rawX = 0f
-                rawY = 0f
-                smoother.reset()
-                recompute()
-                invalidate()
+            MotionEvent.ACTION_MOVE -> {
+                if (pointerId < 0) return false
+                val index = event.findPointerIndex(pointerId)
+                if (index < 0) return true
+                // A page like this is felt, not scribbled on: use every batched
+                // sample so a quick circle still comes out round.
+                for (h in 0 until event.historySize) {
+                    sample(event.getHistoricalX(index, h), event.getHistoricalY(index, h), false)
+                }
+                sample(event.getX(index), event.getY(index))
+                return true
+            }
+            MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_UP -> {
+                val index = event.actionIndex
+                if (event.getPointerId(index) != pointerId) return true
                 if (event.actionMasked == MotionEvent.ACTION_UP) performClick()
+                centre()
+                return true
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                centre()
                 return true
             }
         }
@@ -121,7 +108,13 @@ class LeftStickPreviewView @JvmOverloads constructor(
         return true
     }
 
-    private fun recompute() {
+    /** One finger position, as the pad reads it: fixed socket, guest-up Y. */
+    private fun sample(x: Float, y: Float, redraw: Boolean = true) {
+        val r = radius()
+        if (r <= 0f) return
+        val vector = StickVector.of(width / 2f, height / 2f - labelBand(), x, y, r)
+        rawX = vector[0]
+        rawY = vector[1]
         val shaped = LeftStickFeel.shape(rawX, rawY, settings)
         val smooth = if (hypot(shaped[0], shaped[1]) < 0.002f) {
             smoother.reset()
@@ -131,50 +124,69 @@ class LeftStickPreviewView @JvmOverloads constructor(
         }
         outX = smooth[0]
         outY = smooth[1]
+        // The run is the pad's own latch, with the selected profile's ring: at
+        // the ring the match stick holds RB until the thumb comes back inside
+        // the release point, exactly as here.
+        sprintLatch.thresholds(settings.sprint, LeftStickFeel.sprintRelease(settings))
+        sprintLatch.update(rawX, rawY)
+        if (redraw) invalidate()
     }
 
-    private fun radius(): Float = min(width, height) / 2f - 26f * density
+    private fun centre() {
+        pointerId = -1
+        touched = false
+        rawX = 0f
+        rawY = 0f
+        outX = 0f
+        outY = 0f
+        smoother.reset()
+        sprintLatch.reset()
+        invalidate()
+    }
+
+    /** Space under the stick for the readout, so the two never overlap. */
+    private fun labelBand(): Float = 58f * density
+
+    private fun radius(): Float {
+        val vertical = (height - labelBand() - 24f * density) / 2f
+        return min(width / 2f - 24f * density, vertical).coerceAtLeast(0f)
+    }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val cx = width / 2f
-        val cy = height / 2f
+        val cy = height / 2f - labelBand()
         val r = radius()
         if (r <= 0f) return
 
-        canvas.drawCircle(cx, cy, r, socket)
-        canvas.drawCircle(cx, cy, r * settings.deadzone, zone)
-        canvas.drawCircle(cx, cy, r * settings.deadzone, deadzone)
-        canvas.drawCircle(cx, cy, r * settings.sprint, ring)
-        canvas.drawCircle(cx, cy, r * LeftStickFeel.sprintRelease(settings), release)
-
-        if (touched) {
-            canvas.drawLine(cx, cy, cx + outX * r, cy - outY * r, response)
-            canvas.drawCircle(cx + outX * r, cy - outY * r, 4f * density, responseDot)
-            canvas.drawCircle(cx + rawX * r, cy - rawY * r, 9f * density, dot)
-        } else {
-            canvas.drawCircle(cx, cy, 9f * density, dot)
-        }
+        // The pad's own stick, at this page's radius and full opacity.
+        StickArt.draw(
+            canvas = canvas,
+            density = density,
+            cx = cx,
+            cy = cy,
+            r = r,
+            alpha = 1f,
+            faded = false,
+            deflection = if (touched) floatArrayOf(outX, outY) else null,
+            label = "LS",
+        )
 
         val magnitude = (hypot(outX, outY) * 100f).roundToInt().coerceIn(0, 100)
-        val sprinting = hypot(rawX, rawY) >= settings.sprint
-        val text = context.getString(
-            R.string.left_stick_preview_readout,
-            magnitude,
-            if (sprinting) context.getString(R.string.left_stick_preview_run)
-            else context.getString(R.string.left_stick_preview_walk),
+        val state = when {
+            !touched || magnitude == 0 -> context.getString(R.string.left_stick_state_idle)
+            sprintLatch.active -> context.getString(R.string.left_stick_state_run)
+            else -> context.getString(R.string.left_stick_state_walk)
+        }
+        val baseline = cy + r + 22f * density
+        canvas.drawText(context.getString(R.string.left_stick_preview_readout, magnitude, state), cx, baseline, readout)
+        canvas.drawText(
+            context.getString(
+                R.string.left_stick_preview_thresholds,
+                (settings.sprint * 100f).roundToInt(),
+                (LeftStickFeel.sprintRelease(settings) * 100f).roundToInt(),
+            ),
+            cx, baseline + 18f * density, detail,
         )
-        canvas.drawText(text, 10f * density, height - 8f * density, label)
-    }
-
-    private companion object {
-        /** The run's amber, the same the pad's sprint halo uses. */
-        const val RING = 0xFFFBBF24.toInt()
-
-        /** What the stick sends: the pad's own accent green. */
-        const val RESPONSE = 0xFF34D399.toInt()
-
-        fun withAlpha(color: Int, alpha: Int): Int =
-            (color and 0x00FFFFFF) or ((alpha.coerceIn(0, 255)) shl 24)
     }
 }

@@ -75,18 +75,16 @@
                     android:text="@string/left_stick_presets_hint" />
             </LinearLayout>
 
-            <TextView
-                style="@style/SectionHeading"
+            <!-- The preview is a page of its own: inside this scroll view a
+                 thumb pushing the stick scrolled the page instead, so a
+                 setting could not be felt before a match. This button opens
+                 the fixed page; the settings page itself still scrolls. -->
+            <Button
+                android:id="@+id/left_stick_preview_button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/left_stick_preview" />
-
-            <com.pes2017.recomp.LeftStickPreviewView
-                android:id="@+id/left_stick_preview"
-                android:layout_width="match_parent"
-                android:layout_height="220dp"
-                android:layout_marginTop="4dp"
-                android:background="@drawable/bg_setting_group" />
+                android:layout_marginTop="10dp"
+                android:text="@string/left_stick_preview_open" />
 
             <TextView
                 style="@style/SettingHint"

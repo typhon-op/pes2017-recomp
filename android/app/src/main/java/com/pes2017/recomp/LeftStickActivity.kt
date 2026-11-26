@@ -1,5 +1,6 @@
 package com.pes2017.recomp
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -25,7 +26,6 @@ import kotlin.math.roundToInt
 class LeftStickActivity : AppCompatActivity() {
 
     private lateinit var prefs: Prefs
-    private lateinit var preview: LeftStickPreviewView
     private lateinit var profile: TextView
     private lateinit var presets: RadioGroup
     private lateinit var deadzone: SeekBar
@@ -47,7 +47,6 @@ class LeftStickActivity : AppCompatActivity() {
         prefs = Prefs(this)
         title = getString(R.string.left_stick_menu)
 
-        preview = findViewById(R.id.left_stick_preview)
         profile = findViewById(R.id.left_stick_profile)
         presets = findViewById(R.id.left_stick_presets)
         deadzone = findViewById(R.id.left_stick_deadzone)
@@ -92,6 +91,11 @@ class LeftStickActivity : AppCompatActivity() {
         }
         findViewById<android.view.View>(R.id.left_stick_reset)
             .setOnClickListener { pick(LeftStickFeel.preset(LeftStickFeel.PRESET_DEFAULT)) }
+        // The preview is its own fixed page: this screen keeps scrolling, the
+        // stick does not have to share the thumb with a ScrollView.
+        findViewById<android.view.View>(R.id.left_stick_preview_button).setOnClickListener {
+            startActivity(Intent(this, LeftStickPreviewActivity::class.java))
+        }
 
         show(prefs.leftStickFeel())
     }
@@ -126,7 +130,6 @@ class LeftStickActivity : AppCompatActivity() {
         smoothingGroup.check(smoothingId(s.smoothing))
         applying = false
         labels(s)
-        preview.settings = s
     }
 
     private fun labels(s: LeftStickFeel.Settings) {

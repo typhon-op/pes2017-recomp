@@ -343,221 +343,135 @@ no Vulkan runtime, so the timings are provisional. The device checklist at the
 end of `docs/skill-moves.md` is what turns each entry into "working"; nothing
 here should be described as fully functional before that run.
 
-## tfix5 (2026-11-25): the configurable RS d-pad
+## tfix5 (2026-11-26): the analogue RS, a derived wheel, the preview page, pacing at every limit
 
-`rs_dpad` is a second d-pad in the touch layout that states the right stick's
-axes instead of the four d-pad bits, so the title's right-stick commands are a
-thumb away while the left thumb keeps the analogue movement. It is
-`ControlKind.DPAD` with `rightStickAxes`, so the geometry, the hit test, the
-editor, the pointer claims and `controls.json` are the four-way d-pad's; the
-file gains one optional key, `"axes": true`. The factory place is `480, 290` at
-84 dp on the 800 x 360 design pad, clear of every control on screen by default.
+The RS d-pad this branch carried is **removed**: the control, its `RsDpad`
+class, its test, its default placement and its editor/serialisation hooks are
+gone. A layout saved while it existed still loads -- the reader skips
+`"id": "rs_dpad"` and any d-pad marked `"axes": true` -- so nobody's saved pad
+is reset by the removal.
 
-Eight equal 45-degree wedges with a 30 % resting zone, read from the thumb's
-offset in the socket and tracked per Android pointer id, so a slide changes
-direction without lifting. The axes are written after the app's stick shaping,
-so a deadzone or curve cannot bend them. **The Y sign is the guest's** (up is
-+1, per `StickVector`/`StickAxesTest`); the table the branch was specified with
-was screen-signed, and that single flip lives in `RsDpad.Direction`, with
-`RsDpadTest.upIsUpAndDownIsDown` pinning it. Every release path -- the owner's
-lift, `ACTION_CANCEL`, a phase or stance change, the editor, the pause menu,
-focus loss, `releaseEverything` -- returns the axes to (0, 0), and a hidden or
-off control is skipped by `pushState`; no other source is reset.
+### The RS stick itself
+
+The right stick had been routed only through `nativeSkillPulses` whenever
+`flickSkillStick` was on (the default): `pushState` skipped its analogue axes
+while a flick was being classified (`flicked`), so the title never saw a held
+right-stick deflection, only short pulses. The stick is now always analogue --
+`stickPositions[id]` is written to `rightX`/`rightY` for every right-stick
+element, every frame, while the flick classifier rides along and still plays
+its pulses. Left-stick arithmetic is untouched (`LeftStickFeel`, the sprint
+latch and the two-stage throw all still run exactly as before), and nothing
+presses a button on the RS path. Per-pointer claims already made LS and RS
+independent; releasing one stick writes only that stick's axes, and
+`ACTION_CANCEL`, pause, focus loss and the editor clear both.
+
+### The wheel that vanished while rolling
+
+The ring used a stored `open` flag set by a posted runnable. Anything that
+removed that callback -- a second thumb landing, a redraw, a cancelled
+message -- could leave the ring gone while the thumb was still moving through
+sectors. Visibility is now **derived** by `WheelGesture.isOpen(now)`: the owner
+pointer plus the hold clock, with no timer able to close it. The posted tick is
+only a redraw; a second finger cannot steal an open wheel, a non-owner lift
+closes nothing, and a cancel clears everything.
+
+### Left stick preview: its own fixed page
+
+The settings page keeps its ScrollView; the embedded 220 dp preview is gone.
+A **Preview** button opens `LeftStickPreviewActivity`, a page that does not
+scroll, with the stick centred at the largest radius that fits the window. The
+drawing is the pad's own: `TouchOverlayView.drawStick`'s body was moved into
+`StickArt` and both call it, so socket, notches, cap, dish and grip dots are the
+same code at a larger radius. A thumb there goes through `StickVector` and the
+selected `LeftStickFeel` profile (deadzone, curve, sensitivity, smoothing) and
+the sprint latch, so the live percentage and the walk/run state, and the ring's
+on/off points, are the numbers a match would receive. The page never calls
+NativeBridge; Back returns to the settings page.
+
+### The repository link
+
+Under "Kick off straight away when the app opens" (`direct_launch`) both main
+layouts gained a row with a small GitHub mark and a link to the repository the
+Git remote names, `https://github.com/typhon-op/pes2017-recomp`. The whole row
+is tappable; a device with no browser gets a toast.
+
+### Frame pacing at all seven limits
+
+`runtime/pacing.h` now schedules every limited rate (30, 35, 40, 45, 50, 55,
+and 60 stays on the display's blank), not 30 alone: an exact frame timeline
+(`origin + n / fps`, no 33.333 or 28.571 ms rounding), placed on the display's
+measured boundary, with the one-/two-refresh alternation for limits that do not
+divide the panel. `frame_rate.h` and the Vulkan presenter use that timeline;
+the queue and in-order rules key off `Limited()` rather than a 30 comparison.
+The whole frame-rate list stays available in both menus, the setting lives in
+`Prefs` across restarts, and the in-game Apply & restart re-reads it. The
+Settings text no longer says 35-55 judder; Smooth is no longer "Smooth 30 FPS".
+
+### Engine provenance, and what is honestly in the APK
+
+- Source APK (supplied):
+  `https://www.dropbox.com/scl/fi/7ltef4cuuppbfvoe8nbjzn/pes2017-recomp-tfix5-adrenotools.apk?rlkey=bafohx1mfjn33u3f18ghdosfu&st=9xqauz92&dl=0`
+  -- downloaded via `dl.dropboxusercontent.com`, 52,153,211 bytes, SHA-256
+  `2d2a005690a26a39726066f9ed7d18b07a9cc3933cb85edde00157c5155c92c6`.
+- ABI: `arm64-v8a` only.
+- Extracted engine: `/tmp/srcapk/lib/arm64-v8a/libpes17.so`, 139,430,000
+  bytes, SHA-256 `480d50af78bb3228ee8c02e10e27c45f496e63610c42f81f3e6a63a4e6913327`.
+  It is **not** the `1133fa0b...` engine `tools/engine_pin.sh` names: this APK
+  was built from a newer tree, and its strings already carry
+  `pacing: mode %s, strategy %s, limit %u...`.
+- Rebuild: **not possible in this workspace**. `libpes17.so` is the recompiled
+  guest (`ppc/`, `ppc_recomp_shared.h`, ~1,600 generated units, `build.sh`),
+  and neither the generated tree nor the NDK exists here. The engine packaged
+  is therefore byte-identical to the extracted one; the native pacing sources
+  in this tree were compiled and exercised on the host (below), not into this
+  `.so`. No claim is made that the APK's engine contains the new pacing code.
+- `default.xex` (supplied): 32,493,568 bytes, SHA-256
+  `b914ec9a1abb3a9b42a64255b6aa8ff27312da126f7c18f8c880106b832779e6`, matching
+  `BuildConfig.PES_XEX_SHA256`. It is the game data the installer expects; the
+  APK does not embed it and this build does not need it.
 
 ### Tests actually run
 
-The cloud workspace was given JDK 17 (Temurin) and Android SDK 35 (platform
-35, build-tools 35.0.0) for this pass, so the Kotlin tests ran for the first
-time on this branch. `RsDpadTest` (new), `TouchGeometryTest` -- which caught the
-first default position overlapping the d-pad --, `ControlLayoutPhaseTest` and
-`LayoutSerializationTest` pass. `:app:testDebugUnitTest` is 355 tests, **all
-passing**. The suite's one pre-existing failure
-(`SkillWheelTest.anUnboundSectorPlaysNothingAndABadIndexIsRefused`) was a real
-bug rather than a stale test: `ControlElement.trickMove`/`setTrickMove` bounded
-a sector by the move array's length (`SkillMoves.COUNT`) instead of the wheel's
-eight sectors, so an off-wheel index read back a bound move. The bound is now
-`TrickWheel.SECTORS`, and the test passes unchanged.
+- `g++ -std=c++20 -O1 -I runtime tests/frame_pacing_test.cpp`: **276 checks, 0
+  failed**. Covers 30/35/40/45/50/55/60 on 60/59.94/90/120 Hz panels, no drift,
+  the one-refresh bound, the alternating gaps for 35/45/55, queue policy,
+  strategies and grid divisors.
+- `stick_curve_test`: 30 checks, 0 failed. `stick_pulses_test`: 62 checks, 0
+  failed -- its one intermittent failure was a single-core scheduling race (the
+  reader could finish 20,000 samples before the writer thread first ran); the
+  test now waits (bounded) for the writer's first write, and three consecutive
+  runs are clean.
+- `:app:testDebugUnitTest` (JDK 17, Android SDK 35): **371 tests, 0 failures**.
+  Includes the new `WheelGestureTest` (hold boundary, two laps of continuous
+  rolling asserted at every sample, direction changes, deadzone, a second
+  thumb, owner lift, tap, cancel, re-press, long roll) and the existing suite.
+  `RsDpadTest` was deleted with its subject.
 
 ### Build
 
-`:app:assembleRelease -PprebuiltNative=...` with
-`-Dorg.gradle.jvmargs="-Xmx1024m -XX:+UseSerialGC" --max-workers=1 --no-daemon`
-and `-x lint -x lintVitalRelease -x test`, exit 0;
-`android/app/build/outputs/apk/release/app-release.apk` (about 48 MiB, debug
-key). The engine packaged is the pinned `libpes17.so`
-(`1133fa0b...8eb69`), taken from the tfix5 engine APK at
-`https://files.catbox.moe/pwdg20.apk`; the pinned GitHub V0.2.4 asset now
-returns 404 and the gofile link needs its site token, so neither could be used
-here. The APK's dex carries `rs_dpad` and `axes`.
+    ./gradlew :app:assembleRelease -PprebuiltNative=/tmp/pes17-engine \
+      --no-daemon --max-workers=2 \
+      -Dorg.gradle.jvmargs="-Xmx2560m -XX:+UseSerialGC"
 
-### On the phone: what to try
+Exit 0, `BUILD SUCCESSFUL in 4m 53s`.
+`android/app/build/outputs/apk/release/app-release.apk`: **50,181,941 bytes**,
+SHA-256 `40364bc2b1dbf49a27f0bcfa73bc0fa27be1fe01ccd5e06a3e6afdceb61fedab`,
+debug key, `native-code: 'arm64-v8a'` only.
 
-1. **Placement.** Edit controls: `RS` draws eight spokes and an `RS` middle.
-   Move it, resize it, switch it off and on, then restart the app: it comes
-   back where it was left.
-2. **Both thumbs.** Hold the left stick at a diagonal and press `RS` up with a
-   second finger. The player keeps moving and the right-stick command plays;
-   lifting `RS` leaves the movement untouched, and lifting the stick never
-   leaves the right stick deflected.
-3. **The sign, first.** In a match, press `RS` up: the title must do the
-   *up* right-stick command. If it plays the down one, the guest axis is the
-   other way round on that build and `RsDpad.Direction`'s `y` needs its sign
-   back.
-4. **All eight.** Up, down, left, right and the four diagonals in a skill
-   context (e.g. the knock-on, the roulette, the chop). A diagonal must be the
-   diagonal, not one of its sides.
-5. **Sliding.** Hold `RS` and slide up → up-right → right without lifting. Each
-   change is immediate, nothing has to be re-pressed, and no old direction
-   stays behind.
-6. **Release.** Lift the finger: the stick returns to neutral with no spin, no
-   flick left running. Do it while the left thumb is still moving.
-7. **Cancellation.** Hold a direction, then open the pause menu, drop the
-   notification shade, or switch apps. Coming back, nothing is stuck and the
-   left stick still steers.
-8. **Hidden.** In the editor, switch `RS` off while it is being held: the right
-   stick releases rather than staying deflected.
+Verified inside the APK: `lib/arm64-v8a/libpes17.so` hashes to the extracted
+engine above (unmodified); `LeftStickPreviewActivity` is in the manifest;
+`resources.arsc` carries the new strings (the all-limits pacing hint, "Smooth
+(every limit)", "GitHub · typhon-op/pes2017-recomp", the preview readout and
+ring strings); `rs_dpad` is no longer referenced.
 
-### Not verified
+### Remaining issues and the device gap
 
-No device or emulator was available: the control was not drawn on a screen, no
-right-stick command was played in the title, and position/size/visibility
-persistence was checked by the layout tests and the editor's shared path, not
-by restarting the app on a phone. The Y flip is reasoned from the port's own
-axis convention and pinned by a test, not observed on hardware.
-
-## tfix5 (2026-11-25): 30 FPS frame pacing and both Settings menus
-
-All seven audit findings were re-checked in this tree and still applied. The
-change is presentation timing only: no draw, pass, upscaler, shader, texture,
-resolution, audio or lifecycle path was changed.
-
-### Implementation
-
-- `runtime/pacing.h` (new, header-only): Auto/Smooth/Compatibility strategy,
-  display-timing vs phase-locked-FIFO choice, even-boundary deadline, divisor
-  and phase-error arithmetic, bounded-queue policy. No Vulkan/Android/env, so
-  it is host-testable.
-- `runtime/display_clock.h` (new): the measured display phase written by the
-  presenter and read by `PaceSwap` and the guest vblank.
-- `presenter.cpp`: enables optional `VK_GOOGLE_display_timing`, puts the next
-  even boundary in `VkPresentTimesInfoGOOGLE` for 30 FPS presents, and reads
-  `vkGetPastPresentationTimingGOOGLE` for actual timestamps/phase. The
-  swapchain stays FIFO. Without the extension, Auto/Smooth use
-  `VK_KHR_present_wait` timings. Compatibility and every non-30 limit add no
-  timing chain and keep the original newest-wins drop.
-- `DrawOneFrame`: Auto/Smooth at 30 present every valid frame in order from a
-  queue capped at 3; `ShowImage` applies bounded backpressure instead of
-  letting a backlog grow.
-- `frame_rate.h::PaceSwap`: waits for the display's measured next even boundary
-  with a 1.5 ms lead, so 59.94 Hz accumulates the panel's period rather than
-  33.333 ms. Compatibility keeps the independent clock.
-- `gpu.cpp::VBlankWorker`: period already followed the display; the next blank
-  is now moved onto the measured phase once, and only in the smooth modes.
-- Both limiters remain: the title's own limiter and `PaceSwap`. Neither was
-  removed; no measurement justified a change.
-- `GameActivity`: `Surface.setFrameRate(30f, FIXED_SOURCE)` on API 30+ for a
-  30 FPS/frame-generation run, cleared with `0/DEFAULT` in `onPause` and
-  `onDestroy`, reapplied on resume and surface changes.
-- `PES17_TRACE_PACING` (any value but 0) logs mode/strategy and, every 120 presents,
-  interval mean/min/max, 1/2/3/4-blank counts and phase error.
-
-### Settings, in both menus
-
-`FramePacingOptions` (new) holds the option lists and the shared keys; `Prefs`
-stores `framePacing` and `framePacingRefresh`. Neither is a `DeviceProfile`
-preset field and no pacing listener calls `presetTouched()`, so a pacing change
-cannot flip the preset to Custom or rewrite a preset setting.
-
-- Main menu: Settings -> GRAPHICS & PERFORMANCE -> Frame pacing (under Frame
-  rate): Frame pacing mode (Auto / Smooth 30 FPS / Compatibility) and Display
-  refresh preference (System default / Prefer 60 Hz for 30 FPS gameplay).
-- In-game: pause menu -> Graphics & performance -> the same two rows, value in
-  the right-hand column. Both pages read/write the same `Prefs` keys, and the
-  in-game relaunch intent carries both values as well.
-- Saved immediately. The runtime reads `PES17_PACING` at match start; both
-  pages say so (in-game Apply & restart does it at once). System default keeps
-  the existing "match the screen" / 60 Hz-lock choices; Prefer 60 Hz asks for
-  60 Hz at a 30 FPS limit. The refresh choice is disabled and dimmed while
-  frame generation is on, which requires 60 Hz.
-
-### Tests and build actually completed
-
-- `tests/frame_pacing_test.cpp`: **56 checks, 0 failed** with
-  `g++ -std=c++20 -I runtime`; also registered in `tests/CMakeLists.txt` as
-  `frame-pacing`. Covers strategies/fallbacks, Compatibility restoration,
-  ordering and newest-wins, queue ceiling/backpressure, 60/59.94 Hz deadlines
-  and drift, phase error and divisors.
-- `:app:testDebugUnitTest`: **365 tests in 34 classes, 0 failures, 0 errors**
-  (JDK 17, Android SDK 35). `FramePacingOptionsTest` checks the shared-key
-  round trip both ways, preset isolation, cycling, mode switching and API
-  helpers. The first run had one failure in that new test (a wrong backward
-  step expectation); it was corrected and the full suite rerun clean.
-- `:app:assembleRelease -PprebuiltNative=... -x lint -x lintVitalRelease`:
-  **succeeded** (1m30s standalone; the final run with the unit tests took
-  1m55s; the first attempt was SIGKILLed by the host). APK:
-  `android/app/build/outputs/apk/release/app-release.apk`, 50,180,677 bytes,
-  debug key. New pacing resources are in `resources.arsc`.
-- The packaged `libpes17.so` is the pinned engine from
-  `https://files.catbox.moe/pwdg20.apk` (`1133fa0b...`). **That engine predates
-  this change**, so the APK carries the new Settings but not the new presenter,
-  pacer or vblank code. A native build needs the recompiled guest tree
-  (`ppc_recomp_shared.h`) and the NDK, neither of which is in this workspace;
-  the native sources were reviewed and the header arithmetic tested, not
-  compiled into an APK.
-
-### Remaining issues and device gap
-
-No Android device or Vulkan runtime was available, so present intervals at
-59.94/60 Hz, extension presence, `Surface.setFrameRate` acceptance, input
-latency and battery/heat were **not measured**. `PES17_TRACE_PACING` is the
-check: in a 30 FPS match the 2-blank count should dominate and phase error stay
-within a few milliseconds; Perfetto or `dumpsys SurfaceFlinger --latency` can
-cross-check. Without `VK_GOOGLE_display_timing`, a phase needs
-`VK_KHR_present_wait`; with neither, the original independent clock remains.
-The guest vblank is aligned once, not every blank. A 30 Hz panel uses divisor
-1, and 30 on 90/120 Hz uses 3/4. No CPU/GPU/render workload was added: one
-driver timing query per 50 ms only on the display-timing path, three queue
-slots, and logging only under `PES17_TRACE_PACING`.
-
-### Preservation and GoFile build (2026-11-25)
-
-- Branch: `tfix5`. Source commit: `e309841adf6c56ecc352698d3266b611a90b7e2f`
-  ("Pace the 30 FPS limit to the display and expose it in Settings"), pushed
-  to `origin/tfix5`. This preservation note is committed immediately after it,
-  so the tip of `tfix5` is its child; the tree is clean after that commit.
-- Tests actually run: host `frame_pacing_test` **56 checks, 0 failed**;
-  `:app:testDebugUnitTest` **365 tests, 0 failures, 0 errors**.
-- APK: `android/app/build/outputs/apk/release/app-release.apk`,
-  **50,180,677 bytes**, SHA-256
-  `1824e39c6bb311692534f49e3a1a95a8ff15cb0741f12c20e69000f52b4f9b02`.
-  Built with:
-  `JAVA_HOME=<jdk17> ANDROID_HOME=<sdk35> ANDROID_SDK_ROOT=<sdk35>
-  ./gradlew :app:assembleRelease -PprebuiltNative=/tmp/pes17-engine-gofile
-  --no-daemon --max-workers=1
-  -Dkotlin.compiler.execution.strategy=in-process
-  -Dorg.gradle.jvmargs="-Xmx1536m -XX:+UseSerialGC"
-  -x test -x lint -x lintVitalRelease`.
-- GoFile: file page https://gofile.io/d/rzQAqPvw in the public folder
-  https://gofile.io/d/78271946-1eec-4993-81d3-4341ca008bba. Uploaded as
-  `pes2017-recomp-tfix5-e309841.apk`; re-downloaded through the GoFile session
-  (50,180,677 bytes) and its SHA-256 matched the local APK. An anonymous
-  browser context opens the page and sees the APK and its Download button.
-- Engine provenance: `/tmp/pes17-engine-gofile/arm64-v8a/libpes17.so` was
-  extracted from the `app-release.apk` (50,265,889 bytes, MD5
-  `6372c251914d3045e4a77f6471a47ba9`) at https://gofile.io/d/jruoxGY8. Its
-  SHA-256 is `1133fa0b9309b802fbaa8e074b1decde8f5a7912599be409937807ac6478eb69`,
-  exactly `ENGINE_SO_SHA256` in `tools/engine_pin.sh`, and it contains no
-  tfix5 pacing strings. **This APK therefore carries the current app and
-  Settings but the pinned old prebuilt engine; the tfix5 presenter, pacer and
-  guest-vblank changes are not in its native code.**
-- Missing build inputs: the recompiled guest tree and its generated
-  `ppc_recomp_shared.h`, the matching generated translation units, and an
-  Android NDK/CMake toolchain. They are not in this repository or workspace,
-  which is why `-PprebuiltNative` was used; without that property
-  `android/app/build.gradle.kts` expects the full CMake build.
-- Next task: obtain the guest source tree matching this branch, rebuild
-  `libpes17.so` from the current native sources with `./build.sh` (NDK +
-  generated units), confirm the resulting library contains the `pacing:` and
-  `display-timing` strings, package it with `-PprebuiltNative`, then install
-  and check `PES17_TRACE_PACING` on a 30 FPS match (2-blank dominance, small
-  phase error) before claiming device smoothness.
+- **The packaged engine predates the native pacing work**, for the reason
+  above. A full rebuild needs the generated guest tree and the NDK; only then
+  can `PES17_TRACE_PACING` be checked in a match. The JVM/UI changes (RS
+  path, wheel, preview, GitHub link, all seven limits selectable) are in this
+  APK.
+- **No Android device or emulator was available.** The RS fix, the wheel under
+  continuous rolling, the preview on real screen sizes, and pacing smoothness
+  were not run in-game. The APK was not installed. What is verified is source,
+  unit tests, host timing tests, the build, and the APK's contents.

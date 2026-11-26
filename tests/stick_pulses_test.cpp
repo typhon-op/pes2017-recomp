@@ -401,6 +401,12 @@ int main()
             }
         });
 
+        // A single-core host can let the reader finish every sample before the
+        // writer is scheduled at all; that is the scheduler, not a lost update.
+        // Wait (bounded) for the writer's first pass before reading.
+        for (int spins = 0; spins < 1000000 && writes.load(std::memory_order_relaxed) == 0; spins++)
+            std::this_thread::yield();
+
         bool sane = true;
         for (int i = 0; i < 20000; i++)
         {

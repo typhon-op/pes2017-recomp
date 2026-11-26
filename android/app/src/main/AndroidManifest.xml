@@ -120,6 +120,16 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
+        <!-- LEFT STICK PREVIEW: the fixed, non-scrolling page the Preview
+             button on the left stick screen opens. -->
+        <activity
+            android:name=".LeftStickPreviewActivity"
+            android:exported="false"
+            android:parentActivityName=".LeftStickActivity"
+            android:screenOrientation="fullUser"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+
         <activity
             android:name=".ControlGuideActivity"
             android:exported="false"

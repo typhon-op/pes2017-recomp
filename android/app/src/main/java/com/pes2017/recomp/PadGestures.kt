@@ -425,6 +425,102 @@ object TrickWheel {
 }
 
 /**
+ * The skill wheel's gesture: which finger owns it, where it landed, and which
+ * sector that finger is on.
+ *
+ * Visibility is *derived* from the owner pointer and the clock ([isOpen]), never
+ * stored in a flag that a timer sets. The wheel used to keep an `open` boolean
+ * that a posted runnable flipped, and every path that removed that callback -- a
+ * second thumb landing, a cancelled runnable, a redraw in between -- could leave
+ * the ring gone while the thumb was still rolling through sectors. Here the only
+ * way the wheel is not on screen is the owner letting go (or a cancel), which is
+ * exactly the condition that should close it.
+ *
+ * A second finger cannot steal the wheel from one that is already open, and a
+ * release only closes it when it is the owner's. Pure, so `WheelGestureTest`
+ * walks it through continuous rolling, direction changes and cancellations
+ * without a phone.
+ */
+class WheelGesture(private val holdMs: Long = TrickWheel.HOLD_MS) {
+
+    /** The finger that owns the gesture, or -1. */
+    var pointer: Int = -1
+        private set
+
+    /** Where that finger landed: the ring is drawn around the thumb. */
+    var originX: Float = 0f
+        private set
+    var originY: Float = 0f
+        private set
+
+    /** The sector the thumb is on, or -1 in the deadzone. */
+    var sector: Int = -1
+        private set
+
+    private var downAt = 0L
+
+    val isHeld: Boolean get() = pointer >= 0
+
+    /**
+     * Whether the ring is on screen at [nowMs]: the owner is still down and has
+     * held long enough. Asking this every frame is what keeps the wheel visible
+     * through continuous input.
+     */
+    fun isOpen(nowMs: Long): Boolean = pointer >= 0 && nowMs - downAt >= holdMs
+
+    /** How long the owner has held, for the tap/hold decision on release. */
+    fun heldFor(nowMs: Long): Long = if (pointer >= 0) (nowMs - downAt).coerceAtLeast(0L) else 0L
+
+    /**
+     * A thumb lands on the wheel. Returns false when another finger already owns
+     * an open wheel -- that press must not move the origin out from under it or
+     * close it. A second finger on a wheel that has not opened yet replaces the
+     * press, because neither has chosen anything.
+     */
+    fun press(pointerId: Int, x: Float, y: Float, nowMs: Long): Boolean {
+        if (pointer >= 0 && pointer != pointerId && isOpen(nowMs)) return false
+        pointer = pointerId
+        originX = x
+        originY = y
+        sector = -1
+        downAt = nowMs
+        return true
+    }
+
+    /**
+     * The owner moved. [dx] and [dy] are from the landing point; the sector is
+     * the pure `TrickWheel` answer and is kept even before the hold elapses, so
+     * the ring opens already showing the right move.
+     */
+    fun aim(dx: Float, dy: Float, radius: Float) {
+        if (pointer < 0) return
+        sector = TrickWheel.sector(dx, dy, radius)
+    }
+
+    /** What the owner's lift decided, or null when this finger does not own it. */
+    class Release(val wasHold: Boolean, val sector: Int)
+
+    /**
+     * The owner lifted. Only that finger closes the wheel; another thumb's lift
+     * is not a lift of the wheel and returns null, leaving it open.
+     */
+    fun release(pointerId: Int, nowMs: Long): Release? {
+        if (pointer < 0 || pointerId != pointer) return null
+        val held = heldFor(nowMs)
+        val chosen = sector
+        pointer = -1
+        sector = -1
+        return Release(TrickWheel.isHold(held), chosen)
+    }
+
+    /** A cancel, pause, phase change or the editor: nothing of the gesture survives. */
+    fun cancel() {
+        pointer = -1
+        sector = -1
+    }
+}
+
+/**
  * The shortest gap between two presses of the same button for the second to be
  * a press of its own rather than the bounce of the first. Two taps of sprint --
  * the speed burst -- are a fifth of a second apart and never touch this; a
