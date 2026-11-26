@@ -2,6 +2,11 @@
 #include <ppc_recomp_shared.h>
 #include "title.h"
 #include "game_phase.h"
+#include "match_state.h"
+
+// Declared here rather than pulled from android/android.h: the flow hook only
+// needs the one call, and the header drags the window and Vulkan layers with it.
+namespace android::input { void SetMatchState(uint8_t state, uint8_t event); }
 #include "guest.h"
 #include "log.h"
 #include "crash.h"
@@ -83,6 +88,17 @@ GUEST_HOOK(82F00CE8)
         if (lastFlow.exchange(word) != word)
             LOGI("phase: %s -- %s", word == 2 ? "a match is running" : "the menus are up",
                  name.c_str());
+        // The same name, at the resolution it supports: which part of the match
+        // flow this is, and a menu reached from one. Only what the name says --
+        // possession, half-time and the final whistle are not in it (see
+        // runtime/match_state.h). Told once per change, to the app's listener
+        // and to nativeMatchState, which the app polls beside the phase.
+        const ::match::Event changed = ::match::NoteFlow(name.c_str(), unsigned(name.size()));
+        if (changed != ::match::Event::None)
+        {
+            LOGI("match: %s -- %s", ::match::EventName(changed), name.c_str());
+            android::input::SetMatchState(uint8_t(::match::Current()), uint8_t(changed));
+        }
     }
     if (name == "Intro/ProcInstall" && once++ == 0)
     {

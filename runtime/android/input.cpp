@@ -208,12 +208,17 @@ namespace
     void (*g_rumble)(uint32_t user, uint16_t low, uint16_t high) = nullptr;
     // Set by jni.cpp so a change of what the title is doing can reach the app.
     void (*g_phaseSink)(uint8_t phase) = nullptr;
+    // And a change of what the match is doing, with the event that made it.
+    void (*g_matchSink)(uint8_t state, uint8_t event) = nullptr;
+    // The last pair handed over, so a repeated state does not cross into Java.
+    std::atomic<uint16_t> g_lastMatch{ 0xFFFF };
 }
 
 namespace android::input::detail
 {
     void SetRumbleSink(void (*sink)(uint32_t, uint16_t, uint16_t)) { g_rumble = sink; }
     void SetPhaseSink(void (*sink)(uint8_t phase)) { g_phaseSink = sink; }
+    void SetMatchStateSink(void (*sink)(uint8_t state, uint8_t event)) { g_matchSink = sink; }
 }
 
 void android::input::SetTouchPad(const Pad& pad)
@@ -247,6 +252,13 @@ void android::input::SetGamePhase(uint8_t phase)
     static std::atomic<uint8_t> last{ 0xFF };
     if (last.exchange(phase, std::memory_order_relaxed) == phase) return;
     if (g_phaseSink) g_phaseSink(phase);
+}
+
+void android::input::SetMatchState(uint8_t state, uint8_t event)
+{
+    const uint16_t pair = uint16_t(state) | uint16_t(event) << 8;
+    if (g_lastMatch.exchange(pair, std::memory_order_relaxed) == pair) return;
+    if (g_matchSink) g_matchSink(state, event);
 }
 
 void android::input::SetDpadSynthesis(bool enabled)

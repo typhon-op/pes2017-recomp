@@ -153,7 +153,7 @@ namespace
             uint64_t serial = 0;
         };
         std::mutex lock;
-        std::condition_variable wake, takenWake;
+        std::condition_variable wake, takenWake, spaceWake;
         std::deque<Queued> frameQueue;
         uint64_t taken = 0;                  // the last frame copied out or let go
         std::atomic<uint64_t> lastQueued{ 0 };
@@ -1202,7 +1202,7 @@ namespace
             time.presentID = presentId;
             time.desiredPresentTime = uint64_t(std::max<int64_t>(desired, 0));
             times.swapchainCount = 1;
-            times.pPresentTimes = &time;
+            times.pTimes = &time;
             present.pNext = &times;
             if (g.presentWait) times.pNext = &id;
         }

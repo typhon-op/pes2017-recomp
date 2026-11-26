@@ -102,6 +102,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
      * for a frame does not open it, and the chord is disarmed when it fires so
      * the menu cannot be toggled twice by one press.
      */
+    /** The engine's last answer (runtime/match_state.h); read here and pushed below. */
+    private var matchState = MatchState.UNKNOWN
+
     private val chordKeys = HashSet<Int>()
     private var chordArmed = true
     private var chordPolling = false
@@ -124,6 +127,12 @@ class GameActivity : AppCompatActivity(), NativeListener {
                 if (overlay.gamePhase != phase) {
                     Log.i("PES17Stick", "stick: phase read as $phase")
                     overlay.gamePhase = phase
+                }
+                val matchNow = MatchState.entries.getOrNull(NativeBridge.nativeMatchState())
+                    ?: MatchState.UNKNOWN
+                if (matchState != matchNow) {
+                    Log.i("PES17Stick", "stick: match read as $matchNow")
+                    matchState = matchNow
                 }
             }
             handler.postDelayed(this, PHASE_POLL_MS)
@@ -2027,6 +2036,20 @@ class GameActivity : AppCompatActivity(), NativeListener {
         handler.post {
             if (isFinishing) return@post
             overlay.gamePhase = GamePhase.entries.getOrNull(phase) ?: GamePhase.UNKNOWN
+        }
+    }
+
+    override fun onMatchState(state: Int, event: Int) {
+        // The runtime calls this from its own threads, once per change: the
+        // flow names the title enters, and the pause this activity causes.
+        // Nothing on the pad follows it yet -- the phase still decides what is
+        // drawn -- so this records it for the next thing that needs it.
+        val next = MatchState.entries.getOrNull(state) ?: MatchState.UNKNOWN
+        val why = MatchEvent.entries.getOrNull(event) ?: MatchEvent.NONE
+        handler.post {
+            if (isFinishing) return@post
+            if (next != matchState) Log.i("PES17Stick", "stick: match $next ($why)")
+            matchState = next
         }
     }
 

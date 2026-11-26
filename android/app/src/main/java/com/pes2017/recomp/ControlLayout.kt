@@ -196,6 +196,33 @@ enum class GamePhase {
 }
 
 /**
+ * What the match is doing, as the engine can tell it (runtime/match_state.h):
+ * the title's own flow names, and the app's pause of the title.
+ *
+ * [LOADING] is `Match/MatchSetup` -- the teams come out and the match loads --
+ * and [IN_PLAY] is the rest of the match flow. Possession, half-time and the
+ * final whistle are not in the flow name and so are not here: the engine says
+ * nothing rather than guessing.
+ */
+enum class MatchState {
+    UNKNOWN,
+    MENUS,
+    LOADING,
+    IN_PLAY,
+}
+
+/** Why [NativeListener.onMatchState] was called. */
+enum class MatchEvent {
+    NONE,
+    ENTERED_MENUS,
+    LEFT_MATCH,
+    ENTERED_LOADING,
+    ENTERED_IN_PLAY,
+    PAUSED,
+    RESUMED,
+}
+
+/**
  * One thing on screen. Positions are fractions of the window so a layout
  * made on one phone still makes sense on another, and sizes are in
  * density-independent pixels so a button is the same size in millimetres on

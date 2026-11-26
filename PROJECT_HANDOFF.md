@@ -528,3 +528,102 @@ coverage of the arithmetic; the View itself still needs a phone.
 The APK on GoFile predates this extraction -- behaviour is unchanged, only
 moved code -- so that binary is not a build of this exact commit.
 
+
+### Native engine rebuilt from the resume kit (second pass, 2026-11-26)
+
+The engine in the APK from the previous pass was the one extracted from the
+supplied package. This pass rebuilt `libpes17.so` from source and packaged
+**that**, so the .so in the APK below is not the supplied binary.
+
+**What was restored.** `pes17-resume-kit-tfix5-adrenotools.tar.zst`
+(377,034,221 bytes, SHA-256 `c415832ce00eb054fcc4c0069f19d7949f69064510e2389f4fd59625818610af`,
+zstd -t clean; 2,291,824,640 bytes of tar, 15,087 entries) into `_kit/resume-kit`.
+It carries the generated `ppc/` tree (1,420 files, 478 MB), the configured
+`build-android/` with 1,290 cached guest objects, `pes/default.xex`, the
+`third_party/libadrenotools` submodule content, the supplied engine as
+`payload/engine/` (SHA-256 `480d50af…`, byte-identical to the .so in the
+supplied APK), and `patches/uncommitted.patch`. Nothing tracked was overwritten:
+`ppc/`, `build-android/`, `pes/` and `third_party/libadrenotools` were absent
+from this checkout and were copied in; the payload copies of `third_party/`
+are byte-identical to the tracked trees (`diff -rq`, no output).
+
+**The resume point.** Objects cached from the kit build of 2026-11-26 06:10;
+`libpes17.so` itself was not in the kit, so the link and everything after it
+was the work of this pass. The kit's `build.ninja` is keyed to
+`/workspace/chats/81946bcbd8e89e75f282d199` and `/workspace/homes/81946bcbd8e89e75f282d199`;
+`_kit/nsbuild.sh` bind-mounts this checkout at the first path inside a private
+user namespace, so every cached command line stays byte-identical.
+
+**Making Ninja trust the cache.** A fresh checkout stamps every file with the
+checkout time, which is newer than the cached objects and rebuilds all 1,415
+guest units (the first two attempts did exactly that, 1,676 edges). Two
+corrections, both mechanical and both verified by `ninja -d explain`:
+
+* every tracked file unchanged between `e18265c` (the last commit before the
+  kit was made) and `HEAD` was given the mtime `2026-11-25 18:00Z`, older than
+  both object sets;
+* the NDK copied to the baked path `/tmp/tc/android-ndk-r28c` (r28c,
+  28.2.13676358, clang 19.0.1) was given the same mtime, because its sysroot
+  headers are inputs of every guest unit.
+
+Without the second one 1,251 guest units still rebuilt. With both, the build
+was 153 edges.
+
+**Two source fixes the checkout was missing**, both from the kit's
+`patches/uncommitted.patch` (the kit's engine was built with them applied, so
+they are part of the supplied engine's behaviour):
+
+* `runtime/gpu/vulkan/presenter.cpp` used `g.spaceWake` in four places but never
+  declared it -- the file did not compile at all on this branch;
+* `VkPresentTimesInfoGOOGLE` has `pTimes`, not `pPresentTimes`, so the
+  display-timing path did not compile either.
+
+**Builds.** `cmake` 4.4.5 and `ninja` 1.13.2 (pip `--user`), NDK r28c, JDK 17,
+SDK 35. `ninja -j3 pes17` on the 4-core/8 GiB container: peak RSS 2,355 MiB,
+link 1.5 GB. The engine builds clean.
+
+**What is in the rebuilt engine.** `frame_rate::PresentInOrder()` disassembles
+to `cmp w19,#2` / `mov w9,#0x3b` / `sub w8,w8,#1` / `ccmp w8,w9,#2,ne` /
+`cset w0,lo` -- `mode != Compatibility && 1 <= limit <= 59`, i.e. the
+all-limits schedule. The supplied engine's copy of the same function tests
+`ccmp w8,#0x1e` (`limit == 30`) in the same place, so the APK's pacing is new
+code, not the package's.
+
+| | bytes | SHA-256 |
+|---|---|---|
+| rebuilt, unstripped `build-android/libpes17.so` | 459,006,976 | `c38fa6e2b0ae88e9d365bc0d7640240c92ae12c714c7b54ac253137147948dd3` |
+| built, stripped `engine-tfix5/arm64-v8a/libpes17.so` | 139,432,888 | `cb1ba5639438d0c98e34780cf41bae2520407534731cf26c97698b0895ba4289` |
+| supplied engine (previous APK, kept at `_kit/engine-previous/`) | 139,430,000 | `480d50af78bb3228ee8c02e10e27c45f496e63610c42f81f3e6a63a4e6913327` |
+
+**Game-state signals.** `runtime/match_state.h` turns the title's own flow
+names (`Match/MatchSetup`, `Match/MatchIdle`, `Match/MatchPostPause`, anything
+else = menus) into `Unknown/Menus/Loading/InPlay` plus one event per change and
+a lifecycle pause flag, in one atomic word. Pushed as
+`NativeListener.onMatchState(state, event)`, readable as
+`nativeMatchState()` / `nativeMatchPaused()`, reset in `nativeStart`, paused
+from `nativeSetPaused`. Not signalled, deliberately: possession, loose ball,
+half-time, full time, post-match, next match -- none of them are in the flow
+name and this build has no address for the title's match state machine
+(`T_DATA_ClientStates` is still 0). See `docs/game-state-signals.md`.
+
+**This pass's checks.** `tests/match_state_test.cpp` 43 checks, 0 failures;
+`tests/game_phase_test.cpp` 19, 0; `:app:testDebugUnitTest` 377 tests, 0
+failures; release APK built; the packaged
+`lib/arm64-v8a/libpes17.so` hashes to the stripped engine above and contains
+`nativeMatchState`/`nativeMatchPaused` and the new pacing code.
+
+**APK this pass.** `android/app/build/outputs/apk/release/app-release.apk`,
+**50,225,395 bytes**, SHA-256
+`2380b0aac406ca5fca885ee72a454f1dd07d8cf05341ba80ca80dec12f519397`, arm64-v8a
+only, debug key. The previous APK (50,181,941 bytes, `40364bc2…`) is unchanged
+in the repository's history and on GoFile; this one supersedes it.
+
+**Still not verified.** No phone or emulator here: the pacing schedule, the
+guest-unique parts, the flow names in a real match, and the new callback in
+Java were not run. `PES17_TRACE_PACING` has not been seen on a device, and the
+game-state enumeration was not confirmed against a live title. The `.so` builds
+and its code is present and correct by disassembly, which is not the same as a
+match running at 35 FPS.
+
+**Not done.** The APK was not re-uploaded to GoFile (not asked for this pass);
+`_kit/` holds the downloads and the extracted kit and is not tracked.

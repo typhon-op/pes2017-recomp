@@ -185,6 +185,16 @@ add_executable(game-phase-test
 target_include_directories(game-phase-test PRIVATE "${PES17_RUNTIME}")
 add_test(NAME game-phase COMMAND game-phase-test)
 
+# ---- what the match is doing -----------------------------------------------
+# The state and the change event the app is told (runtime/match_state.h): what
+# one flow name says, that a repetition is not a change, that a menu after a
+# match is leaving it, that a pause keeps the match it paused, and that a reset
+# leaves nothing behind. Header-only.
+add_executable(match-state-test
+    "${CMAKE_CURRENT_SOURCE_DIR}/match_state_test.cpp")
+target_include_directories(match-state-test PRIVATE "${PES17_RUNTIME}")
+add_test(NAME match-state COMMAND match-state-test)
+
 # ---- the touch stick's throw -----------------------------------------------
 # A radial deadzone and a curve on what is left (runtime/stick_curve.h), with
 # the direction of the push preserved. Header-only, no platform.

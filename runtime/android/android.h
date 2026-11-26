@@ -123,6 +123,10 @@ namespace android::input
     // 2 match). The app shows the controls that belong to each: a d-pad over the
     // menus, nothing extra over the pitch. Sent only when it changes.
     void SetGamePhase(uint8_t phase);
+    // What the match is doing (runtime/match_state.h): the state, and the event
+    // that changed it. Sent only when either changes, so a pad that wants it
+    // can also read it back with nativeMatchState instead of waiting.
+    void SetMatchState(uint8_t state, uint8_t event);
     // Set by the app while its layout has a d-pad on screen. The left stick then
     // stops standing in for one, so the guest is not given the same four bits
     // from two places at once.

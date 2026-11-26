@@ -28,6 +28,7 @@
 #include "../online/service.h"
 #include "../kernel/yield_backoff.h"
 #include "../game_phase.h"
+#include "../match_state.h"
 
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
@@ -60,6 +61,7 @@ namespace android::detail
 }
 namespace android::input::detail { void SetRumbleSink(void (*sink)(uint32_t, uint16_t, uint16_t)); }
 namespace android::input::detail { void SetPhaseSink(void (*sink)(uint8_t)); }
+namespace android::input::detail { void SetMatchStateSink(void (*sink)(uint8_t, uint8_t)); }
 
 namespace
 {
@@ -72,6 +74,7 @@ namespace
     jmethodID g_onStatus = nullptr;
     jmethodID g_onKeyboard = nullptr;
     jmethodID g_onGamePhase = nullptr;
+    jmethodID g_onMatchState = nullptr;
     std::mutex g_keyboardLock;
     std::function<void(bool, const std::string&)> g_keyboardDone;
 
@@ -150,6 +153,18 @@ namespace
         JNIEnv* env = Env();
         if (!env) return;
         env->CallVoidMethod(g_listener, g_onGamePhase, jint(phase));
+        if (env->ExceptionCheck()) env->ExceptionClear();
+    }
+
+    // What the match is doing, on a change: the state and the event that made
+    // it. The app's own listener, so a pause it caused comes back to it with
+    // the state it paused rather than as a lost match.
+    void MatchStateSink(uint8_t state, uint8_t event)
+    {
+        if (!g_listener || !g_onMatchState) return;
+        JNIEnv* env = Env();
+        if (!env) return;
+        env->CallVoidMethod(g_listener, g_onMatchState, jint(state), jint(event));
         if (env->ExceptionCheck()) env->ExceptionClear();
     }
 
@@ -278,11 +293,13 @@ PES17_NATIVE(jboolean, nativeInit)(JNIEnv* env, jobject, jstring filesDir, jstri
         g_onStatus = env->GetMethodID(type, "onStatus", "(Ljava/lang/String;)V");
         g_onKeyboard = env->GetMethodID(type, "onKeyboard", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V");
         g_onGamePhase = env->GetMethodID(type, "onGamePhase", "(I)V");
+        g_onMatchState = env->GetMethodID(type, "onMatchState", "(II)V");
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteLocalRef(type);
     }
     android::input::detail::SetRumbleSink(RumbleSink);
     android::input::detail::SetPhaseSink(PhaseSink);
+    android::input::detail::SetMatchStateSink(MatchStateSink);
 
     // A log per process. The launcher and the run are separate processes
     // and both used to open the same file: whichever started second wiped
@@ -358,6 +375,9 @@ PES17_NATIVE(jboolean, nativeStart)(JNIEnv* env, jobject, jstring gameDirectory)
         LOGW("android: the game is already running");
         return JNI_TRUE;
     }
+    // A new run has observed no flow yet, and carries no pause from the last
+    // one: the app starts from Unknown rather than from a stale match.
+    ::match::Reset();
     g_gameFolder = ToString(env, gameDirectory);
     if (g_gameFolder.empty()) g_gameFolder = g_paths.external + "/game";
 
@@ -460,10 +480,28 @@ PES17_NATIVE(jint, nativeGamePhase)(JNIEnv*, jobject)
     return jint(std::uint8_t(::phase::Observed()));
 }
 
+PES17_NATIVE(jint, nativeMatchState)(JNIEnv*, jobject)
+{
+    // The state itself, not the last push. The listener is told only when it
+    // changes, so a change made before the app was listening -- or before this
+    // activity was the listener -- would otherwise be lost for the session.
+    return jint(std::uint8_t(::match::Current()));
+}
+
+PES17_NATIVE(jboolean, nativeMatchPaused)(JNIEnv*, jobject)
+{
+    return ::match::Paused() ? JNI_TRUE : JNI_FALSE;
+}
+
 PES17_NATIVE(void, nativeSetPaused)(JNIEnv*, jobject, jboolean paused)
 {
     android::detail::SetPaused(paused == JNI_TRUE);
     android::audio::SetMuted(paused == JNI_TRUE);
+    // The match is told about the interruption, not restarted by it: the state
+    // it paused is kept, so a resume puts the app back where it was.
+    const ::match::Event changed = ::match::NotePaused(paused == JNI_TRUE);
+    if (changed != ::match::Event::None)
+        android::input::SetMatchState(uint8_t(::match::Current()), uint8_t(changed));
     // Leaving the game may mean it is killed (it often is): the caches' writes are
     // throttled while it runs, so what is pending is written now.
     if (paused == JNI_TRUE) vk::renderer::RequestCacheFlush();

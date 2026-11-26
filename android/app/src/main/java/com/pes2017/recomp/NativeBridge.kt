@@ -130,6 +130,17 @@ object NativeBridge {
      * sent before the app was listening would otherwise leave it guessing.
      */
     external fun nativeGamePhase(): Int
+
+    /**
+     * What the match is doing right now, as [MatchState]'s index, read from the
+     * engine rather than waited for ([NativeListener.onMatchState] is only
+     * called on a change). Where the phase says menus or a match, this says
+     * which part of a match: the load, or the ball in play.
+     */
+    external fun nativeMatchState(): Int
+
+    /** Whether the app has the title paused right now, as the engine was told. */
+    external fun nativeMatchPaused(): Boolean
     external fun nativeStatus(): String
     external fun nativeLogTail(): String
 
@@ -421,4 +432,12 @@ interface NativeListener {
      * controls marked for a phase come and go with it.
      */
     fun onGamePhase(phase: Int)
+
+    /**
+     * What the match is doing, only when it changes: a [MatchState] index and
+     * the [MatchEvent] index that made it. A pause of the app arrives here too,
+     * carrying the state it paused, and the pad can ask again at any time with
+     * [NativeBridge.nativeMatchState].
+     */
+    fun onMatchState(state: Int, event: Int)
 }
