@@ -625,5 +625,9 @@ game-state enumeration was not confirmed against a live title. The `.so` builds
 and its code is present and correct by disassembly, which is not the same as a
 match running at 35 FPS.
 
-**Not done.** The APK was not re-uploaded to GoFile (not asked for this pass);
-`_kit/` holds the downloads and the extracted kit and is not tracked.
+**Uploaded.** <https://gofile.io/d/k8EBBOZ7> --
+`pes2017-recomp-tfix5-rebuilt-engine.apk`, 50,225,395 bytes, md5
+`134bfc52caa40fd183d5d7dae92f7d23` (the file named `app-release.apk` in
+`android/app/build/outputs/apk/release/`). This replaces the previous pass's
+link <https://gofile.io/d/sKnLytFB>, which served the APK with the supplied
+engine. `_kit/` holds the downloads and the extracted kit and is not tracked.
