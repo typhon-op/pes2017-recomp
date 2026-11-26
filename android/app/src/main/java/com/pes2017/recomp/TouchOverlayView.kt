@@ -93,6 +93,12 @@ class TouchOverlayView @JvmOverloads constructor(
     private val claims = TouchClaims()
     private val stickPositions = HashMap<String, FloatArray>()   // id -> normalised x, y
 
+    // The right stick's axes as pushState sends them (RightStick.kt): every
+    // finger on RS adds here, whether the flick-skill path is reading the thumb
+    // or not. One instance reused per push, so a touch sample does not allocate
+    // the state it is about to send.
+    private val rightStick = RightStick()
+
     // The floating movement stick (Prefs.stickMode): the socket is wherever the
     // thumb landed, and it stays there for the whole push -- the thumb moves
     // inside it, the socket does not chase the thumb. Only the movement stick
@@ -911,8 +917,7 @@ class TouchOverlayView @JvmOverloads constructor(
         var rightTrigger = 0
         var leftX = 0f
         var leftY = 0f
-        var rightX = 0f
-        var rightY = 0f
+        rightStick.reset()
 
         val now = SystemClock.uptimeMillis()
         // A grace that is over is let go here as well as by its own callback, so
@@ -952,8 +957,10 @@ class TouchOverlayView @JvmOverloads constructor(
                                 leftY = position[1]
                             }
                         } else {
-                            rightX += position[0]
-                            rightY += position[1]
+                            // Summed and clamped by the same arithmetic a flick
+                            // writes into (RightStick.kt), so RS is analogue
+                            // with the flick switch on or off.
+                            rightStick.add(position[0], position[1])
                         }
                     }
                 }
@@ -988,7 +995,7 @@ class TouchOverlayView @JvmOverloads constructor(
         }
         val rawLx = leftX.coerceIn(-1f, 1f); val rawLy = leftY.coerceIn(-1f, 1f)
         var lx = rawLx; var ly = rawLy
-        var rx = rightX.coerceIn(-1f, 1f); var ry = rightY.coerceIn(-1f, 1f)
+        var rx = rightStick.rightX(); var ry = rightStick.rightY()
 
         // Two things the runtime does for itself when it was built with them:
         // shaping the throw (runtime/stick_curve.h) and standing the left stick
@@ -2214,18 +2221,17 @@ class TouchOverlayView @JvmOverloads constructor(
         if (!flicking) return
         val element = claims.elementFor(skillPointer) ?: return
         if (element.kind != ControlKind.STICK) return
-        val r = throwRadius(element)
-        var dx = (x - skillOriginX) / r
-        // The guest's Y points up; the screen's points down.
-        var dy = -(y - skillOriginY) / r
-        // A thumb can travel further than the socket is wide; the cap keeps the
-        // knob on its rim and the classifier's travel in range.
-        val length = hypot(dx, dy)
-        if (length > 1.5f) { dx = dx / length * 1.5f; dy = dy / length * 1.5f }
-        // The knob follows the flick, so the hand can see what it is doing.
-        stickPositions[element.id] = floatArrayOf(dx.coerceIn(-1f, 1f), dy.coerceIn(-1f, 1f))
+        val travel = RightStick.flickTravel(
+            skillOriginX, skillOriginY, x, y, throwRadius(element),
+        )
+        // The knob follows the flick, so the hand can see what it is doing. This
+        // is also the right stick's own deflection: pushState sends it as RS,
+        // beside the pulses the runtime overlays on it.
+        stickPositions[element.id] = floatArrayOf(
+            RightStick.clamp(travel[0]), RightStick.clamp(travel[1]),
+        )
         if (!NativeBridge.skillStick) return
-        NativeBridge.nativeSkillTouch(dx, dy)
+        NativeBridge.nativeSkillTouch(travel[0], travel[1])
         invalidate()
     }
 

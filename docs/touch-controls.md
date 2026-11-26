@@ -727,8 +727,9 @@ existed still loads: the reader skips `"id": "rs_dpad"` and any d-pad marked
   element for that pointer id, `ACTION_MOVE` writes `stickPositions[element.id]`
   from `StickVector.of(...)` (guest-signed: up is +1), and `pushState` reads that
   vector for every `ControlKind.STICK` with a non-zero `value`. Right-stick
-  elements add into `rightX`/`rightY` and go to the runtime with the rest of the
-  pad state in one call; nothing presses a button or invents an axis.
+  elements add into `RightStick` (`RightStick.kt`: the sum of the fingers,
+  clamped to -1..1) and go to the runtime with the rest of the pad state in one
+  call; nothing presses a button or invents an axis.
 - **Scaling.** The app's own right-stick shaping (`StickShape.apply`, the Right
   stick deadzone and curve in Settings -> Controls) runs once, in `pushState`,
   and only when the packaged engine predates `runtime/stick_curve.h`. The
@@ -740,7 +741,8 @@ existed still loads: the reader skips `"id": "rs_dpad"` and any d-pad marked
   `nativeSkillPulses`; the analogue deflection is sent as well, every frame, so
   the title sees a held right stick rather than only a pulse. The flick used to
   suppress the axes (`flicked`), which is why the stick "did not respond": only
-  the pulses arrived.
+  the pulses arrived. `RightStickTest` pins the arithmetic with the switch on: a
+  press plus a flick still puts the flick's throw on the right axes.
 - **Multitouch.** Each stick's deflection belongs to the finger that claimed it,
   by Android pointer id. LS and RS are separate claims: a second finger on RS
   does not disturb LS and vice versa. `ACTION_POINTER_UP` releases only the

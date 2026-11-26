@@ -484,3 +484,47 @@ built APK was uploaded to GoFile: <https://gofile.io/d/sKnLytFB> (50,181,941
 bytes, md5 `d280909ff62409980ede33fe1d44a983`, the same file named
 `app-release.apk` in `android/app/build/outputs/apk/release/`).
 
+### Engine check: does the packaged `libpes17.so` already pace every limit?
+
+**No.** The supplied engine has the 30-only pacing from `e309841`, not this
+tree's all-limits schedule.
+
+How it was checked: the packaged library has no `.symtab`, but it does keep a
+725,819-entry `.dynsym`, which exports `frame_rate::PresentInOrder()`
+(`0x38506b8`, 252 bytes) and `frame_rate::PaceSwap()` (`0x38f0ff4`, 560 bytes).
+Those two functions are the whole decision, so they were decoded from the
+`.so` in place (Capstone, ARM64):
+
+- `PresentInOrder`: `cmp w19, #2` / `ccmp w8, #0x1e, #0, ne` / `cset w0, eq`
+  -- i.e. `mode != Compatibility && Limit() == 30`. That is exactly the
+  pre-`dcddc23` `pacing::PresentInOrder(PacingMode(), Limit() == 30)`. The
+  all-limits code asks `Limited()` (`limit != 0 && limit < 60`) instead, so a
+  build of this tree contains no `#0x1e` there.
+- `PaceSwap`: `sub w8, w19, #0x3c` / `cmn w8, #0x3b` / `b.lo` (return for 0 or
+  >= 60), `bl PresentInOrder`, then the in-order branch computing
+  `DivisorForPeriod` (float divide, `fcvtas`, `fcmul` of period and limit) and
+  `NextBoundary`; every other limit falls through to the independent clock
+  `udiv 0x000f4240, limit` x 1000 ns. A build of this tree's `PaceSwap` has
+  `FrameDeadline`/`FramesElapsed` (integer division of the frame index by the
+  limit) and calls `NextBoundary(..., 1)`.
+
+Consequence: 30 FPS is tied to the display's boundary in the shipped engine;
+35/40/45/50/55 keep the free-running `1000/limit` clock and drift against the
+panel. The Settings pages and the app-side wiring offer all seven, and the host
+test pins the new arithmetic, but the `.so` in the APK is the old one -- a
+rebuilt engine is needed for all-limits pacing in a match.
+
+### RS regression test, and a small extraction
+
+The right-stick arithmetic `pushState` and `sendSkill` already did (the sum of
+the fingers on the stick, the clamp to -1..1, the flick's capped travel and its
+Y sign) now lives in `RightStick.kt`, and `RightStickTest` (6 tests) pins it:
+with flick-skill on, a press plus a flick still sends a throw on RS in the
+flick's direction; a resting stick sends nothing; two fingers clamp; travel
+past the rim keeps the knob on it while the runtime gets the full travel; a new
+push starts from zero. Suite: **377 tests, 0 failures** (was 371). This is JVM
+coverage of the arithmetic; the View itself still needs a phone.
+
+The APK on GoFile predates this extraction -- behaviour is unchanged, only
+moved code -- so that binary is not a build of this exact commit.
+
