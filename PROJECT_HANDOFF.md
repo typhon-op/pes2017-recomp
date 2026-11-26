@@ -631,3 +631,38 @@ match running at 35 FPS.
 `android/app/build/outputs/apk/release/`). This replaces the previous pass's
 link <https://gofile.io/d/sKnLytFB>, which served the APK with the supplied
 engine. `_kit/` holds the downloads and the extracted kit and is not tracked.
+
+## Native engine build checkpoint (tfix5)
+
+**Archive.** `_checkpoint/pes17-native-engine-checkpoint-tfix5.tar.zst`,
+**503,855,822 bytes**, SHA-256
+`72a0d3e2759581de562f774fbcbfbd864e06d53b8eefb42c0892a1d9e2ab32b3`
+(zstd -6, uncompressed 2,770,759,680 bytes), 15,193 files in
+`MANIFEST.sha256`. On GoFile: <https://gofile.io/d/DcXI2BPk> -- same filename
+and size, md5 `95de98a2a90970d77d0128e80a4bf325`, matching the local file.
+
+**What is inside.** `repo/` (git archive of `4e2a680`), the generated and
+reconstructed `ppc/` source with its 1,414 objects, `pes/` (the
+`default.xex`, 32,493,568 bytes, `b914ec9a…`), `build-android/` (every object,
+depfile, `_deps`, `.ninja_log`, `.ninja_deps`, `libppc_recomp.a`, the
+unstripped `libpes17.so` `ccb831dd…`), `engine/arm64-v8a/libpes17.so`
+(`cb1ba563…`, the verified 139,432,888-byte stripped engine), `toolchain/`
+(sources + `toolchain.sh`, no NDK binaries), `patches/`, `logs/`, `README.md`,
+`BUILD-INFO.txt`, `restore.sh`, both manifests. No credentials, no `.git`, no
+APK, no previous kit.
+
+**Restore.** `_checkpoint/` is untracked (2.6 GB). Extract anywhere, then
+`bash <ck>/restore.sh <ck> <workdir>`, which flattens `repo/` into the build
+root, stamps the NDK, writes the bind-mount shim that maps the baked path
+`/workspace/chats/81946bcbd8e89e75f282d199`, configures CMake and runs
+`ninja -j3 pes17`.
+
+**Restore test (fresh extraction of this archive).** Hashes of the XEX and of
+`engine/arm64-v8a/libpes17.so` verified inside the tree, CMake configured,
+1,414 guest objects reused with **zero** recompiles, ~226 bundled-ffmpeg and
+94 engine units rebuilt once because `cmake` re-timestamps
+`third_party/ffmpeg-xenia/portable/config.h` (~3 minutes total), after which
+`ninja -j3 pes17` reports `ninja: no work to do.` The relinked engine is
+functionally identical but not byte-identical (`9891bfcf…` unstripped,
+`ecad4beb…` stripped); the archived `cb1ba563…` binary remains the verified
+one. `sha256sum -c MANIFEST.sha256` passes on the extracted tree.
