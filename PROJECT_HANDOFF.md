@@ -635,13 +635,16 @@ engine. `_kit/` holds the downloads and the extracted kit and is not tracked.
 ## Native engine build checkpoint (tfix5)
 
 **Archive.** `_checkpoint/pes17-native-engine-checkpoint-tfix5.tar.zst`,
-**504,091,231 bytes**, SHA-256
-`7768046b26cd689b739ac0c479a7eff4865d6cb5a992058d232514c82e823977`
-(zstd -6, uncompressed 2,771,701,760 bytes), 15,302 files in
-`MANIFEST.sha256`. On GoFile: <https://gofile.io/d/XpNRrEZe> -- same filename
-and size, md5 `7e3d333c3cbd63e1e309be26d2b8de8c`, matching the local file.
-This supersedes <https://gofile.io/d/DcXI2BPk>, whose restore rebuilt 231
-objects and relinked a different library.
+**504,092,073 bytes**, SHA-256
+`f1d80b5d2aea442cfaacd6f86c6163e977de35636d80d3fc7543e5b88e0e7a4c`
+(zstd -6, uncompressed 2,771,712,000 bytes), 15,303 files in
+`MANIFEST.sha256`. On GoFile: <https://gofile.io/d/F9IpsNRc> -- same filename
+and size, md5 `a69940a31d8a04e686b153c83a95f92e`, matching the local file.
+This supersedes <https://gofile.io/d/XpNRrEZe> (504,091,231 bytes, `7768046b…`),
+which restored correctly but still carried the earlier mtime and
+`build.ninja` settle steps; and that one superseded
+<https://gofile.io/d/DcXI2BPk>, whose restore rebuilt 231 objects and relinked a
+different library.
 
 **What is inside.** `repo/` (git archive of `4e2a680` plus
 `third_party/libadrenotools`, which `.gitignore` excludes and CMake needs for
@@ -652,8 +655,17 @@ depfile, `_deps`, `.ninja_log`, `.ninja_deps`, `libppc_recomp.a`, the
 unstripped `libpes17.so` `ccb831dd…`), `engine/arm64-v8a/libpes17.so`
 (`cb1ba563…`, the verified 139,432,888-byte stripped engine), `toolchain/`
 (sources + `toolchain.sh`, no NDK binaries), `patches/`, `logs/`, `README.md`,
-`BUILD-INFO.txt`, `restore.sh`, both manifests. No credentials, no `.git`, no
-APK, no previous kit.
+`BUILD-INFO.txt`, `restore.sh`, `check-sources.sh`, both manifests. No
+credentials, no `.git`, no APK, no previous kit.
+
+**Guarding the gitignored source.** `third_party/libadrenotools` is the one part
+of the source tree `git archive` drops and CMake does not miss: it configures
+anyway, omits `-DPES17_HAVE_ADRENOTOOLS=1` and 94 units come out different.
+`check-sources.sh` names every missing build input and exits non-zero;
+`restore.sh` runs it on the restored tree and then refuses a configured
+`build.ninja` without that define, and the README tells a future pack to run it
+over `repo/` before tarring. A repack that loses the tree now fails instead of
+producing a library that no longer matches.
 
 **Restore.** `_checkpoint/` is untracked (2.6 GB). Extract anywhere, then
 `bash <ck>/restore.sh <ck> <workdir>`, which flattens `repo/` into the build
@@ -662,15 +674,18 @@ root, stamps the NDK, writes the bind-mount shim that maps the baked path
 `ninja -j3 pes17`.
 
 **Restore test (fresh extraction of this archive).** `sha256sum -c
-MANIFEST.sha256` passes, CMake configures with the same compile command lines,
-and `ninja -j3 pes17` answers `ninja: no work to do.` in **10 s**: nothing is
-compiled and `build-android/libpes17.so` comes back as `ccb831dd…`, identical
-to the archived link output, with `engine/arm64-v8a/libpes17.so` at
-`cb1ba563…`. Two things were needed for that: shipping the gitignored
-`third_party/libadrenotools` (without it 94 units compiled with different
-defines and the engine hash changed), and configuring with
-`-DCMAKE_SUPPRESS_REGENERATION=ON` plus restoring archived mtimes on
-regenerated files, so Ninja never reruns CMake and re-stamps
-`third_party/ffmpeg-xenia/portable/config.h`. After editing a `CMakeLists.txt`
-the configure command has to be run by hand. Touching one source still gives
-exactly one recompile and one link.
+MANIFEST.sha256` passes over all 15,303 files, CMake configures with the same
+compile command lines, and `ninja -j3 pes17` answers `ninja: no work to do.` in
+**11 s**: nothing is compiled and `build-android/libpes17.so` comes back as
+`ccb831dd…`, identical to the archived link output, with
+`engine/arm64-v8a/libpes17.so` at `cb1ba563…`. What that needs is now three
+things and nothing else: shipping the gitignored `third_party/libadrenotools`;
+`-DCMAKE_SUPPRESS_REGENERATION=ON`, which leaves the generated `build.ninja`
+with no `RERUN_CMAKE` or glob-verify edge, so Ninja never reruns CMake; and the
+archived mtime put back on the single generated file a compile edge reads,
+`third_party/ffmpeg-xenia/portable/config.h` (configure rewrites 27 files on
+every run; the other 26 are CMake's own and feed no edge). The earlier loop that
+re-stamped every regenerated file and the final `touch build.ninja` are gone --
+measured unnecessary once regeneration is suppressed. After editing a
+`CMakeLists.txt` the configure command has to be run by hand. Touching one
+source still gives exactly one recompile and one link.
