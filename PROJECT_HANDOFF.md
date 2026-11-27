@@ -625,6 +625,17 @@ game-state enumeration was not confirmed against a live title. The `.so` builds
 and its code is present and correct by disassembly, which is not the same as a
 match running at 35 FPS.
 
+**Rebuilt from the checkpoint (2026-11-27).** Same source and the same engine,
+packaged again in a scratch copy of `repo/` with
+`-PprebuiltNative=<checkpoint>/engine` (no native compile): **50,225,395
+bytes**, SHA-256
+`81e34bf303337d25d2476136c264e83e50681a2cf1f0a7c200b9dede14cb7a83`, md5
+`7a8092a08643684583175c3463ba37ff`, versionCode 44 / 0.2.4, minSdk 26 /
+target 35, arm64-v8a only, debug key, and `lib/arm64-v8a/libpes17.so` inside it
+still hashes to `cb1ba563…`. It differs from `2380b0aa…` only through zip/AAPT
+timestamps. On GoFile: <https://gofile.io/d/cQkBVqTP> -- 50,225,395 bytes, md5
+matching the local file. This is the file to hand out.
+
 **Uploaded.** <https://gofile.io/d/k8EBBOZ7> --
 `pes2017-recomp-tfix5-rebuilt-engine.apk`, 50,225,395 bytes, md5
 `134bfc52caa40fd183d5d7dae92f7d23` (the file named `app-release.apk` in
