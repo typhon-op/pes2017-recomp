@@ -635,13 +635,17 @@ engine. `_kit/` holds the downloads and the extracted kit and is not tracked.
 ## Native engine build checkpoint (tfix5)
 
 **Archive.** `_checkpoint/pes17-native-engine-checkpoint-tfix5.tar.zst`,
-**503,855,822 bytes**, SHA-256
-`72a0d3e2759581de562f774fbcbfbd864e06d53b8eefb42c0892a1d9e2ab32b3`
-(zstd -6, uncompressed 2,770,759,680 bytes), 15,193 files in
-`MANIFEST.sha256`. On GoFile: <https://gofile.io/d/DcXI2BPk> -- same filename
-and size, md5 `95de98a2a90970d77d0128e80a4bf325`, matching the local file.
+**504,091,231 bytes**, SHA-256
+`7768046b26cd689b739ac0c479a7eff4865d6cb5a992058d232514c82e823977`
+(zstd -6, uncompressed 2,771,701,760 bytes), 15,302 files in
+`MANIFEST.sha256`. On GoFile: <https://gofile.io/d/XpNRrEZe> -- same filename
+and size, md5 `7e3d333c3cbd63e1e309be26d2b8de8c`, matching the local file.
+This supersedes <https://gofile.io/d/DcXI2BPk>, whose restore rebuilt 231
+objects and relinked a different library.
 
-**What is inside.** `repo/` (git archive of `4e2a680`), the generated and
+**What is inside.** `repo/` (git archive of `4e2a680` plus
+`third_party/libadrenotools`, which `.gitignore` excludes and CMake needs for
+`-DPES17_HAVE_ADRENOTOOLS=1`), the generated and
 reconstructed `ppc/` source with its 1,414 objects, `pes/` (the
 `default.xex`, 32,493,568 bytes, `b914ec9a…`), `build-android/` (every object,
 depfile, `_deps`, `.ninja_log`, `.ninja_deps`, `libppc_recomp.a`, the
@@ -657,12 +661,16 @@ root, stamps the NDK, writes the bind-mount shim that maps the baked path
 `/workspace/chats/81946bcbd8e89e75f282d199`, configures CMake and runs
 `ninja -j3 pes17`.
 
-**Restore test (fresh extraction of this archive).** Hashes of the XEX and of
-`engine/arm64-v8a/libpes17.so` verified inside the tree, CMake configured,
-1,414 guest objects reused with **zero** recompiles, ~226 bundled-ffmpeg and
-94 engine units rebuilt once because `cmake` re-timestamps
-`third_party/ffmpeg-xenia/portable/config.h` (~3 minutes total), after which
-`ninja -j3 pes17` reports `ninja: no work to do.` The relinked engine is
-functionally identical but not byte-identical (`9891bfcf…` unstripped,
-`ecad4beb…` stripped); the archived `cb1ba563…` binary remains the verified
-one. `sha256sum -c MANIFEST.sha256` passes on the extracted tree.
+**Restore test (fresh extraction of this archive).** `sha256sum -c
+MANIFEST.sha256` passes, CMake configures with the same compile command lines,
+and `ninja -j3 pes17` answers `ninja: no work to do.` in **10 s**: nothing is
+compiled and `build-android/libpes17.so` comes back as `ccb831dd…`, identical
+to the archived link output, with `engine/arm64-v8a/libpes17.so` at
+`cb1ba563…`. Two things were needed for that: shipping the gitignored
+`third_party/libadrenotools` (without it 94 units compiled with different
+defines and the engine hash changed), and configuring with
+`-DCMAKE_SUPPRESS_REGENERATION=ON` plus restoring archived mtimes on
+regenerated files, so Ninja never reruns CMake and re-stamps
+`third_party/ffmpeg-xenia/portable/config.h`. After editing a `CMakeLists.txt`
+the configure command has to be run by hand. Touching one source still gives
+exactly one recompile and one link.
