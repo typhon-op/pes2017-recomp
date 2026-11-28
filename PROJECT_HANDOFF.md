@@ -700,3 +700,79 @@ re-stamped every regenerated file and the final `touch build.ninja` are gone --
 measured unnecessary once regeneration is suppressed. After editing a
 `CMakeLists.txt` the configure command has to be run by hand. Touching one
 source still gives exactly one recompile and one link.
+
+## tfix6 (2026-11-28): CPU Pinning -- the engine's measured modes, not invented core counts
+
+**What the row was, and why it is gone.** `aa75d885` added a Performance row
+called CPU Thread Limit with Auto / 2 / 3 / 4 / All, pushed as a new option
+`PES17_THREAD_LIMIT`, with a native block that narrowed the guest's affinity
+mask to N cores. Nothing in the repository had measured 2, 3 or 4 cores on any
+device: the numbers that exist are for the engine's own pinning modes, and they
+say the opposite of a narrow mask -- on the POCO X7 Pro (Dimensity 8400,
+1+3+4) the title's sixty-odd threads share the three performance cores and "the
+busy ones waited about as long as they ran", which is why the runtime has a
+wide mode in the first place. A menu that invents a core count next to a
+measured set of modes invites exactly the slower configuration the feature was
+meant to avoid. `e2c7f117` removes the option, the native block and the row.
+
+**The row now.** "CPU Pinning" (`CpuPinning.kt`, `Prefs.cpuPinning`), two
+choices, both of them modes `runtime/platform.cpp` already has:
+
+- **Automatic** -- the default, and first in `VALUES` -- sends *no* value for
+  `PES17_PINNING`, so the engine does the same role pinning it does with no
+  setting at all: the main recompiled loop on the prime core, the title's own
+  threads on the performance cluster, audio and file I/O on the worker cluster,
+  the presenter and ring consumer off the prime core on Mali. Every measurement
+  in `docs/PORTING.md` and `docs/performance.md` was taken under it: it is what
+  took the POCO's match load from a 45 s run-queue stall (1-3 fps for the
+  minute and a half after kick-off) to about twenty seconds and 45-55 fps, and
+  what held 60 fps on the S20 FE.
+- **Wide: every core but the main one** sends `PES17_PINNING=wide` (the
+  runtime's own spelling, `wide`/`split`): the title's threads may also use the
+  worker cluster, which is the engine's answer to the contention above.
+
+Not offered, each for a measured reason: `shared` (the consumer inherits the
+prime core: 45 s of 58 waiting, 1-3 fps), `big` (the performance cores ~80 %
+busy while the prime core sat ~55 % idle, consumer queued longer than it ran),
+`render` on Adreno (43-53 fps against a steady 60; the engine already forces it
+on Mali inside the default), `off` (gives up the placement that was the fix).
+The hint names what it pins and says it applies at the next game start, because
+`PES17_PINNING` is read once, when the runtime starts. Strings in all six
+languages; the row sends its value through the same `nativeSetOption` channel
+as the rest of the Performance page and is not a quality preset setting.
+
+**Migration.** `Prefs.cpuPinning` normalises everything except `WIDE` to
+`AUTO`, and the obsolete `cpuThreadLimit` key is deleted the first time the new
+one is read, so a stored 0/2/3/4/-1 can never be taken for a mode. (1 is Wide's
+own value now and is not treated as stale; the old key is a separate key and
+goes away.)
+
+**The runtime is untouched.** `runtime/thread_limit.h` is deleted and
+`platform.cpp` / `renderer_libraries.cpp` are back to the checkpoint's source;
+the rebuild is `ccb831dd...`, the checkpoint's own unstripped link output, and
+the APK packages `cb1ba563...`, byte-identical to the engine inside the
+supplied APK. No new affinity strategy, and no claim here that either mode
+changes fps or heat.
+
+**Checks actually run.** `:app:testDebugUnitTest` 405 tests, 0 failures,
+including the new `CpuPinningTest` (6): only the two measured modes are
+offered; the default is `AUTO` and maps to `""`; every offered value is a mode
+`PES17_PINNING` parses (`{"" , "wide"}`); 2/3/4/-1/5/64/-7/`Int.MIN_VALUE`/
+`Int.MAX_VALUE` all read as Automatic; the two labels differ; storage
+round-trips. The test also caught that 1 now means Wide, so it cannot sit in
+the stale list. Release APK versionCode 48 / 0.2.8, arm64-v8a, signed,
+50,286,287 bytes, SHA-256
+`bdd87dae9e57776048203b6f8257edff81b701df88966529081ef59568234d14`; inside it
+`lib/arm64-v8a/libpes17.so` hashes to `cb1ba563...`, contains `PES17_PINNING`
+and `wide`, and has no `PES17_THREAD_LIMIT`; the dex carries `PES17_PINNING`
+and no `PES17_THREAD_LIMIT`; the `cpu_pinning*` strings are in all six
+languages.
+
+**Still not verified.** No device has run this build. Whether Wide helps, hurts
+or does nothing on a MediaTek phone is unmeasured -- the option exists only
+because the engine's notes locate the contention -- and the runtime does not
+log which mode it took, so the log alone cannot say. The repeatable plan, with
+the affinities, temperatures and run-queue numbers to record, is
+[docs/performance.md](docs/performance.md) section "CPU Pinning: Automatic vs
+Wide (MediaTek, not yet measured)". If Wide does not tie or win there, it
+should be deleted rather than kept as a guess.

@@ -72,6 +72,93 @@ match each, temperatures from `dumpsys thermalservice` (SKIN, AP) every 10 s: 60
 against plain 30 says what the made frames cost. Note: the S20 FE dropped off USB three times
 when hot and under `adb shell screenrecord`; record with the phone's own recorder instead.
 
+## CPU Pinning: Automatic vs Wide (MediaTek, not yet measured)
+
+Settings > Performance > CPU Pinning (`CpuPinning.kt`) offers two of the engine's
+own pinning modes and nothing else: **Automatic** (the default) sends no value
+for `PES17_PINNING`, so the runtime keeps the role pinning every number in this
+file was taken under, and **Wide** sends `PES17_PINNING=wide`, which also lets
+the title's own threads use the worker cluster. `shared`, `big`, `render` and
+`off` are left out because the POCO section of [PORTING.md](PORTING.md) records
+a regression or no benefit for each. Whether Wide earns its place on a phone
+that is not the POCO is unmeasured; this is the plan that settles it.
+
+**Hypothesis.** On a 1+3+4 part the title's sixty-odd threads share the three
+performance cores and the busy ones wait about as long as they run. Wide adds
+the little cluster to the mask. If that diagnosis is right, the guest threads'
+*runnable* time should fall and fps p10 should hold or rise. If the little
+cores are too slow for latency-critical work, the median may hold while p10 and
+the per-second `worst` fall -- which is a reason to delete the option, not to
+tune it.
+
+**Before the first run.** Record the topology, or the result cannot be
+interpreted:
+
+    adb shell cat /proc/cpuinfo | grep -c processor
+    adb shell 'for c in /sys/devices/system/cpu/cpu*/cpufreq/cpuinfo_max_freq; do echo $c $(cat $c); done'
+    adb shell getprop ro.product.model      # two phones are used here; confirm it is the one you mean
+
+Phone cool (CPU sensor under ~40 C in `dumpsys thermalservice`), unplugged,
+`files/macros/.remote_control` present, `macros` set up as the other runs do.
+
+**The run.** `tools/ab_window.sh` waits for the state (`Match/MatchIdle`) and
+then a fixed window, which is what makes runs comparable; it writes the env
+pairs you give it to `files/env_override`, so the mode is chosen without
+touching the settings UI. Interleave, never block:
+
+    export ANDROID_SERIAL=<serial>
+    export MACRO=play OUT=/tmp/pin_ab
+    tools/ab_window.sh auto-1
+    tools/ab_window.sh wide-1 PES17_PINNING=wide
+    tools/ab_window.sh auto-2
+    tools/ab_window.sh wide-2 PES17_PINNING=wide
+    tools/ab_window.sh auto-3
+    tools/ab_window.sh wide-3 PES17_PINNING=wide
+
+Three pairs is the minimum. One config varied about +/-7 fps median run to run
+on the S20 FE, and a macro's late scene is not the same scene every time, so
+only scene-matched windows count -- the same reason `tools/crowd_windows.py`
+exists. `W0` (default 125 s after playback starts) and `MEASURE` (default 80 s)
+select the window; a run that never reached `Match/MatchIdle` or logged no fps
+is invalid and is repeated.
+
+**What to record, per run.** From the script's own output: window median and
+the `worst` column of `perf: N fps ... ms a frame waiting for the GPU`, the
+draws a frame (scene match), the per-thread CPU (`cpu% of a core`), the clocks
+and the CPU temperature. Two of its fields are Adreno/S20 FE shaped and will be
+empty or wrong on a MediaTek part: the `cpu0/3/4/7` clock sample and the
+`devfreq-13000000.mali` cooling level -- read the clusters from the topology
+above instead.
+
+**The two measurements that decide it** are both in that output already:
+
+- **Affinity** (`<label>.aff`): `Cpus_allowed_list` for `pes17`, the GPU ring
+  consumer, the presenter and a guest thread. This is the proof the mode was
+  applied at all -- the runtime does not log which mode it took, so without it
+  an A/B is two runs of unknown configuration.
+- **Runnable against running**: with `PES17_STREAM_TRACE=1` the log's `stream:`
+  lines give each thread's ms running and ms runnable every 500 ms. That ratio
+  is the measurement the POCO notes used to call the threads starved, and this
+  kernel has no schedstat, so it is the only run-queue evidence available.
+
+**Also check the app path, once per mode.** The settings row does not write
+`env_override`: `GameActivity` calls `nativeSetOption("PES17_PINNING", ...)`
+before the runtime starts. Pick each radio button in the app, run
+`tools/ab_window.sh` with no pairs, and compare the `affinity:` line with the
+`env_override` run of the same mode; the two paths must agree, and the choice
+must survive `am force-stop` and a relaunch. This is the only check that the
+row itself works on a device.
+
+**Decision rule.** Keep Wide only if, across the three pairs, its median is not
+below Automatic's and its p10/`worst` are not worse. Drop it if either fails,
+whatever the means say, and do not change the default on the strength of a
+single pair.
+
+**A second device class.** The mode assumes a distinct little cluster. Repeat
+once on a phone of a different shape (4+4, 2+6, or a Dimensity with different
+cluster sizes): on a symmetric part Wide should behave like Automatic, and a
+run that shows otherwise means the mask is not what the notes describe.
+
 ## Leads not tried yet (workload and heat)
 
 - **Sun shadow map at a lower resolution.** The shadow map is one 1024x2048 depth surface holding two
