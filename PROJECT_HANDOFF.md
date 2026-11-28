@@ -971,3 +971,36 @@ Lowest turns the crowd off, and that an unknown GPU still falls back to Medium.
 **423 tests, 0 failures.** The rule for anything Mali-specific from here: gate on
 `VkPhysicalDeviceProperties.vendorID` (ARM 0x13B5) **and** the detected tier, do
 not touch the Adreno path, and measure on both.
+
+## Session checkpoint (tfix6)
+
+- **Branch / commit:** `tfix6` @ `df1ff6cbd933207e4edf390771a2e8e87aababe1` (pushed to `origin/tfix6`).
+- **Checkpoint archive:** `_checkpoint/pes17-recomp-tfix6-session-checkpoint.tar.zst` — engine source and
+  its incremental `build-android/` tree, `engine6`–`engine9` prebuilt libs, the Gradle `android/app/build/`
+  tree, the portable kit (`kit.tar.zst`, scripts), the 0.3.4 APK, a `git bundle` of every ref, the working
+  tree, and `CHECKPOINT-RESUME.md` with the exact resume commands.
+  - size **2,230,853,059 B (2.23 GB)**, SHA-256 `ff0d347cb6ee333f50c129824fc681d36cbda6c310166c6951cc7c0d2a7113a3`,
+    21,270 entries. Stays in the workspace at `_checkpoint/pes17-recomp-tfix6-session-checkpoint.tar.zst`.
+  - **GoFile:** GoFile refused the single 2.2 GB PUT (curl timeout, twice), so the archive was split into
+    five byte-exact parts (`_checkpoint/ck-split-aa` … `-ae`, 450 MiB each except the last at 327.5 MiB) and
+    each part uploaded and md5-verified against the local file:
+
+    | part | bytes | md5 | link |
+    |---|---|---|---|
+    | aa | 471,859,200 | `50b10de8c79823063806b27792e75656` | https://gofile.io/d/yDDGyMCI |
+    | ab | 471,859,200 | `fd212fa1f456fdbfe48875a0a2606f8a` | https://gofile.io/d/80YbDgpM |
+    | ac | 471,859,200 | `119a2d11c91671218aa3420d15f479ea` | https://gofile.io/d/WCVn4Fik |
+    | ad | 471,859,200 | `3f47b12eec5c23fdebebbc6513002fd1` | https://gofile.io/d/zHcBs4vu |
+    | ae | 343,416,259 | `46e22d02b2a7547b178f84501bcb30a1` | https://gofile.io/d/BWNLqoRZ |
+
+    Reassemble with `cat ck-split-aa ck-split-ab ck-split-ac ck-split-ad ck-split-ae >
+    checkpoint.tar.zst` — the concatenation re-hashes to the SHA-256 above (checked). All five pages answer
+    HTTP 200. Rebuild the parts from the archive with `split -b 450M` if they are ever lost.
+  - `CHECKPOINT-RESUME.md` and the archive's own `./CHECKPOINT-RESUME.md` carry the restore, build and test
+    commands verbatim.
+- **Build directory (still on disk, never cleaned):** `_checkpoint/pes17-native-engine-checkpoint-tfix5/build-android/`
+  for the engine, `android/app/build/` for Gradle.
+- **Incremental engine resume:** `ninja -C _checkpoint/pes17-native-engine-checkpoint-tfix5/build-android`
+  (re-configure only if the CMake cache is lost; the command is in `CHECKPOINT-RESUME.md`).
+- **Progress:** Lowest preset + switch fix + preset hint + frame-stats patch committed and pushed; the last
+  commit is test-only (Snapdragon/Adreno regression checks, 423 tests green). No device measurement exists.
