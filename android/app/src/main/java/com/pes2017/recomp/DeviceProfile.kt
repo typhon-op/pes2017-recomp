@@ -28,7 +28,19 @@ import java.io.File
  */
 object DeviceProfile {
 
-    enum class Tier { LOW, MEDIUM, HIGH }
+    /**
+     * Weakest first, because [classify] takes the minimum of what the GPU, the CPU
+     * and the memory allow: a tier added at the bottom cannot change what an
+     * existing phone is detected as unless something maps to it, and nothing does.
+     *
+     * [LOWEST] is the Helio G85 class of phone (Mali-G52 MC2, 2x A75 + 6x A55,
+     * 4-6 GB) at a 30 FPS target: the Low tier with every lever at its cheapest
+     * safe value. It is offered rather than detected, so a player on a phone that
+     * sits between two tiers can choose it and a phone that already runs Low is
+     * not silently moved down. See [preset] for what it sets and what it leaves
+     * alone.
+     */
+    enum class Tier { LOWEST, LOW, MEDIUM, HIGH }
 
     /** What the classifier saw, for the Settings line and the capture summary. */
     data class Specs(
@@ -51,6 +63,20 @@ object DeviceProfile {
         val heatScale: Boolean,
         val loadScale: Boolean,
         val maxAniso: Int,
+        /**
+         * The crowd (PES17_NO_CROWD). Null is "not this preset's to set": the
+         * player's own choice stays, which is what every preset but [Tier.LOWEST]
+         * wants. Lowest turns the spectators off -- they are thousands of draws a
+         * frame -- and a player who wants them back can turn them on again.
+         */
+        val crowd: Boolean? = null,
+        /**
+         * Internal resolution (PES17_SCALE: the console's frame, twice it, three
+         * times it), or 0 for "leave the player's multiplier alone" -- what every
+         * preset but [Tier.LOWEST] does, because a preset never resets a choice
+         * the player made for this phone. Lowest pins it to 1x, the cheapest.
+         */
+        val renderScale: Int = 0,
     )
 
     // With the heat rule on, the scene scale is the most the match will be drawn at and the
@@ -76,6 +102,28 @@ object DeviceProfile {
         Tier.HIGH -> Preset(75, multisampling = true, fsr = false, fpsLimit = 60, lowMemory = false, heatScale = true, loadScale = false, maxAniso = 4)
         Tier.MEDIUM -> Preset(75, multisampling = true, fsr = true, fpsLimit = 60, lowMemory = false, heatScale = true, loadScale = false, maxAniso = 4)
         Tier.LOW -> Preset(60, multisampling = false, fsr = false, fpsLimit = 30, lowMemory = false, heatScale = true, loadScale = true, maxAniso = 2)
+        // Lowest: the Helio G85 baseline at 30 FPS. Each of these is the cheapest
+        // value the page itself offers, not an invented one -- 50% is the smallest
+        // scene in GraphicsOptions.SCENE_PERCENT, 1x the smallest internal scale,
+        // 1x the smallest anisotropy, 30 the lowest limit.
+        //
+        // The two rules stay on: the heat rule is what lets the scene give ground
+        // when the phone throttles, and the load rule is the one that acts when a
+        // frame goes over budget -- on a part this slow they are the difference
+        // between a smaller picture and a stuttering one.
+        //
+        // No essential pass is removed: the scene, its depth buffer, the resolve and
+        // the present are untouched. What goes is the vertex shadow buffer
+        // (PES17_NO_SHADOW, the same switch Low-memory uses), the crowd
+        // (PES17_NO_CROWD), multisampling, FSR, and the extra filtering samples --
+        // the picture is smaller and flatter, not wrong.
+        //
+        // The texture budget (PES17_TEXTURE_BUDGET_MB) is deliberately left on auto.
+        // The engine already sizes it from MemTotal, and forcing the slider's
+        // smallest value would evict and re-upload textures: that spends frame time
+        // to save memory this preset has already saved elsewhere -- no MSAA
+        // attachments, a 50% scene, no FSR target, no vertex shadow buffer.
+        Tier.LOWEST -> Preset(50, multisampling = false, fsr = false, fpsLimit = 30, lowMemory = true, heatScale = true, loadScale = true, maxAniso = 1, crowd = false, renderScale = 1)
     }
 
     fun apply(prefs: Prefs, tier: Tier) {
@@ -88,6 +136,10 @@ object DeviceProfile {
         prefs.heatScale = p.heatScale
         prefs.loadScale = p.loadScale
         prefs.maxAniso = p.maxAniso
+        // Null and 0 are "not this preset's to set": the crowd and the internal
+        // multiplier stay exactly as the player left them.
+        p.crowd?.let { prefs.crowd = it }
+        if (p.renderScale > 0) prefs.renderScale = p.renderScale
         prefs.preset = tier.name
     }
 
@@ -113,9 +165,9 @@ object DeviceProfile {
      * the value and is Custom by then, so neither loses a choice.
      */
     fun ensureAniso(prefs: Prefs) {
-        if (prefs.preset != Tier.LOW.name) return
+        if (prefs.preset != Tier.LOW.name && prefs.preset != Tier.LOWEST.name) return
         if (prefs.hasChosenAniso()) return
-        prefs.maxAniso = preset(Tier.LOW).maxAniso
+        prefs.maxAniso = preset(if (prefs.preset == Tier.LOWEST.name) Tier.LOWEST else Tier.LOW).maxAniso
     }
 
     fun detect(context: Context, prefs: Prefs): Result {

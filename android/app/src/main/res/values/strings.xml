@@ -910,4 +910,5 @@
     <string name="cpu_pinning_auto">Automatic (recommended)</string>
     <string name="cpu_pinning_wide">Wide: every core but the main one</string>
     <string name="cpu_pinning_hint">Which cores the game’s own threads are pinned to. Automatic is the arrangement every measurement was taken with, and the fastest one measured. Wide lets them use the little cores as well, for phones where they queue up on the performance cores. Applies the next time the game starts.</string>
+    <string name="preset_lowest">Lowest</string>
 </resources>

@@ -859,3 +859,73 @@ the packaged engine contains `fstats:`, `PES17_PRESENT_MODE` and
 in a real `game.log`, and whether FIFO is the instability's cause is exactly
 what the on-device A/B (fifo against mailbox, 60 first, then every supported
 limit) is for. No claim is made that frame times improved.
+
+### Graphics preset "Lowest" (0.3.1, 2026-11-28)
+
+A fourth preset, for the Helio G85 class of phone (Mali-G52 MC2, 2x A75 + 6x A55,
+4-6 GB) at a 30 FPS target. It is **offered, never detected**:
+`DeviceProfile.Tier.LOWEST` sits at the bottom of the enum, where
+`classify`'s `minOf` still works, and nothing in the classifier maps to it -- so
+a G85 that detected Low before this build still detects Low, and no phone is
+moved onto a new preset by installing an update.
+
+| Setting | Lowest | Low | Reaches the runtime as |
+|---|---|---|---|
+| Scene resolution | 50% | 60% | `PES17_SCENE_SCALE=0.5000` |
+| Internal resolution | 1x | the player's | `PES17_SCALE=1` |
+| Multisampling | off | off | `PES17_NO_MSAA=1` |
+| FSR | off | off | `PES17_UPSCALER=""` |
+| Anisotropic filtering | 1x | 2x | `PES17_MAX_ANISO=1` |
+| Vertex shadow buffer | skipped | kept | `PES17_NO_SHADOW=1` |
+| Crowd | off | the player's | `PES17_NO_CROWD=1` |
+| Frame limit | 30 | 30 | `PES17_FPS_LIMIT=30` |
+| Heat rule (dynamic scale) | on | on | `PES17_HEAT_SCALE=1` |
+| Load rule | on | on | `PES17_LOAD_SCALE=1` |
+
+Every value is one the pages already offer (`GraphicsOptions.SCENE_PERCENT`,
+`INTERNAL_SCALE`, `MAX_ANISO`, `FPS_LIMIT`), not a new number: 50% is the
+smallest scene, 1x the smallest internal scale and the smallest anisotropy, 30
+the lowest limit. The 30 FPS limit is the one the pacing system already treats
+specially (`pacing.h`: presents in order, every second boundary), and the preset
+touches neither `PES17_PACING` nor `PES17_PINNING` -- both stay the player's.
+
+**Why each cut, and why not more.** The scene at 50% and the internal scale at
+1x are the two that remove the most fragments; MSAA off removes the multisample
+attachments as well as their resolve; the vertex shadow buffer is the largest
+single buffer a low-RAM phone gives up; the crowd is thousands of draws; 1x
+anisotropy halves the pitch's texture samples. Nothing essential is removed --
+the scene pass, its depth buffer, the resolve and the present are untouched, so
+the picture is smaller and flatter, not wrong. **Not** set: the texture budget
+(`PES17_TEXTURE_BUDGET_MB`) stays on auto, because the engine already sizes it
+from MemTotal and forcing the slider's smallest value would evict and re-upload
+textures -- spending frame time to save memory the preset has already saved
+elsewhere. No engine change was needed: every lever above already existed and
+was already pushed by `GameActivity`.
+
+**What changed in code.** `DeviceProfile.Preset` gained `crowd: Boolean?` (null =
+not this preset's to set) and `renderScale: Int` (0 = leave the player's
+multiplier alone); both default so High, Medium and Low write exactly what they
+wrote before, and `DeviceProfileTest` asserts that field by field. The tier is in
+`SettingsActivity` (a fourth button), `QuickGraphics` (the in-match page builds
+its rows from `Tier.values()`), and `preset_lowest` is in all six languages.
+
+**Checks actually run.** `:app:testDebugUnitTest` **414 tests, 0 failures**,
+including the new `DeviceProfileTest` (9): tier ordering, the three existing
+presets unchanged value by value, Lowest no more expensive than Low on every
+lever, every preset value an option the pages offer, the 30 FPS limit present and
+the pacing keys untouched, the scene at the slider's floor, a G85 still detecting
+Low, no spec combination ever detected as Lowest, and the preset being
+vendor-free. Release APK versionCode 51 / 0.3.1, arm64-v8a, signed, 50,289,291
+bytes, SHA-256
+`970aefed84ea8d05b6c01394bc52b430d8212e888b84be6afc4a813645314e58`, carrying the
+same engine as 0.3.0 (`0f23d706...`); `LOWEST` is in the dex and `preset_lowest`
+in `resources.arsc`.
+
+**Still not verified.** No Helio G85 (or any phone) ran this. Whether the preset
+holds 30 FPS on a G85 is unmeasured and is not claimed; what it is is every
+GPU-cost lever this port has, at the cheapest value the app already allows, with
+the heat and load rules left on to absorb what the phone cannot hold. The
+comparison: same match, same macro, Lowest against Low at 30, reading the
+`fstats:` line (p50/p99, 1% low, spikes over 1.5x and 2x) plus
+`dumpsys thermalservice`, three interleaved pairs, and the preset kept only if
+its p99 and 1% low are better at the same limit.

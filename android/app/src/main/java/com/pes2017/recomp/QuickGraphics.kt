@@ -61,6 +61,7 @@ object QuickGraphics {
         /** Chosen tier when the values still match it, for the checked dot. */
         private fun tierName(tier: DeviceProfile.Tier): String = activity.getString(
             when (tier) {
+                DeviceProfile.Tier.LOWEST -> R.string.preset_lowest
                 DeviceProfile.Tier.LOW -> R.string.preset_low
                 DeviceProfile.Tier.MEDIUM -> R.string.preset_medium
                 DeviceProfile.Tier.HIGH -> R.string.preset_high
@@ -79,6 +80,10 @@ object QuickGraphics {
             v.scene = p.sceneScalePercent; v.msaa = p.multisampling; v.fsr = p.fsr
             v.fps = p.fpsLimit; v.heat = p.heatScale; v.loadScale = p.loadScale
             v.lowMemory = p.lowMemory; v.aniso = p.maxAniso; v.preset = tier.name
+            // The crowd and the internal multiplier are only a preset's to set when
+            // it says so (Lowest does; the others leave the player's choice).
+            p.crowd?.let { v.crowd = it }
+            if (p.renderScale > 0) v.scale = p.renderScale
         }
 
         fun screen(menu: PesMenu): PesMenu.Screen {

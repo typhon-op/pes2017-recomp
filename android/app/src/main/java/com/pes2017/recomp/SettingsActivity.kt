@@ -311,6 +311,7 @@ class SettingsActivity : AppCompatActivity() {
         presetLabel = findViewById(R.id.preset_label)
         presetLabel.text = getString(R.string.preset_label, tierName(prefs.preset))
         listOf(
+            R.id.preset_lowest to DeviceProfile.Tier.LOWEST,
             R.id.preset_low to DeviceProfile.Tier.LOW,
             R.id.preset_medium to DeviceProfile.Tier.MEDIUM,
             R.id.preset_high to DeviceProfile.Tier.HIGH,
@@ -335,6 +336,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun tierName(name: String): String = getString(
         when (name) {
+            DeviceProfile.Tier.LOWEST.name -> R.string.preset_lowest
             DeviceProfile.Tier.LOW.name -> R.string.preset_low
             DeviceProfile.Tier.MEDIUM.name -> R.string.preset_medium
             DeviceProfile.Tier.HIGH.name -> R.string.preset_high

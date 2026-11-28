@@ -103,9 +103,17 @@
                         android:orientation="horizontal">
 
                         <Button
+                            android:id="@+id/preset_lowest"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/preset_lowest" />
+
+                        <Button
                             android:id="@+id/preset_low"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
                             android:layout_weight="1"
                             android:text="@string/preset_low" />
 

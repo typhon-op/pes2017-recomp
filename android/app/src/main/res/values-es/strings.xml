@@ -741,4 +741,5 @@
     <string name="cpu_pinning_auto">Automático (recomendado)</string>
     <string name="cpu_pinning_wide">Amplio: todos los núcleos menos el principal</string>
     <string name="cpu_pinning_hint">A qué núcleos se anclan los hilos del propio juego. Automático es la disposición con la que se hicieron todas las mediciones y la más rápida medida. Amplio les permite usar también los núcleos pequeños, para teléfonos donde se acumulan en los núcleos de rendimiento. Se aplica la próxima vez que se inicie el juego.</string>
+    <string name="preset_lowest">Mínimo</string>
 </resources>
