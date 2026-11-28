@@ -171,6 +171,84 @@ class DeviceProfileTest {
     }
 
     /**
+     * The Snapdragon path, checked before anything low-end is allowed in: a high-end
+     * Adreno is detected High and gets the High preset, whose values are the ones the
+     * port was tuned on. Nothing Lowest introduced may reach it.
+     */
+    @Test
+    fun aHighEndSnapdragonKeepsTheHighPreset() {
+        // 8 Gen 2 / 8 Gen 3 class: Adreno 740, four fast cores, 12 GB.
+        for (gpu in listOf("Adreno (TM) 740", "Adreno (TM) 750", "Adreno (TM) 650")) {
+            val result = DeviceProfile.classify(Specs(gpu, memoryMB = 11_000, fast = 4, mhz = 3200))
+            assertEquals("$gpu", DeviceProfile.Tier.HIGH, result.tier)
+            assertEquals("$gpu", "GPU", result.reason)
+        }
+        val high = preset(DeviceProfile.Tier.HIGH)
+        assertEquals(75, high.sceneScalePercent)
+        assertTrue(high.multisampling)
+        assertFalse(high.fsr)
+        assertEquals(60, high.fpsLimit)
+        assertFalse(high.lowMemory)
+        assertTrue(high.heatScale)
+        assertFalse(high.loadScale)
+        assertEquals(4, high.maxAniso)
+        // The two levers Lowest pulls are not pulled here: crowd on, multiplier unpinned.
+        assertTrue(high.crowd)
+        assertEquals(0, high.renderScale)
+    }
+
+    @Test
+    fun everyAdrenoModelKeepsTheTierItHadBeforeLowest() {
+        // The Adreno column of the GPU table, model by model: a low-end change must not
+        // move a Snapdragon up or down. These are the values in gpuTier, restated so a
+        // change to either shows up here.
+        val expected = mapOf(
+            "Adreno (TM) 610" to DeviceProfile.Tier.LOW,    // 680, 695, 750G
+            "Adreno (TM) 619" to DeviceProfile.Tier.LOW,
+            "Adreno (TM) 640" to DeviceProfile.Tier.MEDIUM, // 855
+            "Adreno (TM) 642L" to DeviceProfile.Tier.MEDIUM,
+            "Adreno (TM) 644" to DeviceProfile.Tier.MEDIUM,
+            "Adreno (TM) 650" to DeviceProfile.Tier.HIGH,   // 865
+            "Adreno (TM) 660" to DeviceProfile.Tier.HIGH,   // 888
+            "Adreno (TM) 710" to DeviceProfile.Tier.MEDIUM,
+            "Adreno (TM) 725" to DeviceProfile.Tier.MEDIUM,
+            "Adreno (TM) 730" to DeviceProfile.Tier.HIGH,
+            "Adreno (TM) 740" to DeviceProfile.Tier.HIGH,
+            "Adreno (TM) 750" to DeviceProfile.Tier.HIGH,
+        )
+        for ((gpu, tier) in expected) {
+            // Only the GPU decides here: memory and CPU are generous, so the answer is
+            // the table's own.
+            val result = DeviceProfile.classify(Specs(gpu, memoryMB = 11_000, fast = 4, mhz = 3200))
+            assertEquals(gpu, tier, result.tier)
+            assertTrue(gpu, result.reason == "GPU")
+        }
+    }
+
+    @Test
+    fun onlyLowestTurnsTheCrowdOff() {
+        // Turning the spectators off is something only the player's choice of Lowest
+        // does. Every other preset -- which is every device's default -- leaves them on
+        // exactly as the toggle's own default does, so no Adreno phone loses them.
+        for (tier in DeviceProfile.Tier.values()) {
+            assertEquals("$tier", tier != DeviceProfile.Tier.LOWEST, preset(tier).crowd)
+        }
+    }
+
+    @Test
+    fun anUnknownGpuKeepsTheDefaultTier() {
+        // A GPU the table has never seen is not assumed cheap: it gets the Medium
+        // guess, the same as before Lowest existed, and the Settings line says why.
+        val result = DeviceProfile.classify(Specs("Some New GPU", memoryMB = 11_000, fast = 4, mhz = 3200))
+        assertEquals(DeviceProfile.Tier.MEDIUM, result.tier)
+        assertEquals("GPU not in the table", result.reason)
+        // Never the Lowest preset, and never its values.
+        assertTrue(result.tier != DeviceProfile.Tier.LOWEST)
+        assertTrue(preset(result.tier).crowd)
+        assertEquals(0, preset(result.tier).renderScale)
+    }
+
+    /**
      * The switch this was reported for: a player on 2x picks Lowest, then goes back to
      * Medium. The crowd must come back and the multiplier must be 2x again, not the 1x
      * Lowest pinned.

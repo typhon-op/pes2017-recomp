@@ -959,3 +959,15 @@ under the preset row: "Lowest targets Helio G85-class phones at 30 FPS. Not yet
 verified on a device." (`preset_lowest_hint`, all six locales). Release APK
 versionCode 53 / 0.3.3, 50,290,823 bytes, SHA-256
 `31a62aabcd663891533e77297207133ed3270b3a0058f9720515d3029cc6f3a8`.
+
+**Device isolation (no runtime change).** Nothing low-end was added to the
+runtime: the Lowest preset is a table of existing switches, written by a button,
+never detected, and the renderer's own vendor branches (Adreno BC decode off,
+Qualcomm `staticStates`, Mali pipeline-cache persistence, `IsMali()`) are as they
+were. What did change is the checking: `DeviceProfileTest` now locks the
+Snapdragon column of the GPU table model by model, asserts a high-end Adreno
+(650/740/750) still detects as High with the High preset's values, that only
+Lowest turns the crowd off, and that an unknown GPU still falls back to Medium.
+**423 tests, 0 failures.** The rule for anything Mali-specific from here: gate on
+`VkPhysicalDeviceProperties.vendorID` (ARM 0x13B5) **and** the detected tier, do
+not touch the Adreno path, and measure on both.
