@@ -347,6 +347,17 @@ class Prefs(context: Context) {
             .putInt(KEY_MAX_ANISO, GraphicsOptions.normalize(GraphicsOptions.MAX_ANISO, value))
             .apply()
 
+    /**
+     * How many cores the title's own worker threads may share (CpuThreadLimit):
+     * 0 for Auto, 2, 3, 4, or -1 for every core. Not a quality preset setting:
+     * it changes no pixel, only where the game's threads run.
+     */
+    var cpuThreadLimit: Int
+        get() = CpuThreadLimit.normalize(store.getInt(KEY_CPU_THREAD_LIMIT, 0))
+        set(value) = store.edit()
+            .putInt(KEY_CPU_THREAD_LIMIT, CpuThreadLimit.normalize(value))
+            .apply()
+
     // ---- sound ------------------------------------------------------------
 
     var audioEnabled: Boolean
@@ -834,6 +845,7 @@ class Prefs(context: Context) {
         private const val KEY_STICK_TRAVEL_KNOB = "stickTravelMatchesKnob"
         private const val KEY_HAPTICS = "haptics"
         private const val KEY_STICK_MODE = "stickMode"
+        private const val KEY_CPU_THREAD_LIMIT = "cpuThreadLimit"
         private const val KEY_STICK_STAGE = "stickStage"
         private const val KEY_STICK_AUTO = "stickAuto"
         private const val KEY_DEFENDING_PAD = "defendingPad"

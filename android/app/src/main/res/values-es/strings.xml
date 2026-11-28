@@ -735,4 +735,12 @@
     <string name="capture_stop_button">■ PARAR %1$d:%2$02d</string>
     <string name="macro_record_button">GRABAR MACRO</string>
     <string name="macro_stop_button">■ PARAR GRAB.</string>
+
+    <string name="cpu_thread_limit">Límite de hilos de CPU</string>
+    <string name="cpu_threads_auto">Auto (el anclaje del propio motor)</string>
+    <string name="cpu_threads_2">2 núcleos</string>
+    <string name="cpu_threads_3">3 núcleos</string>
+    <string name="cpu_threads_4">4 núcleos</string>
+    <string name="cpu_threads_all">Todos los núcleos disponibles</string>
+    <string name="cpu_thread_limit_hint">Cuántos núcleos pueden compartir los hilos de trabajo del juego y cuánto puede crecer el grupo que prepara los sombreadores. Auto deja el anclaje que el motor ya hace. No se apaga ningún núcleo: el bucle principal, el renderizador, el sonido y la entrada conservan sus núcleos.</string>
 </resources>

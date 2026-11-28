@@ -735,4 +735,12 @@
     <string name="capture_stop_button">■ إيقاف %1$d:%2$02d</string>
     <string name="macro_record_button">تسجيل ماكرو</string>
     <string name="macro_stop_button">■ إيقاف التسجيل</string>
+
+    <string name="cpu_thread_limit">حد خيوط المعالج</string>
+    <string name="cpu_threads_auto">تلقائي (كما يثبّت المحرك)</string>
+    <string name="cpu_threads_2">نواتان</string>
+    <string name="cpu_threads_3">٣ أنوية</string>
+    <string name="cpu_threads_4">٤ أنوية</string>
+    <string name="cpu_threads_all">كل الأنوية المتاحة</string>
+    <string name="cpu_thread_limit_hint">كم نواة يمكن أن تتقاسمها خيوط عمل اللعبة، وكم يمكن أن يتسع مجمع تحضير التظليل. «تلقائي» يترك تثبيت المحرك كما هو. لا يُعطَّل أي نواة: الحلقة الرئيسية والعرض والصوت والإدخال تحتفظ بأنويتها.</string>
 </resources>

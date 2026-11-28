@@ -735,4 +735,12 @@
     <string name="capture_stop_button">■ PARAR %1$d:%2$02d</string>
     <string name="macro_record_button">GRAVAR MACRO</string>
     <string name="macro_stop_button">■ PARAR GRAVAÇÃO</string>
+
+    <string name="cpu_thread_limit">Limite de threads da CPU</string>
+    <string name="cpu_threads_auto">Automático (fixação do motor)</string>
+    <string name="cpu_threads_2">2 núcleos</string>
+    <string name="cpu_threads_3">3 núcleos</string>
+    <string name="cpu_threads_4">4 núcleos</string>
+    <string name="cpu_threads_all">Todos os núcleos disponíveis</string>
+    <string name="cpu_thread_limit_hint">Quantos núcleos os threads de trabalho do jogo podem partilhar e qual a largura do grupo que prepara os shaders. Automático mantém a fixação do motor. Nenhum núcleo é desligado: o ciclo principal, o renderizador, o som e a entrada mantêm os seus núcleos.</string>
 </resources>

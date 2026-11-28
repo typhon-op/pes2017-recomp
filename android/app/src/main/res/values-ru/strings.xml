@@ -735,4 +735,12 @@
     <string name="capture_stop_button">■ СТОП %1$d:%2$02d</string>
     <string name="macro_record_button">ЗАПИСЬ МАКРОСА</string>
     <string name="macro_stop_button">■ СТОП ЗАПИСИ</string>
+
+    <string name="cpu_thread_limit">Лимит потоков ЦП</string>
+    <string name="cpu_threads_auto">Авто (как закрепляет сам движок)</string>
+    <string name="cpu_threads_2">2 ядра</string>
+    <string name="cpu_threads_3">3 ядра</string>
+    <string name="cpu_threads_4">4 ядра</string>
+    <string name="cpu_threads_all">Все доступные ядра</string>
+    <string name="cpu_thread_limit_hint">Сколько ядер могут делить рабочие потоки игры и насколько широким может быть пул подготовки шейдеров. «Авто» оставляет закрепление движка. Ни одно ядро не отключается: главный цикл, рендерер, звук и ввод остаются на своих ядрах.</string>
 </resources>
