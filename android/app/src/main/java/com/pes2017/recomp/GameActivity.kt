@@ -983,11 +983,12 @@ class GameActivity : AppCompatActivity(), NativeListener {
         // read once as the run starts, like every other PES17_* switch; both
         // Settings pages say the change takes effect at the next match.
         NativeBridge.nativeSetOption("PES17_PACING", prefs.framePacing)
-        // CPU Thread Limit: how many host cores the title's worker threads may
-        // share, and how wide the engine's shader-preparing pool may be. Empty is
-        // Auto (the pinning the engine does anyway), "all" is every core; the
-        // main loop, the renderer, audio and input are never pinned by this.
-        NativeBridge.nativeSetOption("PES17_THREAD_LIMIT", CpuThreadLimit.option(prefs.cpuThreadLimit))
+        // CPU Pinning: one of the engine's own modes for where the title's
+        // threads run (PES17_PINNING). Empty leaves the role pinning the engine
+        // does anyway -- the arrangement its measurements were taken with -- and
+        // "wide" is its own mode for phones where those threads queue up on the
+        // performance cores. Read once when the runtime starts.
+        NativeBridge.nativeSetOption("PES17_PINNING", CpuPinning.option(prefs.cpuPinning))
         // Both caches live in the app's own folder and make the second start
         // of a level far quicker than the first.
         val extDir = getExternalFilesDir(null)

@@ -736,11 +736,9 @@
     <string name="macro_record_button">GRABAR MACRO</string>
     <string name="macro_stop_button">■ PARAR GRAB.</string>
 
-    <string name="cpu_thread_limit">Límite de hilos de CPU</string>
-    <string name="cpu_threads_auto">Auto (el anclaje del propio motor)</string>
-    <string name="cpu_threads_2">2 núcleos</string>
-    <string name="cpu_threads_3">3 núcleos</string>
-    <string name="cpu_threads_4">4 núcleos</string>
-    <string name="cpu_threads_all">Todos los núcleos disponibles</string>
-    <string name="cpu_thread_limit_hint">Cuántos núcleos pueden compartir los hilos de trabajo del juego y cuánto puede crecer el grupo que prepara los sombreadores. Auto deja el anclaje que el motor ya hace. No se apaga ningún núcleo: el bucle principal, el renderizador, el sonido y la entrada conservan sus núcleos.</string>
+
+    <string name="cpu_pinning">Anclaje de CPU</string>
+    <string name="cpu_pinning_auto">Automático (recomendado)</string>
+    <string name="cpu_pinning_wide">Amplio: todos los núcleos menos el principal</string>
+    <string name="cpu_pinning_hint">A qué núcleos se anclan los hilos del propio juego. Automático es la disposición con la que se hicieron todas las mediciones y la más rápida medida. Amplio les permite usar también los núcleos pequeños, para teléfonos donde se acumulan en los núcleos de rendimiento. Se aplica la próxima vez que se inicie el juego.</string>
 </resources>

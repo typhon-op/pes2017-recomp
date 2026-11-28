@@ -121,18 +121,15 @@ class SettingsActivity : AppCompatActivity() {
             val index = refreshIds.indexOf(id)
             if (index >= 0) prefs.framePacingRefresh = FramePacingOptions.REFRESHES[index]
         }
-        // CPU Thread Limit: how many cores the title's own worker threads may
-        // share, sent to the engine as PES17_THREAD_LIMIT when the game starts.
-        // Not a quality preset setting either: it changes no pixel.
-        val threadIds = intArrayOf(
-            R.id.cpu_threads_auto, R.id.cpu_threads_2, R.id.cpu_threads_3,
-            R.id.cpu_threads_4, R.id.cpu_threads_all,
-        )
-        val threads: android.widget.RadioGroup = findViewById(R.id.cpu_threads)
-        threads.check(threadIds[CpuThreadLimit.VALUES.indexOf(prefs.cpuThreadLimit).coerceAtLeast(0)])
-        threads.setOnCheckedChangeListener { _, id ->
-            val index = threadIds.indexOf(id)
-            if (index >= 0) prefs.cpuThreadLimit = CpuThreadLimit.VALUES[index]
+        // CPU Pinning: one of the engine's own modes for where the title's
+        // threads run, sent as PES17_PINNING before the game starts. Not a
+        // quality preset setting either: it changes no pixel.
+        val pinningIds = intArrayOf(R.id.cpu_pinning_auto, R.id.cpu_pinning_wide)
+        val pinning: android.widget.RadioGroup = findViewById(R.id.cpu_pinning)
+        pinning.check(pinningIds[CpuPinning.VALUES.indexOf(prefs.cpuPinning).coerceAtLeast(0)])
+        pinning.setOnCheckedChangeListener { _, id ->
+            val index = pinningIds.indexOf(id)
+            if (index >= 0) prefs.cpuPinning = CpuPinning.VALUES[index]
         }
         // Frame generation owns 60 Hz, so the 30 FPS refresh preference has
         // nothing to choose while it is on (the hint says so as well).

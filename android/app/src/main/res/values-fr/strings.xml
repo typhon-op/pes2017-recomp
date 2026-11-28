@@ -736,11 +736,9 @@
     <string name="macro_record_button">ENREG. MACRO</string>
     <string name="macro_stop_button">■ ARRÊT ENREG.</string>
 
-    <string name="cpu_thread_limit">Limite de threads CPU</string>
-    <string name="cpu_threads_auto">Auto (épinglage du moteur)</string>
-    <string name="cpu_threads_2">2 cœurs</string>
-    <string name="cpu_threads_3">3 cœurs</string>
-    <string name="cpu_threads_4">4 cœurs</string>
-    <string name="cpu_threads_all">Tous les cœurs disponibles</string>
-    <string name="cpu_thread_limit_hint">Combien de cœurs les threads de travail du jeu peuvent partager, et quelle largeur le pool de préparation des shaders peut prendre. Auto garde l’épinglage du moteur. Aucun cœur n’est désactivé : la boucle principale, le rendu, le son et les entrées gardent leurs cœurs.</string>
+
+    <string name="cpu_pinning">Épinglage CPU</string>
+    <string name="cpu_pinning_auto">Automatique (recommandé)</string>
+    <string name="cpu_pinning_wide">Large : tous les cœurs sauf le principal</string>
+    <string name="cpu_pinning_hint">À quels cœurs les threads du jeu sont épinglés. Automatique est la disposition avec laquelle toutes les mesures ont été faites, et la plus rapide mesurée. Large leur permet aussi d’utiliser les petits cœurs, pour les téléphones où ils s’accumulent sur les cœurs de performance. S’applique au prochain démarrage du jeu.</string>
 </resources>

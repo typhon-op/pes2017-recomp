@@ -348,14 +348,24 @@ class Prefs(context: Context) {
             .apply()
 
     /**
-     * How many cores the title's own worker threads may share (CpuThreadLimit):
-     * 0 for Auto, 2, 3, 4, or -1 for every core. Not a quality preset setting:
-     * it changes no pixel, only where the game's threads run.
+     * Which of the engine's pinning modes the title's own threads run under
+     * (CpuPinning): the engine's own arrangement, or its wide mode. Not a
+     * quality preset setting: it changes no pixel, only where the game's threads
+     * run, and it is read when the game starts.
+     *
+     * The obsolete `cpuThreadLimit` key a 0.2.7 test build wrote is removed the
+     * first time this is read, so a stored core count (0/2/3/4/-1) can never be
+     * taken for a pinning mode.
      */
-    var cpuThreadLimit: Int
-        get() = CpuThreadLimit.normalize(store.getInt(KEY_CPU_THREAD_LIMIT, 0))
+    var cpuPinning: Int
+        get() {
+            if (store.contains(KEY_OBSOLETE_THREAD_LIMIT)) {
+                store.edit().remove(KEY_OBSOLETE_THREAD_LIMIT).apply()
+            }
+            return CpuPinning.normalize(store.getInt(KEY_CPU_PINNING, CpuPinning.AUTO))
+        }
         set(value) = store.edit()
-            .putInt(KEY_CPU_THREAD_LIMIT, CpuThreadLimit.normalize(value))
+            .putInt(KEY_CPU_PINNING, CpuPinning.normalize(value))
             .apply()
 
     // ---- sound ------------------------------------------------------------
@@ -845,7 +855,8 @@ class Prefs(context: Context) {
         private const val KEY_STICK_TRAVEL_KNOB = "stickTravelMatchesKnob"
         private const val KEY_HAPTICS = "haptics"
         private const val KEY_STICK_MODE = "stickMode"
-        private const val KEY_CPU_THREAD_LIMIT = "cpuThreadLimit"
+        private const val KEY_CPU_PINNING = "cpuPinning"
+        private const val KEY_OBSOLETE_THREAD_LIMIT = "cpuThreadLimit"
         private const val KEY_STICK_STAGE = "stickStage"
         private const val KEY_STICK_AUTO = "stickAuto"
         private const val KEY_DEFENDING_PAD = "defendingPad"

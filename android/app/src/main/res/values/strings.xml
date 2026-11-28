@@ -905,11 +905,9 @@
     <string name="macro_record_button">REC MACRO</string>
     <string name="macro_stop_button">■ STOP REC</string>
 
-    <string name="cpu_thread_limit">CPU Thread Limit</string>
-    <string name="cpu_threads_auto">Auto (the engine’s own pinning)</string>
-    <string name="cpu_threads_2">2 cores</string>
-    <string name="cpu_threads_3">3 cores</string>
-    <string name="cpu_threads_4">4 cores</string>
-    <string name="cpu_threads_all">All available cores</string>
-    <string name="cpu_thread_limit_hint">How many cores the title’s own worker threads may share, and how wide the engine’s shader-preparing pool may be. Auto leaves the pinning the engine does anyway. No core is switched off: the main game loop, the renderer, the sound and input keep their own cores.</string>
+
+    <string name="cpu_pinning">CPU Pinning</string>
+    <string name="cpu_pinning_auto">Automatic (recommended)</string>
+    <string name="cpu_pinning_wide">Wide: every core but the main one</string>
+    <string name="cpu_pinning_hint">Which cores the game’s own threads are pinned to. Automatic is the arrangement every measurement was taken with, and the fastest one measured. Wide lets them use the little cores as well, for phones where they queue up on the performance cores. Applies the next time the game starts.</string>
 </resources>
