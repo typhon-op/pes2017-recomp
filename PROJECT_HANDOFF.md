@@ -837,6 +837,12 @@ checked against the surface's own list and logged with that list at swapchain
 creation, **unset still FIFO**; and `vk::renderer::ThermalStatus()` for the
 line. No frame generation, affinity or "performance mode" was touched.
 
+The engine's own source is not tracked in this repository. The change as a
+patch against the checkpoint's tree (engine commit `4e2a680`) is
+`patches/tfix6-frame-stats-and-present-mode.patch`: six files, and it applies
+with `patch -p1` from the engine tree's root -- the dry run against the
+pristine checkpoint source is clean.
+
 **Checks actually run.** `ctest` over the native checks: 20 of 20 pass,
 including the new `frame-stats`; `bc-test` cannot be configured on this machine
 (no Vulkan headers outside the Android toolchain) and is the only one not run.

@@ -1,0 +1,528 @@
+# tfix6: frame-time diagnostics and a selectable present mode
+#
+# Against the engine source of the native checkpoint (repo/, engine commit
+# 4e2a680). Apply from the repository root of the engine tree:
+#
+#   patch -p1 < tfix6-frame-stats-and-present-mode.patch
+#
+# What it does, and why, is in docs/performance.md section "Frame times against
+# Winlator Mali" and PROJECT_HANDOFF.md. Nothing changes unless PES17_PRESENT_MODE
+# is set: unset is FIFO, which is what the code did before.
+#
+--- a/repo/runtime/gpu/vulkan/presenter.cpp
++++ b/repo/runtime/gpu/vulkan/presenter.cpp
+@@ -64,6 +64,7 @@
+ #include "util.h"
+ #include "upscaler.h"
+ #include "framegen.h"
++#include "../../frame_stats.h"
+ 
+ namespace
+ {
+@@ -181,6 +182,18 @@
+         std::atomic<uint64_t> guestPeriodNs{ 0 };
+         std::atomic<int64_t> guestPeriodAt{ 0 };
+ 
++        // The `fstats:` window (frame_stats.h): the intervals the display took,
++        // for the percentiles, the 1% low and the spikes one line reports per
++        // 600 presents. Nothing reads these numbers; they are written for a
++        // phone report to quote.
++        frame_stats::Window frameWindow;
++        uint64_t fstatsDuplicated = 0;       // blanks a frame was held over this window
++        uint64_t fstatsDroppedAt = 0;        // droppedFrames when the window opened
++        uint64_t fstatsEmptyAt = 0;          // emptyPresents when it opened
++
++        // The mode the swapchain was made with. FIFO unless asked otherwise.
++        VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
++
+         // Pacing (tfix5, pacing.h). Display timing is optional: the measured
+         // clock in display_clock.h is the FIFO fallback, and 0 here means the
+         // driver was not asked. Read once as the run starts.
+@@ -207,6 +220,84 @@
+ 
+     Presenter g;
+ 
++    // The name a present mode goes by in the log, so a report can say "mailbox"
++    // rather than 1.
++    const char* PresentModeName(VkPresentModeKHR mode)
++    {
++        switch (mode)
++        {
++        case VK_PRESENT_MODE_IMMEDIATE_KHR: return "immediate";
++        case VK_PRESENT_MODE_MAILBOX_KHR: return "mailbox";
++        case VK_PRESENT_MODE_FIFO_KHR: return "fifo";
++        case VK_PRESENT_MODE_FIFO_RELAXED_KHR: return "fifo_relaxed";
++        case VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR: return "shared_demand";
++        case VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR: return "shared_continuous";
++        default: return "other";
++        }
++    }
++
++    // Which present mode to ask for, from PES17_PRESENT_MODE, checked against
++    // what this surface actually lists. Called where the swapchain is made.
++    VkPresentModeKHR ChoosePresentMode()
++    {
++        const char* wanted = env::Text("PES17_PRESENT_MODE");
++        VkPresentModeKHR mode = VK_PRESENT_MODE_FIFO_KHR;
++        if (wanted && *wanted)
++        {
++            if (std::strcmp(wanted, "mailbox") == 0) mode = VK_PRESENT_MODE_MAILBOX_KHR;
++            else if (std::strcmp(wanted, "immediate") == 0) mode = VK_PRESENT_MODE_IMMEDIATE_KHR;
++            else if (std::strcmp(wanted, "fifo") != 0)
++                LOGW("vulkan: PES17_PRESENT_MODE=%s is not fifo, mailbox or immediate; FIFO", wanted);
++            if (mode != VK_PRESENT_MODE_FIFO_KHR)
++            {
++                uint32_t count = 0;
++                if (vkGetPhysicalDeviceSurfacePresentModesKHR(g.physical, g.surface, &count, nullptr) != VK_SUCCESS)
++                    count = 0;
++                std::vector<VkPresentModeKHR> list(count);
++                if (count)
++                    vkGetPhysicalDeviceSurfacePresentModesKHR(g.physical, g.surface, &count, list.data());
++                bool lists = false;
++                std::string all;
++                for (VkPresentModeKHR m : list)
++                {
++                    if (m == mode) lists = true;
++                    all += all.empty() ? "" : " ";
++                    all += PresentModeName(m);
++                }
++                LOGI("vulkan: surface present modes: %s; asked for %s",
++                     all.empty() ? "none" : all.c_str(), PresentModeName(mode));
++                if (!lists)
++                {
++                    LOGW("vulkan: this surface does not list %s; staying on FIFO", PresentModeName(mode));
++                    mode = VK_PRESENT_MODE_FIFO_KHR;
++                }
++            }
++        }
++        else
++        {
++            // Still worth one line: it says whether the newest-frame mode was
++            // even available on this phone, which is half the FIFO question.
++            uint32_t count = 0;
++            if (vkGetPhysicalDeviceSurfacePresentModesKHR(g.physical, g.surface, &count, nullptr) == VK_SUCCESS && count)
++            {
++                std::vector<VkPresentModeKHR> list(count);
++                vkGetPhysicalDeviceSurfacePresentModesKHR(g.physical, g.surface, &count, list.data());
++                std::string all;
++                bool mailbox = false;
++                for (VkPresentModeKHR m : list)
++                {
++                    if (m == VK_PRESENT_MODE_MAILBOX_KHR) mailbox = true;
++                    all += all.empty() ? "" : " ";
++                    all += PresentModeName(m);
++                }
++                LOGI("vulkan: surface present modes: %s; FIFO%s", all.c_str(),
++                     mailbox ? " (mailbox is available: PES17_PRESENT_MODE=mailbox asks for it)" : "");
++            }
++        }
++        LOGI("vulkan: present mode %s", PresentModeName(mode));
++        return mode;
++    }
++
+     bool Check(VkResult r, const char* what)
+     {
+         if (r == VK_SUCCESS) return true;
+@@ -529,7 +620,17 @@
+             LOGW("vulkan: the surface will not take an identity transform; the picture may be"
+                  " rotated");
+         info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+-        info.presentMode = VK_PRESENT_MODE_FIFO_KHR;      // always supported
++        // FIFO is the mode every surface has and the one this presenter has
++        // always used: a frame a refresh, in order, and a frame that misses its
++        // refresh waits for the next. That is the console's presentation, and
++        // it is what a title hovering around the panel's period turns into 60
++        // and 30 a second in turn -- which is the shape of the phone reports
++        // about instability. PES17_PRESENT_MODE=mailbox (or immediate) asks the
++        // driver for its newest-frame mode where the surface lists one, so that
++        // can be measured against FIFO on a phone; unset, nothing changes. A
++        // mode the surface does not list is refused, not silently substituted.
++        g.presentMode = ChoosePresentMode();
++        info.presentMode = g.presentMode;
+         info.clipped = VK_TRUE;
+         // The one being replaced, if any, so the driver can carry over what it
+         // can; it is destroyed once the new one exists.
+@@ -850,6 +951,45 @@
+     // On the console the blank the title counts is the display's own; a
+     // timer of ours beside it drifts, and every so often a frame is shown
+     // twice or waits a frame longer.
++    // How many presents one `fstats:` window holds: 600 is about ten seconds
++    // at 60 and about twenty at 30, long enough for a percentile to mean
++    // something and short enough that a match has several.
++    constexpr size_t kFrameStatsWindow = 600;
++
++    // One line a window: what a phone report has to carry. Average FPS alone
++    // cannot separate a smooth 55 from a 60 with a hitch every second, and the
++    // difference between those is what "less stable than Winlator" means, so
++    // the line is percentiles, the 1% low and the spikes, with the resolution,
++    // the limit, the present mode and the phone's thermal status beside them.
++    void LogFrameStats()
++    {
++        // The target is the run's own: the panel's period at 60, the limit's
++        // period below it. That is what makes "over 1.5x" mean a dropped
++        // blank rather than a fixed 25 ms.
++        const double targetMs = frame_rate::Limited()
++            ? 1000.0 / double(frame_rate::Limit())
++            : (g.periodNs > 0 ? g.periodNs / 1e6 : 1000.0 / 60.0);
++        const frame_stats::Summary s = g.frameWindow.Take(targetMs);
++        if (!s.count) return;
++        const uint64_t dropped = g.droppedFrames.load(std::memory_order_relaxed);
++        const uint64_t empty = g.emptyPresents.load(std::memory_order_relaxed);
++        LOGI("fstats: %zu frames in %.1f s, %.1f fps; frame ms p50 %.2f p90 %.2f p99 %.2f worst %.2f,"
++             " 1%% low %.2f; %zu over 1.5x and %zu over 2x the %.2f ms target; %llu duplicated blanks,"
++             " %llu frames dropped, %llu empty; %ux%u at limit %u, %s, thermal %d",
++             s.count, double(s.count) * s.meanMs / 1000.0, s.fps,
++             s.p50Ms, s.p90Ms, s.p99Ms, s.worstMs, s.low1Ms,
++             s.overOneAndAHalf, s.overTwice, targetMs,
++             (unsigned long long)g.fstatsDuplicated,
++             (unsigned long long)(dropped - g.fstatsDroppedAt),
++             (unsigned long long)(empty - g.fstatsEmptyAt),
++             g.extent.width, g.extent.height, frame_rate::Limit(),
++             PresentModeName(g.presentMode), vk::renderer::ThermalStatus());
++        g.frameWindow.Reset();
++        g.fstatsDuplicated = 0;
++        g.fstatsDroppedAt = dropped;
++        g.fstatsEmptyAt = empty;
++    }
++
+     void SawDisplayed(uint64_t id, int64_t at)
+     {
+         const uint64_t queued = g.lastQueued.load(std::memory_order_relaxed);
+@@ -866,6 +1006,21 @@
+                 g.periodNs += (gap - g.periodNs) / 256.0;
+             if (blanks > long(frames))
+                 stutters::Displayed(id, uint32_t(blanks - long(frames)), gap / 1e6);
++
++            // The `fstats:` window (frame_stats.h). A gap over half a second is a
++            // load, a menu or a pause rather than a frame: the window starts again
++            // after one instead of counting it as the worst frame of the run.
++            if (gap > 500e6)
++            {
++                g.frameWindow.Reset();
++                g.fstatsDuplicated = 0;
++            }
++            else
++            {
++                g.frameWindow.Add(gap / 1e6);
++                if (blanks > long(frames)) g.fstatsDuplicated += uint64_t(blanks - long(frames));
++                if (g.frameWindow.Count() >= kFrameStatsWindow) LogFrameStats();
++            }
+         }
+         g.lastShownNs = at;
+         g.lastShownId = id;
+@@ -1779,8 +1934,9 @@
+         snprintf(line, sizeof(line), format, args...);
+         out += line;
+     };
+-    add("presenter: running %d, swapchains made %llu, %zu swapchain images, %ux%u, present mode FIFO\n",
+-        int(g.running.load()), (unsigned long long)g.swapchainsMade, g.images.size(), g.extent.width, g.extent.height);
++    add("presenter: running %d, swapchains made %llu, %zu swapchain images, %ux%u, present mode %s\n",
++        int(g.running.load()), (unsigned long long)g.swapchainsMade, g.images.size(), g.extent.width, g.extent.height,
++        PresentModeName(g.presentMode));
+     add("presenter: %u frames in flight, present_wait %d, suboptimal expected %d, fullscreen %d\n",
+         kFramesInFlight, int(g.presentWait), int(g.suboptimalIsExpected), int(g.fullscreen));
+     add("pacing: mode %s, strategy %s, display timing %d, display period %.4f ms\n",
+--- a/repo/runtime/gpu/vulkan/renderer.cpp
++++ b/repo/runtime/gpu/vulkan/renderer.cpp
+@@ -10,6 +10,7 @@
+ void vk::renderer::Shutdown() {}
+ bool vk::renderer::Ready() { return false; }
+ void vk::renderer::SetThermalStatus(int) {}
++int vk::renderer::ThermalStatus() { return 0; }
+ void vk::renderer::Draw(const gpu::RegisterFile&, const DrawCall&) {}
+ void vk::renderer::Resolve(const gpu::RegisterFile&) {}
+ void vk::renderer::Swap(uint32_t) {}
+@@ -659,5 +660,6 @@
+ // The phone's thermal status (PowerManager THERMAL_STATUS_*), from the Java side. Read by the
+ // dynamic scene scale at the next frame.
+ void vk::renderer::SetThermalStatus(int status) { g.thermalStatus.store(status, std::memory_order_relaxed); }
++int vk::renderer::ThermalStatus() { return g.thermalStatus.load(std::memory_order_relaxed); }
+ 
+ #endif  // PES17_HAVE_VULKAN
+--- a/repo/runtime/gpu/vulkan/renderer.h
++++ b/repo/runtime/gpu/vulkan/renderer.h
+@@ -24,6 +24,10 @@
+     // thread; the dynamic scene scale (PES17_DYNAMIC_SCALE) reads it at the next frame.
+     void SetThermalStatus(int status);
+ 
++    // The status last set: the `fstats:` line says what the phone was doing when
++    // its frame times were taken. Any thread; 0 until the app reports one.
++    int ThermalStatus();
++
+     // The name a shader goes by here: FNV-1a over its microcode dwords, as the
+     // command stream loads them.
+     inline uint64_t ShaderHash(const uint32_t* code, size_t words)
+--- a/repo/runtime/frame_stats.h
++++ b/repo/runtime/frame_stats.h
+@@ -0,0 +1,107 @@
++#pragma once
++// Frame-interval statistics: what the `fstats:` line reports.
++//
++// The rest of the instrumentation counts events -- stutters.h counts frames
++// lost and the blanks a frame was held, pacing_trace.h prints mean/min/max of
++// the presents' spacing. Mean and max cannot tell a smooth 55 FPS from a 60 FPS
++// run with a spike every second, which is the difference the phone reports are
++// about, so this keeps the intervals themselves and answers with percentiles and
++// the 1% low.
++//
++// One window is one line in game.log: 600 presents, about ten seconds at 60.
++// Everything here is arithmetic on doubles; it opens no device and reads no
++// clock, so tests/frame_stats_test.cpp checks it without a phone.
++#include <algorithm>
++#include <cmath>
++#include <cstddef>
++#include <cstring>
++
++namespace frame_stats
++{
++    struct Summary
++    {
++        size_t count = 0;
++        double fps = 0;          // frames a second over the window, from its own intervals
++        double meanMs = 0;
++        double p50Ms = 0, p90Ms = 0, p99Ms = 0;
++        double worstMs = 0;
++        double low1Ms = 0;       // the mean of the slowest 1%: the "1% low"
++        size_t overOneAndAHalf = 0, overTwice = 0;   // frames over 1.5x and 2x the target
++    };
++
++    class Window
++    {
++    public:
++        // Ten seconds at 60, with room for a burst: a window that fills is
++        // halved rather than stopped, so a long stall cannot freeze the count.
++        static constexpr size_t kCapacity = 1024;
++
++        void Add(double ms)
++        {
++            if (!std::isfinite(ms) || ms < 0) return;
++            if (count_ == kCapacity)
++            {
++                const size_t keep = kCapacity / 2;
++                std::memmove(samples_, samples_ + (kCapacity - keep), keep * sizeof(double));
++                count_ = keep;
++            }
++            samples_[count_++] = ms;
++        }
++
++        void Reset() { count_ = 0; }
++
++        size_t Count() const { return count_; }
++
++        // The window's numbers. `targetMs` is the frame period the run is paced
++        // to (16.667 at 60, 1000/45 at 45); 0 leaves the spike counts at zero.
++        // Does not reset: the caller decides when a window ends.
++        Summary Take(double targetMs) const
++        {
++            Summary s;
++            if (!count_) return s;
++            std::copy(samples_, samples_ + count_, sorted_);
++            std::sort(sorted_, sorted_ + count_);
++
++            double sum = 0;
++            for (size_t i = 0; i < count_; ++i) sum += sorted_[i];
++            s.count = count_;
++            s.meanMs = sum / double(count_);
++            s.fps = sum > 0 ? double(count_) * 1000.0 / sum : 0.0;
++            s.p50Ms = Percentile(50.0);
++            s.p90Ms = Percentile(90.0);
++            s.p99Ms = Percentile(99.0);
++            s.worstMs = sorted_[count_ - 1];
++
++            const size_t slowest = std::max<size_t>(1, size_t(std::lround(double(count_) / 100.0)));
++            double tail = 0;
++            for (size_t i = count_ - slowest; i < count_; ++i) tail += sorted_[i];
++            s.low1Ms = tail / double(slowest);
++
++            if (targetMs > 0)
++                for (size_t i = 0; i < count_; ++i)
++                {
++                    if (sorted_[i] > targetMs * 1.5) s.overOneAndAHalf++;
++                    if (sorted_[i] > targetMs * 2.0) s.overTwice++;
++                }
++            return s;
++        }
++
++    private:
++        // Linear interpolation between the two samples either side, as numpy's
++        // default does: for a smooth run every percentile is the period itself.
++        double Percentile(double p) const
++        {
++            if (!count_) return 0;
++            if (count_ == 1) return sorted_[0];
++            const double x = (p / 100.0) * double(count_ - 1);
++            const size_t lo = size_t(std::floor(x));
++            const double frac = x - double(lo);
++            const size_t hi = std::min(lo + 1, count_ - 1);
++            return sorted_[lo] * (1.0 - frac) + sorted_[hi] * frac;
++        }
++
++        double samples_[kCapacity]{};
++        double mutable sorted_[kCapacity]{};
++        size_t count_ = 0;
++    };
++}
+--- a/repo/tests/frame_stats_test.cpp
++++ b/repo/tests/frame_stats_test.cpp
+@@ -0,0 +1,144 @@
++// The frame-interval statistics behind the `fstats:` line (runtime/frame_stats.h).
++// It is arithmetic over intervals and nothing else, so the numbers a phone
++// report is judged by are checked here: a smooth run has every percentile at
++// its own period, one slow frame in a hundred is the 1% low and not the mean,
++// the spike counts use the run's own target, and a stall that is really a load
++// screen does not poison the window it follows.
++#include "frame_stats.h"
++
++#include <cmath>
++#include <cstdio>
++#include <string>
++
++namespace
++{
++    int g_checks = 0;
++    int g_failures = 0;
++
++    void Check(bool ok, const std::string& what)
++    {
++        g_checks++;
++        if (!ok)
++        {
++            g_failures++;
++            std::printf("FAIL: %s\n", what.c_str());
++        }
++    }
++
++    bool Near(double a, double b, double tolerance = 0.01)
++    {
++        return std::fabs(a - b) <= tolerance;
++    }
++
++    void Empty()
++    {
++        frame_stats::Window w;
++        const frame_stats::Summary s = w.Take(16.667);
++        Check(s.count == 0, "an empty window has no frames");
++        Check(s.fps == 0 && s.p50Ms == 0 && s.low1Ms == 0 && s.worstMs == 0, "an empty window is all zeros");
++        Check(s.overOneAndAHalf == 0 && s.overTwice == 0, "an empty window has no spikes");
++    }
++
++    void Smooth()
++    {
++        frame_stats::Window w;
++        for (int i = 0; i < 600; i++) w.Add(1000.0 / 60.0);
++        const frame_stats::Summary s = w.Take(1000.0 / 60.0);
++        Check(s.count == 600, "600 frames counted");
++        Check(Near(s.fps, 60.0, 0.05), "a steady 16.667 ms is 60 fps");
++        Check(Near(s.p50Ms, 16.667) && Near(s.p90Ms, 16.667) && Near(s.p99Ms, 16.667),
++              "every percentile of a smooth run is the period");
++        Check(Near(s.low1Ms, 16.667) && Near(s.worstMs, 16.667), "the 1% low and the worst are the period too");
++        Check(s.overOneAndAHalf == 0 && s.overTwice == 0, "a smooth run has no spikes");
++    }
++
++    void Percentiles()
++    {
++        frame_stats::Window w;
++        for (double ms : { 10.0, 20.0, 30.0, 40.0 }) w.Add(ms);
++        const frame_stats::Summary s = w.Take(0);
++        Check(Near(s.p50Ms, 25.0), "p50 of 10/20/30/40 is 25");
++        Check(Near(s.p90Ms, 37.0), "p90 of 10/20/30/40 is 37");
++        Check(Near(s.p99Ms, 39.7), "p99 of 10/20/30/40 is 39.7");
++        Check(Near(s.worstMs, 40.0), "the worst is the slowest frame");
++        // Four samples: the slowest 1% is one of them.
++        Check(Near(s.low1Ms, 40.0), "the 1% low of four frames is the slowest");
++        Check(Near(s.meanMs, 25.0) && Near(s.fps, 40.0), "mean and fps over the four");
++    }
++
++    // The case the phone reports are about: a run whose mean looks fine and
++    // whose tail does not.
++    void OneInAHundred()
++    {
++        frame_stats::Window w;
++        for (int i = 0; i < 198; i++) w.Add(1000.0 / 60.0);
++        w.Add(100.0);
++        w.Add(100.0);
++        const frame_stats::Summary s = w.Take(1000.0 / 60.0);
++        Check(Near(s.low1Ms, 100.0, 0.001), "the 1% low is the two slow frames, not the mean");
++        Check(s.worstMs > 99.0, "the worst frame is one of them");
++        Check(s.meanMs < 18.0, "and the mean still looks healthy");
++        Check(s.overOneAndAHalf == 2 && s.overTwice == 2, "two frames over 1.5x, both also over 2x");
++    }
++
++    void Spikes()
++    {
++        frame_stats::Window w;
++        for (double ms : { 16.0, 16.0, 20.0, 34.0, 40.0 }) w.Add(ms);
++        const frame_stats::Summary s = w.Take(1000.0 / 60.0);
++        Check(s.overOneAndAHalf == 2, "34 and 40 ms are over 1.5x of 16.667 (20 ms is not)");
++        Check(s.overTwice == 2, "34 and 40 ms are also over 2x");
++        const frame_stats::Summary none = w.Take(0);
++        Check(none.overOneAndAHalf == 0 && none.overTwice == 0, "no target, no spike counts");
++    }
++
++    void NotAFrame()
++    {
++        frame_stats::Window w;
++        w.Add(std::nan(""));
++        w.Add(INFINITY);
++        w.Add(-16.0);
++        Check(w.Count() == 0, "NaN, infinity and a negative interval are not frames");
++        w.Add(16.0);
++        Check(w.Count() == 1, "a real frame still counts");
++    }
++
++    void Rolling()
++    {
++        frame_stats::Window w;
++        for (size_t i = 0; i < frame_stats::Window::kCapacity; i++) w.Add(10.0);
++        w.Add(20.0);
++        // A full window keeps its newer half rather than stopping or growing:
++        // the count lands just under halfway, then fills again.
++        Check(w.Count() == frame_stats::Window::kCapacity / 2 + 1, "a full window halves rather than stopping");
++        const frame_stats::Summary s = w.Take(0);
++        Check(Near(s.worstMs, 20.0, 0.001), "the frame just added is in the window");
++        Check(s.meanMs > 10.0, "the shifted window kept the older frames");
++        w.Reset();
++        Check(w.Count() == 0, "Reset empties it");
++    }
++
++    void Single()
++    {
++        frame_stats::Window w;
++        w.Add(40.0);
++        const frame_stats::Summary s = w.Take(16.667);
++        Check(s.count == 1 && Near(s.p50Ms, 40.0) && Near(s.p99Ms, 40.0) && Near(s.low1Ms, 40.0),
++              "one frame is every percentile");
++        Check(s.overOneAndAHalf == 1 && s.overTwice == 1, "and it is a spike, over both thresholds");
++    }
++}
++
++int main()
++{
++    Empty();
++    Smooth();
++    Percentiles();
++    OneInAHundred();
++    Spikes();
++    NotAFrame();
++    Rolling();
++    Single();
++    std::printf("frame_stats: %d checks, %d failures\n", g_checks, g_failures);
++    return g_failures ? 1 : 0;
++}
+--- a/repo/tests/CMakeLists.txt
++++ b/repo/tests/CMakeLists.txt
+@@ -259,3 +259,14 @@
+ target_compile_definitions(skill-mirror-test PRIVATE
+     "PES17_SKILL_KT=\"${CMAKE_CURRENT_SOURCE_DIR}/../android/app/src/main/java/com/pes2017/recomp/SkillMoves.kt\"")
+ add_test(NAME skill-mirror COMMAND skill-mirror-test)
++
++# ---- the frame-interval statistics -----------------------------------------
++# The numbers the `fstats:` line reports (runtime/frame_stats.h), which is what
++# a phone report about unstable FPS is judged by: percentiles over a window of
++# intervals, the 1% low as the mean of the slowest hundredth, spike counts
++# against the run's own target, and a load screen's half-second gap not counted
++# as a frame.
++add_executable(frame-stats-test
++    "${CMAKE_CURRENT_SOURCE_DIR}/frame_stats_test.cpp")
++target_include_directories(frame-stats-test PRIVATE "${PES17_RUNTIME}")
++add_test(NAME frame-stats COMMAND frame-stats-test)
