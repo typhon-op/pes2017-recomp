@@ -134,6 +134,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
                     Log.i("PES17Stick", "stick: match read as $matchNow")
                     matchState = matchNow
                 }
+                // The pad reads the same answer: its match controls follow the
+                // engine's match flow, not only the sampled phase.
+                if (overlay.matchState != matchNow) overlay.matchState = matchNow
             }
             handler.postDelayed(this, PHASE_POLL_MS)
         }
@@ -629,13 +632,13 @@ class GameActivity : AppCompatActivity(), NativeListener {
             gravity = Gravity.CENTER_VERTICAL
         }
         val hudTitle = TextView(this).apply {
-            text = "PES 2017 ANDROID · PERFORMANCE"
+            text = getString(R.string.hud_performance_title)
             setTextColor(Color.argb(255, 56, 189, 248))
             textSize = 11f
             typeface = Typeface.DEFAULT_BOLD
         }
         val hudCollapseBtn = TextView(this).apply {
-            text = "  [▲ Close]"
+            text = "  " + getString(R.string.hud_close)
             setTextColor(Color.argb(200, 148, 163, 184))
             textSize = 10f
             typeface = Typeface.MONOSPACE
@@ -646,7 +649,7 @@ class GameActivity : AppCompatActivity(), NativeListener {
             }
         }
         val hudConsoleBtn = TextView(this).apply {
-            text = " [⚡ CMD]"
+            text = " " + getString(R.string.hud_cmd)
             setTextColor(Color.argb(230, 245, 158, 11))
             textSize = 10f
             typeface = Typeface.MONOSPACE
@@ -1447,6 +1450,25 @@ class GameActivity : AppCompatActivity(), NativeListener {
             ) {
                 overlay.noteStartPressed()
             }
+            // A pad's Cross is the same resume the on-screen A is: while the
+            // title's sheet is open it closes it, and the stick goes back to
+            // MATCH on that press, not on the next sample. Only the first DOWN,
+            // for the same reason as START.
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 &&
+                event.keyCode == KeyEvent.KEYCODE_BUTTON_A
+            ) {
+                overlay.noteMenuCancel()
+            }
+            // A d-pad walked into the sheet is navigation too: Cross after it
+            // selects a row rather than resuming.
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 &&
+                (event.keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                    event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
+                    event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                    event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)
+            ) {
+                overlay.noteSheetNavigate()
+            }
             return true
         }
         return super.dispatchKeyEvent(event)
@@ -1472,9 +1494,14 @@ class GameActivity : AppCompatActivity(), NativeListener {
             // Let the overlay's auto stick follow a pad's steering too: with
             // the touchscreen hidden, touch MOVE events never arrive, and a
             // pad player's kick-off would otherwise only be seen by the timer.
-            overlay.notePadStick(
-                event.getAxisValue(MotionEvent.AXIS_X), event.getAxisValue(MotionEvent.AXIS_Y),
-            )
+            val padX = event.getAxisValue(MotionEvent.AXIS_X)
+            val padY = event.getAxisValue(MotionEvent.AXIS_Y)
+            overlay.notePadStick(padX, padY)
+            // A stick walked into the title's sheet has left Resume behind, so
+            // the Cross after it picks a row instead of resuming.
+            if (abs(padX) > PAD_SHEET_NAVIGATE || abs(padY) > PAD_SHEET_NAVIGATE) {
+                overlay.noteSheetNavigate()
+            }
             return true
         }
         return super.onGenericMotionEvent(event)
@@ -1733,12 +1760,12 @@ class GameActivity : AppCompatActivity(), NativeListener {
     private fun toggleCapture() {
         if (!capture.active) {
             capture.onTick = { seconds ->
-                captureButton.text = "\u25A0 STOP %d:%02d".format(seconds / 60, seconds % 60)
+                captureButton.text = getString(R.string.capture_stop_button, seconds / 60, seconds % 60)
             }
             capture.start(surfaceView)
             captureButton.alpha = 1f
             captureButton.setTextColor(Color.rgb(255, 90, 90))
-            captureButton.text = "\u25A0 STOP 0:00"
+            captureButton.text = getString(R.string.capture_stop_button, 0, 0)
             toast(getString(R.string.capture_started))
             return
         }
@@ -1816,18 +1843,18 @@ class GameActivity : AppCompatActivity(), NativeListener {
     }
 
     private fun resetCaptureButton() {
-        captureButton.text = "CAPTURE"
+        captureButton.text = getString(R.string.capture_button)
         captureButton.alpha = 0.55f
         captureButton.setTextColor(Color.WHITE)
     }
 
     private fun refreshMacroButton() {
         if (Macro.recording) {
-            macroButton.text = "\u25A0 STOP REC"
+            macroButton.text = getString(R.string.macro_stop_button)
             macroButton.alpha = 1f
             macroButton.setTextColor(Color.rgb(255, 90, 90))
         } else {
-            macroButton.text = "REC MACRO"
+            macroButton.text = getString(R.string.macro_record_button)
             macroButton.alpha = 0.55f
             macroButton.setTextColor(Color.WHITE)
         }
@@ -2050,6 +2077,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
             if (isFinishing) return@post
             if (next != matchState) Log.i("PES17Stick", "stick: match $next ($why)")
             matchState = next
+            // Pushed the moment the flow changes, so the pad's match controls
+            // are already the right ones when the pre-match screens begin.
+            if (overlay.matchState != next) overlay.matchState = next
         }
     }
 
@@ -2080,6 +2110,9 @@ class GameActivity : AppCompatActivity(), NativeListener {
 
         /** The timer's resolution: how often a hold is checked, in milliseconds. */
         private const val PAD_HOLD_POLL_MS = 100L
+
+        /** Past this a pad's stick is walking a menu, not resting. */
+        private const val PAD_SHEET_NAVIGATE = 0.5f
 
         /** How long D-Pad up and RB must be down together to count as the chord. */
         private const val CHORD_HOLD_MS = 250L

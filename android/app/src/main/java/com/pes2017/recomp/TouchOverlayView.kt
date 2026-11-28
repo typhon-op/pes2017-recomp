@@ -398,9 +398,13 @@ class TouchOverlayView @JvmOverloads constructor(
         set(value) {
             if (field == value) return
             field = value
-            // A different flow is not the title's in-match menu the switch was
-            // following: START's latch belongs to one match and goes with it.
-            titleMenu = false
+            // A sampled phase is not news a sheet the pad opened cannot
+            // survive: the title keeps naming `Match/...` under its own sheet,
+            // and a menu the engine really enters arrives through [matchState].
+            // Clearing the sheet here is what left the switch on MENU for
+            // seconds after Cross, waiting for a sample. A resume is settled
+            // instead, and only against a different answer.
+            settleSheet()
             // Entering the Match flow is not the kick-off: the lineups, the
             // walk-out and the pre-match cutscenes are inside it too, and START
             // there skips them rather than opening the pause sheet. The switch
@@ -451,16 +455,101 @@ class TouchOverlayView @JvmOverloads constructor(
         }
 
     /**
-     * Whether the title's own in-match menu is open. The engine keeps naming
-     * the flow `Match/...` while Game Plan, Substitutions or the START pause
-     * sheet is up, so the phase cannot answer this: START does. A press in a
-     * running match opens the menu (MENU stick), the next START -- the title's
-     * own resume -- closes it (MATCH stick). A phase change clears it, and the
-     * app's own pause does not: closing that lands back in the title's menu,
-     * where the MENU stick is still the right one.
+     * The title's own in-match menu, as the pad followed it.
+     *
+     * The engine keeps naming the flow `Match/...` while the sheet is up, and
+     * the name it returns to is only announced once the title is actually back
+     * in play -- seconds after the player pressed Resume. So the sheet is the
+     * pad's own state: START opens it, START or Cross closes it, and
+     * [StickSheet.RESUMED] carries that close through until the engine says
+     * something different. The app's own pause does not touch it: closing that
+     * lands back in the title's menu, where the MENU stick is still the right
+     * one.
      */
-    var titleMenu: Boolean = false
+    var sheet: StickSheet = StickSheet.ABSENT
         private set
+
+    /**
+     * Whether a thumb has navigated the title's sheet since it opened. The sheet
+     * opens with **Resume** highlighted, so Cross resumes an untouched sheet and
+     * selects another row once one has been walked to.
+     */
+    private var titleMenuNavigated = false
+
+    /** What the phase and the named flow were when the player resumed. */
+    private var resumedIn: Pair<GamePhase, MatchState>? = null
+
+    /**
+     * A stick, a d-pad or the pill used while the sheet is up. A controller's
+     * own controls come through here too, so a pad's Cross after walking the
+     * sheet selects a row exactly as a thumb's does.
+     */
+    fun noteSheetNavigate() {
+        if (sheet == StickSheet.OPEN) titleMenuNavigated = true
+    }
+
+    /**
+     * What the engine says the match is doing (runtime/match_state.h), pushed
+     * the moment the title enters a flow. It decides the pad's match controls
+     * together with the phase -- a `Match/...` flow keeps them on screen through
+     * the pre-match screens -- and it is what the stick's switch follows while
+     * it is known, because it arrives on the change instead of on a sample.
+     */
+    var matchState: MatchState = MatchState.UNKNOWN
+        set(value) {
+            if (field == value) return
+            field = value
+            // The engine moved on: a resume stops outranking it, and a match
+            // that is loading cannot still be under an old sheet.
+            settleSheet()
+            if (sheet == StickSheet.OPEN && value == MatchState.LOADING) {
+                noteSheet(StickSheet.ABSENT, "a new match is loading")
+            }
+            invalidate()
+            // A named flow is what the switch follows, so a change in it moves
+            // the switch here -- pushed, never sampled.
+            reconsiderStick()
+        }
+
+    /** The one writer of [sheet], so every path clears the same bookkeeping. */
+    private fun noteSheet(value: StickSheet, because: String) {
+        resumedIn = if (value == StickSheet.RESUMED) gamePhase to matchState else null
+        if (value != StickSheet.OPEN) titleMenuNavigated = false
+        if (sheet == value) return
+        sheet = value
+        Log.i(TAG, "stick: the title's menu ${value.name.lowercase()} ($because)")
+        reconsiderStick()
+        invalidate()
+    }
+
+    /**
+     * A resume outranks the engine only until the engine says something else:
+     * the moment the phase or the named flow differs from what they were when
+     * the player resumed, the engine's answer is the rule again. A stale sample
+     * can therefore never hold MATCH on, and a menu walked into after the
+     * resume takes the switch back at once.
+     */
+    private fun settleSheet() {
+        val at = resumedIn ?: return
+        if (at.first == gamePhase && at.second == matchState) return
+        noteSheet(StickSheet.ABSENT, "the engine moved on")
+    }
+
+    /**
+     * One Cross/A press from the pad, already on its way to the title. While the
+     * sheet is open and nothing has been navigated, A is the sheet's own Resume:
+     * the sheet closes and the stick goes back to MATCH without a second START,
+     * and without waiting for a flow name the title has not said yet.
+     */
+    fun noteMenuCancel() {
+        if (sheet != StickSheet.OPEN) return
+        noteSheet(
+            StickSwitch.sheetAfter(
+                sheet, cancelPressed = true, navigated = titleMenuNavigated,
+            ),
+            "Cross on the sheet's Resume",
+        )
+    }
 
     /**
      * One START press, from the on-screen button (press) or a physical pad
@@ -470,17 +559,12 @@ class TouchOverlayView @JvmOverloads constructor(
      */
     fun noteStartPressed() {
         if (editing || paused) return
-        if (gamePhase != GamePhase.MATCH) {
-            // Defensive: a latch from a previous match cannot survive a screen
-            // that is no longer a match even if the phase was not rebuilt.
-            if (titleMenu) {
-                titleMenu = false
-                reconsiderStick()
-                invalidate()
-            }
-            return
-        }
-        if (kickOffPending) {
+        // A sheet the pad opened closes on START wherever the engine thinks it
+        // is: while the title's sheet is up the flow name is still a match's,
+        // and refusing the press on a stale phase is what left the switch on
+        // MENU until the engine caught up.
+        if (sheet == StickSheet.ABSENT && !StickSwitch.inMatchFlow(gamePhase, matchState)) return
+        if (sheet == StickSheet.ABSENT && kickOffPending) {
             // Holding a stick at this moment is live play, even if no MOVE has
             // arrived since the hold began (a still thumb sends nothing).
             if (steeringSustained() || padSteeringSustained()) {
@@ -498,13 +582,9 @@ class TouchOverlayView @JvmOverloads constructor(
                 removeCallbacks(padKickOffProbe)
             }
         }
-        titleMenu = !titleMenu
-        // The new stage lets go of the run and the two-stage dwell itself; the
-        // title stops the match behind its menu, so nothing else is held on
-        // purpose. The START finger's own claim is left alone: it is the press
-        // that opened the menu and must still reach the title.
-        reconsiderStick()
-        invalidate()
+        // START toggles the sheet: it opens one in a match, and is the title's
+        // own resume when one is already up.
+        noteSheet(StickSwitch.sheetAfter(sheet, startPressed = true), "START")
     }
 
     private var stanceToast: Toast? = null
@@ -570,7 +650,7 @@ class TouchOverlayView @JvmOverloads constructor(
 
     /** The touch stick is deflected far enough to be play, not a menu nudge. */
     private fun steeringMatch(): Boolean {
-        if (gamePhase != GamePhase.MATCH || titleMenu || paused || editing) return false
+        if (gamePhase != GamePhase.MATCH || sheet == StickSheet.OPEN || paused || editing) return false
         val p = stickPositions[MOVE_STICK] ?: return false
         return hypot(p[0], p[1]) >= KICK_OFF_STEER
     }
@@ -581,7 +661,7 @@ class TouchOverlayView @JvmOverloads constructor(
             SystemClock.uptimeMillis() - steerHeldSince >= KICK_OFF_STEER_MS
 
     private fun padSteeringMatch(): Boolean =
-        kickOffPending && !titleMenu && !paused && !editing &&
+        kickOffPending && sheet != StickSheet.OPEN && !paused && !editing &&
             hypot(padX, padY) >= KICK_OFF_STEER
 
     private fun padSteeringSustained(): Boolean {
@@ -615,7 +695,9 @@ class TouchOverlayView @JvmOverloads constructor(
         padSteerSince = 0L
         removeCallbacks(kickOffProbe)
         removeCallbacks(padKickOffProbe)
-        if (stickOverride == StickSwitch.key(GamePhase.MATCH, paused = false, titleMenu = false)) {
+        if (stickOverride ==
+            StickSwitch.key(GamePhase.MATCH, paused = false, sheet = StickSheet.ABSENT)
+        ) {
             stickOverride = StickSwitch.NO_OVERRIDE
         }
         Log.i(TAG, "stick: kick-off seen ($because)")
@@ -1469,6 +1551,19 @@ class TouchOverlayView @JvmOverloads constructor(
         triggerHaptic()
         pressAt[pointerId] = floatArrayOf(x, y)
         markPressed(element)
+        // A thumb that walks the title's sheet has left Resume, so a Cross after
+        // that selects a row instead of resuming (StickSwitch.sheetAfter).
+        if (sheet == StickSheet.OPEN && (element.kind == ControlKind.DPAD ||
+                element.kind == ControlKind.STICK || element.kind == ControlKind.STICK_MODE)
+        ) {
+            titleMenuNavigated = true
+        }
+        // Cross is the sheet's Resume: the menu closes without a second START.
+        if (element.kind == ControlKind.BUTTON && element.value == NativeBridge.A &&
+            !element.toggle
+        ) {
+            noteMenuCancel()
+        }
         // START is the title's pause/menu key. Follow it while the switch is on
         // auto, so the title's in-match menu gets the MENU stick even though
         // the engine still calls the match flow a match.
@@ -1623,7 +1718,7 @@ class TouchOverlayView @JvmOverloads constructor(
                 // stands until the game changes state, and auto has the switch
                 // back after that. Auto itself is turned off in the pause menu,
                 // so a stray tap can never quietly take the switch over.
-                if (prefs.stickAuto) stickOverride = StickSwitch.key(gamePhase, paused, titleMenu)
+                if (prefs.stickAuto) stickOverride = StickSwitch.key(gamePhase, paused, sheet)
                 val stage =
                     if (prefs.stickStage == Prefs.STAGE_TWO) Prefs.STAGE_ONE else Prefs.STAGE_TWO
                 setStickStage(stage, automatic = false)
@@ -2182,12 +2277,14 @@ class TouchOverlayView @JvmOverloads constructor(
         // A tap stands until the game itself moves on -- kick-off, a pause,
         // another screen -- and auto has the switch back then.
         if (stickOverride != StickSwitch.NO_OVERRIDE &&
-            stickOverride != StickSwitch.key(gamePhase, paused, titleMenu)
+            stickOverride != StickSwitch.key(gamePhase, paused, sheet)
         ) stickOverride = StickSwitch.NO_OVERRIDE
-        val stage = StickSwitch.stage(prefs.stickAuto, gamePhase, paused, titleMenu, stickOverride)
+        val stage = StickSwitch.stage(
+            prefs.stickAuto, gamePhase, paused, sheet, matchState, stickOverride,
+        )
         Log.i(
             TAG,
-            "stick: auto phase=$gamePhase paused=$paused titleMenu=$titleMenu " +
+            "stick: auto phase=$gamePhase match=$matchState paused=$paused sheet=$sheet " +
                 "override=$stickOverride -> " +
                 (stage?.let { if (it == Prefs.STAGE_ONE) "MATCH" else "MENU" } ?: "keep"),
         )
@@ -2196,7 +2293,11 @@ class TouchOverlayView @JvmOverloads constructor(
             stage, automatic = true,
             because = when {
                 paused -> "paused"
-                titleMenu -> "the title's in-match menu"
+                sheet == StickSheet.OPEN -> "the title's in-match menu"
+                sheet == StickSheet.RESUMED -> "resumed from it"
+                matchState == MatchState.IN_PLAY || matchState == MatchState.LOADING ->
+                    "the match flow"
+                matchState == MatchState.MENUS -> "the engine's menu"
                 gamePhase == GamePhase.MATCH -> "match"
                 gamePhase == GamePhase.MENUS -> "menus"
                 else -> "no phase yet"
@@ -2472,9 +2573,11 @@ class TouchOverlayView @JvmOverloads constructor(
             if (!available(element)) continue
             // In the editor everything is drawn, faded when it is not on screen
             // in play -- a control that belongs to the menus has to be findable
-            // over the pitch.
-            if (!editing && !element.shownIn(gamePhase, stance)) continue
-            val faded = editing && !element.shownIn(gamePhase, stance)
+            // over the pitch. In play the phase and the engine's match state
+            // decide together, so a match's controls stay up through the
+            // pre-match screens instead of blinking out and back.
+            if (!editing && !element.shownIn(gamePhase, stance, matchState)) continue
+            val faded = editing && !element.shownIn(gamePhase, stance, matchState)
             val stanceAlpha = element.alphaOn(stance)
             // An off control is its own state in the editor: dimmed to 0.30,
             // forced flat and badged. In play it is simply not drawn, which the

@@ -1,6 +1,8 @@
 package com.pes2017.recomp
 
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowInsets
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import kotlin.math.roundToInt
@@ -14,9 +16,15 @@ import kotlin.math.roundToInt
  * the stick is centred in the window and the Back button is fixed under it --
  * so every direction and the way back to centre can be felt.
  *
- * The settings themselves are read once when the page opens; they are not
- * editable here (the settings page owns that), and nothing on this page reaches
- * the game's input.
+ * The settings themselves are read when the page opens and again on every
+ * resume -- they are not editable here (the settings page and Edit Controls own
+ * that), and nothing on this page reaches the game's input.
+ *
+ * The stick is drawn at the **layout's own size**: [applyStickSize] reads the
+ * `stick` element from the same `controls.json` the match reads, fits it with
+ * the same [ScreenFit] rule and the same density, and hands the radius to the
+ * view. There is no page-specific scale, so a stick resized in Edit Controls is
+ * this size on the pitch and this size here.
  */
 class LeftStickPreviewActivity : AppCompatActivity() {
 
@@ -28,11 +36,39 @@ class LeftStickPreviewActivity : AppCompatActivity() {
         findViewById<android.view.View>(R.id.back_button)
             .setOnClickListener { onBackPressedDispatcher.onBackPressed() }
 
-        val prefs = Prefs(this)
-        val profile = LeftStickFeel.sanitize(prefs.leftStickFeel())
-        val preview = findViewById<LeftStickPreviewView>(R.id.left_stick_preview)
-        preview.settings = profile
+        applyStickSize()
+        applyProfile()
+        findViewById<android.view.View>(R.id.left_stick_preview_back)
+            .setOnClickListener { onBackPressedDispatcher.onBackPressed() }
+    }
 
+    /**
+     * The pad's own zoom, read again after Edit Controls may have changed the
+     * stick's size: the socket is the layout's `stick`, fitted exactly as
+     * [TouchOverlayView] fits it.
+     */
+    override fun onResume() {
+        super.onResume()
+        applyStickSize()
+        applyProfile()
+    }
+
+    private fun applyStickSize() {
+        val preview = findViewById<LeftStickPreviewView>(R.id.left_stick_preview)
+        val sizeDp = StickPreview.sizeDp(ControlLayout.load(this)) ?: return
+        val metrics = resources.displayMetrics
+        val density = metrics.density
+        val fit = ScreenFit(
+            metrics.widthPixels / density,
+            metrics.heightPixels / density,
+            safeArea(),
+        )
+        preview.stickRadiusPx = StickPreview.radiusPx(sizeDp, fit, density)
+    }
+
+    private fun applyProfile() {
+        val profile = LeftStickFeel.sanitize(Prefs(this).leftStickFeel())
+        findViewById<LeftStickPreviewView>(R.id.left_stick_preview).settings = profile
         val values = getString(
             R.string.left_stick_preview_profile,
             label(profile.preset),
@@ -41,9 +77,26 @@ class LeftStickPreviewActivity : AppCompatActivity() {
             curve(profile.curve),
             (profile.sprint * 100f).roundToInt(),
         )
-        findViewById<TextView>(R.id.left_stick_preview_profile).text = values
-        findViewById<android.view.View>(R.id.left_stick_preview_back)
-            .setOnClickListener { onBackPressedDispatcher.onBackPressed() }
+        val sizeDp = StickPreview.sizeDp(ControlLayout.load(this)) ?: 0f
+        findViewById<TextView>(R.id.left_stick_preview_profile).text =
+            values + "\n" + getString(R.string.left_stick_preview_size, sizeDp.roundToInt())
+    }
+
+    /** The window's unusable edges in dp, as the pad reads them. */
+    private fun safeArea(): SafeAreaDp {
+        val density = resources.displayMetrics.density
+        val root = window.decorView.rootWindowInsets ?: return SafeAreaDp.NONE
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val bars = root.getInsets(
+                WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout(),
+            )
+            return StickPreview.safeArea(bars.left, bars.top, bars.right, bars.bottom, density)
+        }
+        @Suppress("DEPRECATION")
+        return StickPreview.safeArea(
+            root.systemWindowInsetLeft, root.systemWindowInsetTop,
+            root.systemWindowInsetRight, root.systemWindowInsetBottom, density,
+        )
     }
 
     private fun label(preset: String): String = getString(

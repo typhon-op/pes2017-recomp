@@ -37,7 +37,7 @@
     <string name="patch_import_warn_empty_cpk">أحد ملفات CPK في المصدر فارغ؛ تحقق من التنزيل.</string>
     <string name="patch_import_peak_title">أقصى مساحة مطلوبة (وليست الحجم النهائي)</string>
     <string name="patch_import_peak_value">%1$s</string>
-    <string name="patch_import_peak_breakdown">الاستخراج %1$s + التحضير %2$s + النسخة في مجلد اللعبة %3$s + الحزمة المحفوظة %4$s، مع احتياطي %5$s.</string>
+    <string name="patch_import_peak_breakdown">الفك %1$s + الحزمة المحفوظة %2$s، مع احتياطي %3$s. لا يُكتب مجلد اللعبة.</string>
     <string name="patch_import_low_space">المساحة غير كافية · %1$s متاحة، و%2$s مطلوبة في الذروة. فرّغ بعض المساحة ثم عُد.</string>
     <string name="patch_import_backup_note">تُنقل الحزمة المثبتة الآن إلى patch-backups قبل وضع الجديدة، والتثبيت الفاشل أو الملغى يترك مجلد اللعبة كما كان.</string>
     <string name="patch_import_install">تثبيت patch</string>

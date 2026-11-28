@@ -37,7 +37,7 @@
     <string name="patch_import_warn_empty_cpk">Один CPK в источнике пуст; проверьте загрузку.</string>
     <string name="patch_import_peak_title">МАКСИМУМ МЕСТА (НЕ ИТОГОВЫЙ РАЗМЕР)</string>
     <string name="patch_import_peak_value">%1$s</string>
-    <string name="patch_import_peak_breakdown">Распаковка %1$s + подготовка %2$s + копия в папке игры %3$s + сохраняемый пакет %4$s, плюс запас %5$s.</string>
+    <string name="patch_import_peak_breakdown">Распаковка %1$s + сохраняемый пакет %2$s, плюс запас %3$s. Папка игры не записывается.</string>
     <string name="patch_import_low_space">НЕДОСТАТОЧНО МЕСТА · свободно %1$s, в пике нужно %2$s. Освободите место и вернитесь.</string>
     <string name="patch_import_backup_note">Установленный пакет переносится в patch-backups до установки нового, а неудачная или отменённая установка оставляет папку игры как была.</string>
     <string name="patch_import_install">УСТАНОВИТЬ ПАТЧ</string>

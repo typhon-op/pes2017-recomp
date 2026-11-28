@@ -96,6 +96,41 @@ class ControlLayoutPhaseTest {
     }
 
     @Test
+    fun theMatchFlowKeepsTheMatchControlsThroughThePreMatchScreens() {
+        // The phase answers "what did the title name last" and is sampled twice a
+        // second; the engine's match state is pushed the moment a flow is
+        // entered. Through the walk-out and the load the phase can still read
+        // menus while the match flow has already begun -- which is the pad's
+        // buttons and skill controls blinking out and back at kick-off.
+        val hud = control(id = "hud", kind = ControlKind.LOOK, shownWhen = PhaseMask.MATCH)
+
+        assertTrue(hud.shownIn(GamePhase.MENUS, matchState = MatchState.LOADING))
+        assertTrue(hud.shownIn(GamePhase.MENUS, matchState = MatchState.IN_PLAY))
+        assertTrue(hud.shownIn(GamePhase.UNKNOWN, matchState = MatchState.IN_PLAY))
+    }
+
+    @Test
+    fun aMenuTheEngineNamesHidesTheMatchControlsEvenWhenThePhaseIsStale() {
+        val hud = control(id = "hud", kind = ControlKind.LOOK, shownWhen = PhaseMask.MATCH)
+
+        assertFalse(hud.shownIn(GamePhase.MATCH, matchState = MatchState.MENUS))
+        // What is not a match control is untouched: the pause sheet does not
+        // take START away, and the menus' own d-pad still follows the phase.
+        val start = control(id = "start", kind = ControlKind.BUTTON, shownWhen = PhaseMask.ALWAYS)
+        assertTrue(start.shownIn(GamePhase.MATCH, matchState = MatchState.MENUS))
+        assertTrue(control().shownIn(GamePhase.MENUS, matchState = MatchState.MENUS))
+    }
+
+    @Test
+    fun aMatchStateTheEngineHasNotNamedLeavesThePhaseRuleExactly() {
+        val hud = control(id = "hud", kind = ControlKind.LOOK, shownWhen = PhaseMask.MATCH)
+
+        assertFalse(hud.shownIn(GamePhase.MENUS, matchState = MatchState.UNKNOWN))
+        assertTrue(hud.shownIn(GamePhase.MATCH, matchState = MatchState.UNKNOWN))
+        assertTrue(hud.shownIn(GamePhase.UNKNOWN, matchState = MatchState.UNKNOWN))
+    }
+
+    @Test
     fun theDefaultLayoutHasADpadForTheMenusAndTheMatch() {
         val layout = ControlLayout.defaults(800f, 360f)
         val dpad = layout.find("dpad") ?: error("the default pad has a d-pad")

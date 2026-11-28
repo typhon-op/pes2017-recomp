@@ -12,15 +12,20 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * The left stick, large, on its own fixed page.
+ * The left stick, on a page of its own, at the size the match pad draws it.
  *
  * It is the same stick the match pad draws -- [StickArt] is the one drawing of
- * it, with the same socket, notches, cap, dish and grip dots -- only at the
- * radius this page can give it. A thumb on it goes through the very arithmetic
- * the pad uses (`StickVector` then `LeftStickFeel.shape`, including the selected
- * profile's deadzone, curve, sensitivity and smoothing) and the same sprint
- * latch, so the output percentage and the walk/run state are what a match would
- * receive rather than an illustration.
+ * it, with the same socket, notches, cap, dish and grip dots -- and the same
+ * **size**: [stickRadiusPx] is the layout's own `stick` element fitted by
+ * [ScreenFit] and scaled by this device's density, which is exactly what the
+ * pad's geometry does. Resizing the stick in Edit Controls therefore resizes
+ * this page's stick, and there is no second scale anywhere.
+ *
+ * A thumb on it goes through the very arithmetic the pad uses (`StickVector`
+ * then `LeftStickFeel.shape`, including the selected profile's deadzone, curve,
+ * sensitivity and smoothing) and the same sprint latch, so the output percentage
+ * and the walk/run state are what a match would receive rather than an
+ * illustration.
  *
  * It shares no touch stream with the game: it is a view on a separate activity
  * and never calls NativeBridge, so dragging it cannot press anything.
@@ -33,6 +38,17 @@ class LeftStickPreviewView @JvmOverloads constructor(
         set(value) {
             field = LeftStickFeel.sanitize(value)
             smoother.reset()
+            invalidate()
+        }
+
+    /**
+     * The socket's radius in pixels, from the layout the match draws
+     * ([StickPreview.radiusPx]). Zero draws nothing: a page with no stick is a
+     * page with nothing to say.
+     */
+    var stickRadiusPx: Float = 0f
+        set(value) {
+            field = value.coerceAtLeast(0f)
             invalidate()
         }
 
@@ -112,7 +128,7 @@ class LeftStickPreviewView @JvmOverloads constructor(
     private fun sample(x: Float, y: Float, redraw: Boolean = true) {
         val r = radius()
         if (r <= 0f) return
-        val vector = StickVector.of(width / 2f, height / 2f - labelBand(), x, y, r)
+        val vector = StickVector.of(width / 2f, (height - labelBand()) / 2f, x, y, r)
         rawX = vector[0]
         rawY = vector[1]
         val shaped = LeftStickFeel.shape(rawX, rawY, settings)
@@ -147,15 +163,12 @@ class LeftStickPreviewView @JvmOverloads constructor(
     /** Space under the stick for the readout, so the two never overlap. */
     private fun labelBand(): Float = 58f * density
 
-    private fun radius(): Float {
-        val vertical = (height - labelBand() - 24f * density) / 2f
-        return min(width / 2f - 24f * density, vertical).coerceAtLeast(0f)
-    }
+    private fun radius(): Float = stickRadiusPx
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val cx = width / 2f
-        val cy = height / 2f - labelBand()
+        val cy = (height - labelBand()) / 2f
         val r = radius()
         if (r <= 0f) return
 

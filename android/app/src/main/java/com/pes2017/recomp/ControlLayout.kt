@@ -177,21 +177,43 @@ enum class GamePhase {
     MATCH,
     ;
 
-    /** Whether a control marked [mask] is on screen in this phase and stance. */
-    fun shows(mask: PhaseMask, stance: PadStance = PadStance.ATTACK): Boolean = when (mask) {
-        PhaseMask.ALWAYS -> true
-        PhaseMask.MENUS -> this != GamePhase.MATCH
-        // A match control is one that has no place in the title's menus. A
-        // phase the tracker has not read yet keeps it, the same way it keeps
-        // the menus' controls: the mentality pair vanishing over the pitch
-        // because the tracker went quiet is the worse mistake, and a control
-        // that is hidden on a guess cannot be pressed at all.
-        PhaseMask.MATCH -> this != GamePhase.MENUS
-        // An attacking or defending control is a match control that only one
-        // of the two pads carries. An unknown phase keeps it, as it keeps the
-        // menus' controls: hiding it on a guess would be worse.
-        PhaseMask.ATTACK -> this != GamePhase.MENUS && stance == PadStance.ATTACK
-        PhaseMask.DEFEND -> this != GamePhase.MENUS && stance == PadStance.DEFEND
+    /**
+     * Whether a control marked [mask] is on screen in this phase, stance and
+     * match state.
+     *
+     * [matchState] is the engine's own answer (runtime/match_state.h), pushed
+     * the moment the title enters a flow: `Match/MatchSetup` and the rest of
+     * `Match/...` are a match that is loading or in play, anything else is a
+     * menu. It outranks [GamePhase], which answers a different question --
+     * what the title named *last*, sampled twice a second -- so the pre-match
+     * screens could read as a menu for a moment after a match began and the
+     * pad's match controls disappeared and came back. A state the engine has
+     * not named yet ([MatchState.UNKNOWN]) keeps the phase rule exactly as it
+     * was, because hiding a control on a guess cannot be undone by a thumb.
+     */
+    fun shows(
+        mask: PhaseMask,
+        stance: PadStance = PadStance.ATTACK,
+        matchState: MatchState = MatchState.UNKNOWN,
+    ): Boolean {
+        val inMatchFlow = matchState == MatchState.LOADING || matchState == MatchState.IN_PLAY
+        val menusVisible = this != GamePhase.MATCH
+        // In the match flow the match controls stay; in a menu the engine names
+        // they go, even if the coarser phase has not caught up yet.
+        val matchVisible = inMatchFlow || (matchState != MatchState.MENUS && this != GamePhase.MENUS)
+        return when (mask) {
+            PhaseMask.ALWAYS -> true
+            PhaseMask.MENUS -> menusVisible
+            // A match control is one that has no place in the title's menus. An
+            // unknown phase or state keeps it: the mentality pair vanishing over
+            // the pitch because the tracker went quiet is the worse mistake, and
+            // a control that is hidden on a guess cannot be pressed at all.
+            PhaseMask.MATCH -> matchVisible
+            // An attacking or defending control is a match control that only one
+            // of the two pads carries.
+            PhaseMask.ATTACK -> matchVisible && stance == PadStance.ATTACK
+            PhaseMask.DEFEND -> matchVisible && stance == PadStance.DEFEND
+        }
     }
 }
 
@@ -326,8 +348,11 @@ data class ControlElement(
         trickMoves[sector] = if (SkillMoves.valid(move)) move else -1
     }
     /** Whether it is on screen at all: the player's switch, the phase and the pad, all three. */
-    fun shownIn(phase: GamePhase, stance: PadStance = PadStance.ATTACK): Boolean =
-        visibleIn(stance) && phase.shows(shownWhen, stance)
+    fun shownIn(
+        phase: GamePhase,
+        stance: PadStance = PadStance.ATTACK,
+        matchState: MatchState = MatchState.UNKNOWN,
+    ): Boolean = visibleIn(stance) && phase.shows(shownWhen, stance, matchState)
 
     // ---- per-stance geometry ------------------------------------------------
 

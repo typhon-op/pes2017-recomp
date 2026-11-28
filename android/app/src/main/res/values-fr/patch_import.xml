@@ -37,7 +37,7 @@
     <string name="patch_import_warn_empty_cpk">Un CPK de la source est vide ; vérifiez le téléchargement.</string>
     <string name="patch_import_peak_title">ESPACE MAXIMAL NÉCESSAIRE (PAS LA TAILLE FINALE)</string>
     <string name="patch_import_peak_value">%1$s</string>
-    <string name="patch_import_peak_breakdown">Extraction %1$s + préparation %2$s + la copie dans le dossier du jeu %3$s + le pack conservé %4$s, plus une réserve de %5$s.</string>
+    <string name="patch_import_peak_breakdown">Extraction %1$s + le pack conservé %2$s, plus une réserve de %3$s. Le dossier du jeu n’est pas écrit.</string>
     <string name="patch_import_low_space">ESPACE INSUFFISANT · %1$s libres, %2$s nécessaires au pic. Libérez de l\'espace, puis revenez.</string>
     <string name="patch_import_backup_note">Le pack installé maintenant est déplacé vers patch-backups avant que le nouveau ne soit mis en place, et une installation échouée ou annulée laisse le dossier du jeu tel qu\'il était.</string>
     <string name="patch_import_install">INSTALLER LE PATCH</string>
