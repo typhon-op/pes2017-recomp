@@ -742,4 +742,5 @@
     <string name="cpu_pinning_wide">Amplo: todos os núcleos menos o principal</string>
     <string name="cpu_pinning_hint">A que núcleos ficam fixados os threads do próprio jogo. Automático é a disposição com que todas as medições foram feitas e a mais rápida medida. Amplo deixa-os usar também os núcleos pequenos, para telemóveis onde se acumulam nos núcleos de desempenho. Aplica-se na próxima vez que o jogo arrancar.</string>
     <string name="preset_lowest">Mínimo</string>
+    <string name="preset_lowest_hint">Mínimo destina-se a telemóveis da classe Helio G85 a 30 FPS. Ainda não verificado num dispositivo.</string>
 </resources>

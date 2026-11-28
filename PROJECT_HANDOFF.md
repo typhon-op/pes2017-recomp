@@ -953,3 +953,9 @@ versionCode 52 / 0.3.2, 50,289,555 bytes, SHA-256
 Lowest-versus-Low comparison, in the same shape as the CPU Pinning plan, is
 [docs/performance.md](docs/performance.md) section "Lowest preset against Low at
 30 FPS".
+
+**Lowest hint (0.3.3).** The Graphics page now says what the button is for,
+under the preset row: "Lowest targets Helio G85-class phones at 30 FPS. Not yet
+verified on a device." (`preset_lowest_hint`, all six locales). Release APK
+versionCode 53 / 0.3.3, 50,290,823 bytes, SHA-256
+`31a62aabcd663891533e77297207133ed3270b3a0058f9720515d3029cc6f3a8`.

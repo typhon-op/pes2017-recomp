@@ -742,4 +742,5 @@
     <string name="cpu_pinning_wide">Large : tous les cœurs sauf le principal</string>
     <string name="cpu_pinning_hint">À quels cœurs les threads du jeu sont épinglés. Automatique est la disposition avec laquelle toutes les mesures ont été faites, et la plus rapide mesurée. Large leur permet aussi d’utiliser les petits cœurs, pour les téléphones où ils s’accumulent sur les cœurs de performance. S’applique au prochain démarrage du jeu.</string>
     <string name="preset_lowest">Minimal</string>
+    <string name="preset_lowest_hint">Minimal vise les téléphones de la classe Helio G85 à 30 i/s. Pas encore vérifié sur un appareil.</string>
 </resources>

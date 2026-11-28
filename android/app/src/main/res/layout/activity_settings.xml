@@ -136,6 +136,13 @@
                     </LinearLayout>
 
                     <TextView
+                        android:id="@+id/preset_lowest_hint"
+                        style="@style/SettingHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/preset_lowest_hint" />
+
+                    <TextView
                         android:id="@+id/preset_detected"
                         style="@style/SettingHint"
                         android:layout_width="match_parent"
