@@ -122,7 +122,9 @@ exists. `W0` (default 125 s after playback starts) and `MEASURE` (default 80 s)
 select the window; a run that never reached `Match/MatchIdle` or logged no fps
 is invalid and is repeated.
 
-**What to record, per run.** From the script's own output: window median and
+**What to record, per run.** The `pinning:` line from `game.log` (it is not in
+the script's summary, which only reads the window), then from the script's own
+output: window median and
 the `worst` column of `perf: N fps ... ms a frame waiting for the GPU`, the
 draws a frame (scene match), the per-thread CPU (`cpu% of a core`), the clocks
 and the CPU temperature. Two of its fields are Adreno/S20 FE shaped and will be
@@ -132,10 +134,16 @@ above instead.
 
 **The two measurements that decide it** are both in that output already:
 
+- **The mode the runtime took**: one `pinning:` line per run in `game.log` --
+  `pinning: PES17_PINNING="wide" taken as wide; clusters prime 0x80 perf 0x70
+  worker 0xf` -- the value received, how it was read (`auto` for the empty value
+  the row sends for Automatic), and the cluster masks the ordering was built
+  from. Check it before reading any other number: a run whose line is missing,
+  or says `auto` when it was meant to be `wide`, is a broken run and not a
+  result.
 - **Affinity** (`<label>.aff`): `Cpus_allowed_list` for `pes17`, the GPU ring
-  consumer, the presenter and a guest thread. This is the proof the mode was
-  applied at all -- the runtime does not log which mode it took, so without it
-  an A/B is two runs of unknown configuration.
+  consumer, the presenter and a guest thread -- the per-thread result of that
+  decision, and the thing to compare when the same mode is set two ways.
 - **Runnable against running**: with `PES17_STREAM_TRACE=1` the log's `stream:`
   lines give each thread's ms running and ms runnable every 500 ms. That ratio
   is the measurement the POCO notes used to call the threads starved, and this
@@ -145,9 +153,10 @@ above instead.
 `env_override`: `GameActivity` calls `nativeSetOption("PES17_PINNING", ...)`
 before the runtime starts. Pick each radio button in the app, run
 `tools/ab_window.sh` with no pairs, and compare the `affinity:` line with the
-`env_override` run of the same mode; the two paths must agree, and the choice
-must survive `am force-stop` and a relaunch. This is the only check that the
-row itself works on a device.
+`env_override` run of the same mode -- the `pinning:` line must read `auto` for
+Automatic and `wide` for Wide in both -- and the two paths' affinities must
+agree, with the choice surviving `am force-stop` and a relaunch. This is the
+only check that the row itself works on a device.
 
 **Decision rule.** Keep Wide only if, across the three pairs, its median is not
 below Automatic's and its p10/`worst` are not worse. Drop it if either fails,

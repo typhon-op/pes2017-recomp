@@ -747,12 +747,23 @@ one is read, so a stored 0/2/3/4/-1 can never be taken for a mode. (1 is Wide's
 own value now and is not treated as stale; the old key is a separate key and
 goes away.)
 
-**The runtime is untouched.** `runtime/thread_limit.h` is deleted and
-`platform.cpp` / `renderer_libraries.cpp` are back to the checkpoint's source;
-the rebuild is `ccb831dd...`, the checkpoint's own unstripped link output, and
-the APK packages `cb1ba563...`, byte-identical to the engine inside the
-supplied APK. No new affinity strategy, and no claim here that either mode
-changes fps or heat.
+**The runtime is the checkpoint's source plus one log line.**
+`runtime/thread_limit.h` is deleted and `platform.cpp` /
+`renderer_libraries.cpp` are back to the checkpoint's source; the pinning code
+itself is unchanged. What was added is one line, once per process, when the
+runtime takes its mode:
+
+    pinning: PES17_PINNING="wide" taken as wide; clusters prime 0x80 perf 0x70 worker 0xf
+
+-- the value received, how it was read (`auto` for the empty value the row
+sends for Automatic; `off`/`shared`/`big`/`render` as themselves; `unknown` for
+anything else), and the cluster masks the ordering was built from. The
+per-thread `Cpus_allowed_list` that `tools/ab_window.sh` dumps still shows the
+result; the line says what was asked for and what the topology made of it, so an
+A/B run proves its own configuration instead of trusting the harness. Rebuilt
+with the checkpoint's kit -- one recompile (`platform.cpp`) and one link,
+`3eb5cdd2...` unstripped. No new affinity strategy, and no claim here that
+either mode changes fps or heat.
 
 **Checks actually run.** `:app:testDebugUnitTest` 405 tests, 0 failures,
 including the new `CpuPinningTest` (6): only the two measured modes are
@@ -760,19 +771,20 @@ offered; the default is `AUTO` and maps to `""`; every offered value is a mode
 `PES17_PINNING` parses (`{"" , "wide"}`); 2/3/4/-1/5/64/-7/`Int.MIN_VALUE`/
 `Int.MAX_VALUE` all read as Automatic; the two labels differ; storage
 round-trips. The test also caught that 1 now means Wide, so it cannot sit in
-the stale list. Release APK versionCode 48 / 0.2.8, arm64-v8a, signed,
-50,286,287 bytes, SHA-256
-`bdd87dae9e57776048203b6f8257edff81b701df88966529081ef59568234d14`; inside it
-`lib/arm64-v8a/libpes17.so` hashes to `cb1ba563...`, contains `PES17_PINNING`
-and `wide`, and has no `PES17_THREAD_LIMIT`; the dex carries `PES17_PINNING`
-and no `PES17_THREAD_LIMIT`; the `cpu_pinning*` strings are in all six
-languages.
+the stale list. Release APK versionCode 49 / 0.2.9, arm64-v8a, signed,
+50,286,735 bytes, SHA-256
+`349ae51111b1dee6c0b7d38b8f4527ba9b63ff7567401e791250473da15c6d66`; inside it
+`lib/arm64-v8a/libpes17.so` hashes to
+`d34c04d2e0cfb86bd5843f1bcc11d779b9594ce183d456f6edf810ebbb41c92d`, contains
+`PES17_PINNING`, `wide` and the `pinning:` line, and has no
+`PES17_THREAD_LIMIT`; the dex carries `PES17_PINNING` and no
+`PES17_THREAD_LIMIT`; the `cpu_pinning*` strings are in all six languages.
 
-**Still not verified.** No device has run this build. Whether Wide helps, hurts
-or does nothing on a MediaTek phone is unmeasured -- the option exists only
-because the engine's notes locate the contention -- and the runtime does not
-log which mode it took, so the log alone cannot say. The repeatable plan, with
-the affinities, temperatures and run-queue numbers to record, is
+**Still not verified.** No device has run this build and the `pinning:` line has
+not been seen in a real `game.log`. Whether Wide helps, hurts or does nothing on
+a MediaTek phone is unmeasured -- the option exists only because the engine's
+notes locate the contention. The repeatable plan, with the log line, the
+affinities, temperatures and run-queue numbers to record, is
 [docs/performance.md](docs/performance.md) section "CPU Pinning: Automatic vs
 Wide (MediaTek, not yet measured)". If Wide does not tie or win there, it
 should be deleted rather than kept as a guess.
