@@ -285,6 +285,72 @@ showing a lower p99 and a better 1% low at the same limit, on the same scene, in
 at least two of three pairs -- not a higher mean. The reverse result deletes
 `PES17_PRESENT_MODE` rather than keeping it as a switch nobody should use.
 
+## Lowest preset against Low at 30 FPS (Helio G85, not yet measured)
+
+Settings > Graphics > presets has a fourth, **Lowest**, for the phone this port is
+reported unplayable on: a Helio G85 (Mali-G52 MC2, 2x A75 + 6x A55, 4-6 GB) at
+30 FPS. It is offered, never detected -- a G85 still classifies as Low -- and it
+is the Low preset with every lever at the cheapest value the pages already
+offer: a 50% scene, 1x internal scale, no MSAA, no FSR, 1x anisotropy, the
+vertex shadow buffer skipped (`PES17_NO_SHADOW`), the crowd off
+(`PES17_NO_CROWD`), the 30 FPS limit, and the heat and load rules left on. The
+table with every value and the option it reaches is in PROJECT_HANDOFF.md.
+Nothing here has been measured on a G85: 30 FPS is the target, not a result.
+
+**Hypothesis.** 30 FPS is a 33.3 ms frame. Against Low, Lowest removes four
+GPU-costs: a sixth of the scene's pixels (60% -> 50%, plus 1x internal scale),
+the vertex shadow buffer, half the pitch's anisotropy samples, and the crowd.
+If the G52 is the limit, Lowest's p99 and 1% low should improve at the same
+limit and the distribution should narrow -- fewer frames over 1.5x (50 ms) and
+2x (66.7 ms) of the target, fewer duplicated blanks -- and `gpu:` pass time
+(`PES17_GPU_TIMING=1`) should fall. If the 2x A75 CPU is the limit, the fps
+numbers will sit flat between the two presets and the p99 will not move; that is
+also a result, and it would mean the preset is a memory and heat saving rather
+than a frame-rate one, and should be described that way.
+
+**One confound to record first.** The runtime turns the vertex shadow off by
+itself when MemTotal is 6 GB or less (`perf.cpp`). On a 4 or 6 GB G85, Low may
+already be running without it, so the shadow term cancels and the difference
+between the presets is the scene, the anisotropy and the crowd only. Read the
+run's first lines to see whether it did, and if the comparison is meant to
+include the shadow, force it for both runs (`files/env_override` with
+`PES17_NO_SHADOW=1` for Low) rather than trusting the automatic rule.
+
+**The run.** Same phone, same match, same macro, one variable: the preset button.
+Three interleaved pairs, never a block, and the same 30 FPS limit in both:
+
+    # Settings > Graphics: press Lowest, relaunch, then
+    tools/ab_window.sh lowest-1
+    # press Low, relaunch, then
+    tools/ab_window.sh low-1
+    # and so on, six runs in all
+
+`ab_window.sh` waits for `Match/MatchIdle` and then a fixed window, so a run
+that never reached the match, or logged no fps, is invalid and is repeated.
+Keep the pacing on Auto and the resolution the app asks for unchanged: the
+preset is the only variable.
+
+**What to record, per run.** The `fstats:` line (fps, p50/p90/p99, 1% low,
+frames over 1.5x and 2x of 33.33 ms, duplicated blanks, dropped frames, the
+resolution and limit it prints); `dumpsys thermalservice` CPU and skin
+temperature at the start and end of the window; and with `PES17_GPU_TIMING=1`
+the `gpu:` pass total, which is the direct evidence that the GPU had less work.
+Three pairs minimum: one Low run varied about +/-7 fps median on the S20 FE, and
+a 30 FPS match has fewer frames in a window to average over.
+
+**Decision rule.** Keep Lowest, and say so in the settings, only if its p99 and
+1% low beat Low's at the same limit in at least two of three pairs -- or if it
+markedly lowers `gpu:` pass time at equal stability, in which case it is a heat
+and memory preset and the text must say that instead of implying a higher frame
+rate. If neither holds on a G85, remove the preset rather than keep a fourth
+button nobody should press.
+
+**A second device class.** The preset is vendor-free, so repeat once on the
+weakest phone to hand that is not Mali (an Adreno 610 or a PowerVR): the same
+values should help or be neutral there, and a run that shows a regression means
+one of the four cuts is wrong for that part, not that the preset belongs to one
+vendor.
+
 ## Leads not tried yet (workload and heat)
 
 - **Sun shadow map at a lower resolution.** The shadow map is one 1024x2048 depth surface holding two

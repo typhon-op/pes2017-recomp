@@ -2,7 +2,6 @@ package com.pes2017.recomp
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -63,10 +62,11 @@ class DeviceProfileTest {
         assertTrue(low.loadScale)
         assertEquals(2, low.maxAniso)
 
-        // None of the three sets the crowd or the internal multiplier: those stay
-        // whatever the player chose, which is what "existing presets unchanged" means.
+        // The three state the crowd -- on, which is the toggle's own default, so a
+        // switch away from Lowest puts it back -- and none of them pins the internal
+        // multiplier: that stays whatever the player chose.
         for (p in listOf(high, medium, low)) {
-            assertNull(p.crowd)
+            assertTrue(p.crowd)
             assertEquals(0, p.renderScale)
         }
     }
@@ -89,7 +89,7 @@ class DeviceProfileTest {
         // Shadows off (the vertex shadow buffer), crowd off, and the smallest
         // internal multiplier: the three levers Low leaves alone.
         assertTrue(lowest.lowMemory)
-        assertEquals(false, lowest.crowd)
+        assertFalse(lowest.crowd)
         assertEquals(1, lowest.renderScale)
     }
 
@@ -168,5 +168,72 @@ class DeviceProfileTest {
         // Lowest with the same meaning it has on Mali.
         val adreno = Specs(gpu = "Adreno (TM) 610", memoryMB = 3000)
         assertEquals(DeviceProfile.Tier.LOW, DeviceProfile.classify(adreno).tier)
+    }
+
+    /**
+     * The switch this was reported for: a player on 2x picks Lowest, then goes back to
+     * Medium. The crowd must come back and the multiplier must be 2x again, not the 1x
+     * Lowest pinned.
+     */
+    @Test
+    fun switchingFromLowestToMediumPutsTheCrowdBackAndRestoresTheMultiplier() {
+        val lowest = preset(DeviceProfile.Tier.LOWEST)
+        val medium = preset(DeviceProfile.Tier.MEDIUM)
+
+        val pinned = DeviceProfile.scaleShift(lowest, currentScale = 2, pinnedBefore = 0)
+        assertEquals(1, pinned.scale)
+        assertEquals(2, pinned.pinnedBefore)
+        assertFalse(lowest.crowd)
+
+        assertTrue(medium.crowd)
+        val restored = DeviceProfile.scaleShift(medium, pinned.scale, pinned.pinnedBefore)
+        assertEquals(2, restored.scale)
+        assertEquals(0, restored.pinnedBefore)
+
+        // High does the same, and both put the crowd back.
+        assertTrue(preset(DeviceProfile.Tier.HIGH).crowd)
+        assertEquals(2, DeviceProfile.scaleShift(preset(DeviceProfile.Tier.HIGH), 1, 2).scale)
+    }
+
+
+    @Test
+    fun aPresetThatDoesNotPinLeavesThePlayersMultiplierAlone() {
+        // Medium chosen with no pin behind it: a chosen 3x stays 3x, and so does 1x.
+        assertEquals(DeviceProfile.ScaleShift(3, 0), DeviceProfile.scaleShift(preset(DeviceProfile.Tier.MEDIUM), 3, 0))
+        assertEquals(DeviceProfile.ScaleShift(1, 0), DeviceProfile.scaleShift(preset(DeviceProfile.Tier.LOW), 1, 0))
+        assertEquals(DeviceProfile.ScaleShift(2, 0), DeviceProfile.scaleShift(preset(DeviceProfile.Tier.HIGH), 2, 0))
+    }
+
+    @Test
+    fun choosingLowestTwiceRemembersTheFirstValueItOverrode() {
+        // Pressing Lowest again must not remember its own 1x as the value to restore.
+        val first = DeviceProfile.scaleShift(preset(DeviceProfile.Tier.LOWEST), 2, 0)
+        val again = DeviceProfile.scaleShift(preset(DeviceProfile.Tier.LOWEST), first.scale, first.pinnedBefore)
+        assertEquals(1, again.scale)
+        assertEquals(2, again.pinnedBefore)
+    }
+
+    @Test
+    fun lowestWithNoStoredChoiceLeavesNothingToRestore() {
+        // A fresh install is already at 1x: the pin remembers nothing, and the next
+        // preset keeps 1x rather than inventing a value.
+        val pinned = DeviceProfile.scaleShift(preset(DeviceProfile.Tier.LOWEST), 1, 0)
+        assertEquals(1, pinned.scale)
+        assertEquals(0, pinned.pinnedBefore)
+        assertEquals(1, DeviceProfile.scaleShift(preset(DeviceProfile.Tier.MEDIUM), pinned.scale, pinned.pinnedBefore).scale)
+    }
+
+    @Test
+    fun everyRestoredMultiplierIsAnOptionThePageOffers() {
+        for (tier in DeviceProfile.Tier.values()) {
+            for (current in GraphicsOptions.INTERNAL_SCALE) {
+                for (before in 0 until 4) {
+                    val shift = DeviceProfile.scaleShift(preset(tier), current, before)
+                    assertTrue("$tier from $current with $before -> ${shift.scale}",
+                        GraphicsOptions.INTERNAL_SCALE.contains(shift.scale))
+                    assertTrue(shift.pinnedBefore == 0 || GraphicsOptions.INTERNAL_SCALE.contains(shift.pinnedBefore))
+                }
+            }
+        }
     }
 }

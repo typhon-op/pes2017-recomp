@@ -132,6 +132,16 @@ class Prefs(context: Context) {
         get() = store.getBoolean(KEY_CROWD, true)
         set(value) = store.edit().putBoolean(KEY_CROWD, value).apply()
 
+    /**
+     * The internal multiplier the player had before a preset pinned one (0 when no
+     * preset is pinning it). DeviceProfile.Tier.LOWEST pins 1x; this is what the
+     * next preset that does not pin one puts back, so a switch away from Lowest
+     * restores the player's own value instead of leaving the lowest one behind.
+     */
+    var renderScaleBeforePin: Int
+        get() = store.getInt(KEY_RENDER_SCALE_BEFORE, 0)
+        set(value) = store.edit().putInt(KEY_RENDER_SCALE_BEFORE, value).apply()
+
     /** Bug-hunting experiments (Settings > Experiments); each is sent to the runtime at the next start. */
     var arenaMB: Int   // 0 = automatic
         get() = store.getInt(KEY_ARENA_MB, 0)
@@ -818,6 +828,7 @@ class Prefs(context: Context) {
         private const val KEY_RENDER_SCALE = "renderScale"
         private const val KEY_MSAA = "multisampling"
         private const val KEY_TEXTURE_MB = "textureBudgetMB"
+        private const val KEY_RENDER_SCALE_BEFORE = "renderScaleBeforePin"
         private const val KEY_SHOW_STATS = "showStats"
         private const val KEY_HUD_LEVEL = "hudLevel"
         private const val KEY_DEV_TOOLS = "developerTools"

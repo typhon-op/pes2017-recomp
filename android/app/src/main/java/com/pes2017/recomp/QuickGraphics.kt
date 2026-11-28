@@ -42,6 +42,11 @@ object QuickGraphics {
      * One visit to the screen. The values live here, not in the screen it
      * builds, so re-rendering a row after an adjustment keeps every other
      * change the player already made.
+     *
+     * A preset sets the internal multiplier only when it pins one (Lowest does);
+     * the value the player had before that pin is kept in
+     * [Prefs.renderScaleBeforePin] and restored by the next preset that does not
+     * pin one, so choosing Medium after Lowest does not leave 1x behind.
      */
     class Session internal constructor(
         private val activity: Activity,
@@ -80,10 +85,16 @@ object QuickGraphics {
             v.scene = p.sceneScalePercent; v.msaa = p.multisampling; v.fsr = p.fsr
             v.fps = p.fpsLimit; v.heat = p.heatScale; v.loadScale = p.loadScale
             v.lowMemory = p.lowMemory; v.aniso = p.maxAniso; v.preset = tier.name
-            // The crowd and the internal multiplier are only a preset's to set when
-            // it says so (Lowest does; the others leave the player's choice).
-            p.crowd?.let { v.crowd = it }
-            if (p.renderScale > 0) v.scale = p.renderScale
+            // Every preset states the crowd, so leaving Lowest puts the spectators back.
+            v.crowd = p.crowd
+            // The multiplier only moves when the preset pins it. What the player had
+            // before the pin is remembered here and in the same key the launcher's page
+            // uses, so the next preset that stops pinning restores it (DeviceProfile
+            // .scaleShift). Writing this one key now is the same small write the pacing
+            // rows below already do; the rest goes through the relaunch intent.
+            val shift = DeviceProfile.scaleShift(p, v.scale, prefs.renderScaleBeforePin)
+            v.scale = shift.scale
+            prefs.renderScaleBeforePin = shift.pinnedBefore
         }
 
         fun screen(menu: PesMenu): PesMenu.Screen {

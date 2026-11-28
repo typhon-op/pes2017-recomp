@@ -64,17 +64,19 @@ object DeviceProfile {
         val loadScale: Boolean,
         val maxAniso: Int,
         /**
-         * The crowd (PES17_NO_CROWD). Null is "not this preset's to set": the
-         * player's own choice stays, which is what every preset but [Tier.LOWEST]
-         * wants. Lowest turns the spectators off -- they are thousands of draws a
-         * frame -- and a player who wants them back can turn them on again.
+         * The crowd (PES17_NO_CROWD): every preset states it. [Tier.LOWEST] turns the
+         * spectators off -- they are thousands of draws a frame -- and the other three
+         * turn them back on, so choosing Medium after Lowest restores the crowd instead
+         * of leaving the lowest preset's choice behind. A player who wants them off on
+         * another preset turns the row off, which makes the preset Custom.
          */
-        val crowd: Boolean? = null,
+        val crowd: Boolean,
         /**
-         * Internal resolution (PES17_SCALE: the console's frame, twice it, three
-         * times it), or 0 for "leave the player's multiplier alone" -- what every
-         * preset but [Tier.LOWEST] does, because a preset never resets a choice
-         * the player made for this phone. Lowest pins it to 1x, the cheapest.
+         * Internal resolution (PES17_SCALE: the console's frame, twice it, three times
+         * it), or 0 for "this preset does not pin it" -- what High, Medium and Low do,
+         * because a preset never resets a multiplier the player chose for this phone.
+         * [Tier.LOWEST] pins it to 1x, the cheapest, and [scaleShift] is what puts the
+         * player's own value back when a later preset stops pinning it.
          */
         val renderScale: Int = 0,
     )
@@ -99,9 +101,9 @@ object DeviceProfile {
     // when MemTotal is 6 GB or less (perf.cpp), and forcing it from the Low tier cost CPU on 8 GB
     // phones that have the RAM to spare.
     fun preset(tier: Tier): Preset = when (tier) {
-        Tier.HIGH -> Preset(75, multisampling = true, fsr = false, fpsLimit = 60, lowMemory = false, heatScale = true, loadScale = false, maxAniso = 4)
-        Tier.MEDIUM -> Preset(75, multisampling = true, fsr = true, fpsLimit = 60, lowMemory = false, heatScale = true, loadScale = false, maxAniso = 4)
-        Tier.LOW -> Preset(60, multisampling = false, fsr = false, fpsLimit = 30, lowMemory = false, heatScale = true, loadScale = true, maxAniso = 2)
+        Tier.HIGH -> Preset(75, multisampling = true, fsr = false, fpsLimit = 60, lowMemory = false, heatScale = true, loadScale = false, maxAniso = 4, crowd = true)
+        Tier.MEDIUM -> Preset(75, multisampling = true, fsr = true, fpsLimit = 60, lowMemory = false, heatScale = true, loadScale = false, maxAniso = 4, crowd = true)
+        Tier.LOW -> Preset(60, multisampling = false, fsr = false, fpsLimit = 30, lowMemory = false, heatScale = true, loadScale = true, maxAniso = 2, crowd = true)
         // Lowest: the Helio G85 baseline at 30 FPS. Each of these is the cheapest
         // value the page itself offers, not an invented one -- 50% is the smallest
         // scene in GraphicsOptions.SCENE_PERCENT, 1x the smallest internal scale,
@@ -126,6 +128,28 @@ object DeviceProfile {
         Tier.LOWEST -> Preset(50, multisampling = false, fsr = false, fpsLimit = 30, lowMemory = true, heatScale = true, loadScale = true, maxAniso = 1, crowd = false, renderScale = 1)
     }
 
+    /**
+     * What changing preset does to the internal multiplier: the value to store, and
+     * what to keep to put back later.
+     *
+     * A preset that pins the multiplier ([Preset.renderScale] non-zero, which today is
+     * only [Tier.LOWEST]) remembers the player's own value the first time it overrides
+     * it; the next preset that does not pin one restores it and forgets it. Without
+     * this, choosing Lowest and then Medium left the multiplier at 1x -- the lowest
+     * preset's value -- for ever.
+     */
+    data class ScaleShift(val scale: Int, val pinnedBefore: Int)
+
+    fun scaleShift(p: Preset, currentScale: Int, pinnedBefore: Int): ScaleShift {
+        val pin = p.renderScale
+        if (pin > 0) {
+            val remember = if (pinnedBefore == 0 && currentScale != pin) currentScale else pinnedBefore
+            return ScaleShift(pin, remember)
+        }
+        if (pinnedBefore != 0) return ScaleShift(pinnedBefore, 0)
+        return ScaleShift(currentScale, 0)
+    }
+
     fun apply(prefs: Prefs, tier: Tier) {
         val p = preset(tier)
         prefs.sceneScalePercent = p.sceneScalePercent
@@ -136,10 +160,13 @@ object DeviceProfile {
         prefs.heatScale = p.heatScale
         prefs.loadScale = p.loadScale
         prefs.maxAniso = p.maxAniso
-        // Null and 0 are "not this preset's to set": the crowd and the internal
-        // multiplier stay exactly as the player left them.
-        p.crowd?.let { prefs.crowd = it }
-        if (p.renderScale > 0) prefs.renderScale = p.renderScale
+        // Every preset states the crowd, so leaving Lowest puts the spectators back.
+        prefs.crowd = p.crowd
+        // The multiplier only moves when the preset pins it, and the player's own
+        // value comes back when a later preset stops pinning it.
+        val shift = scaleShift(p, prefs.renderScale, prefs.renderScaleBeforePin)
+        prefs.renderScale = shift.scale
+        prefs.renderScaleBeforePin = shift.pinnedBefore
         prefs.preset = tier.name
     }
 

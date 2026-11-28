@@ -929,3 +929,27 @@ comparison: same match, same macro, Lowest against Low at 30, reading the
 `fstats:` line (p50/p99, 1% low, spikes over 1.5x and 2x) plus
 `dumpsys thermalservice`, three interleaved pairs, and the preset kept only if
 its p99 and 1% low are better at the same limit.
+
+**Preset switching (0.3.2).** The first cut of Lowest left two settings behind
+when a player chose Medium or High afterwards: the crowd stayed off and the
+internal multiplier stayed at Lowest's 1x. `Preset.crowd` was nullable and
+`renderScale` 0 meant "leave alone" -- right for not clobbering a player's
+choice, wrong once a preset had set one. Now every preset states the crowd (the
+three say on, Lowest says off), and the multiplier moves only when a preset pins
+it: `DeviceProfile.scaleShift` remembers the player's own value the first time a
+pin overrides it (`Prefs.renderScaleBeforePin`), and the next preset that does
+not pin restores it and forgets it. Both pages run the same helper, so switching
+in the launcher and switching in the pause menu behave alike; the in-match page
+writes that one key immediately, the same small write its pacing rows already
+do.
+
+`DeviceProfileTest` grew to 14 checks: the reported switch (a 2x player takes
+Lowest, which pins 1x and remembers 2; Medium then restores 2x and the crowd), a
+preset that does not pin leaving a chosen 3x alone, pressing Lowest twice not
+remembering its own 1x, a fresh install having nothing to restore, and every
+restored value being one the page offers. **419 tests, 0 failures.** Release APK
+versionCode 52 / 0.3.2, 50,289,555 bytes, SHA-256
+`c77efc2830f582fb166a3b5720cf2a55ef538c92b56773311c8cdf59e18b88ec`. The
+Lowest-versus-Low comparison, in the same shape as the CPU Pinning plan, is
+[docs/performance.md](docs/performance.md) section "Lowest preset against Low at
+30 FPS".
