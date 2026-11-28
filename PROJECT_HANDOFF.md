@@ -788,3 +788,68 @@ affinities, temperatures and run-queue numbers to record, is
 [docs/performance.md](docs/performance.md) section "CPU Pinning: Automatic vs
 Wide (MediaTek, not yet measured)". If Wide does not tie or win there, it
 should be deleted rather than kept as a guess.
+
+### Frame times against Winlator Mali (0.3.0, 2026-11-28)
+
+A player reports this port's FPS is less stable than the same title in
+Winlator Mali Bionic 1.2.1. Nothing was measured on a phone in this pass; the
+work is the audit, the instrumentation that turns the report into numbers, and
+one lever to test the mechanism it points at. The full text, with the
+comparison and its decision rule, is
+[docs/performance.md](docs/performance.md) section "Frame times against Winlator
+Mali".
+
+**What the audit found.** Presentation is FIFO and nothing else
+(`presenter.cpp`, `info.presentMode`), with `minImageCount = max(caps
+.minImageCount, 2)` and `kFramesInFlight = 2`: a frame that misses its refresh
+waits a whole one, so work that sits *at* the panel's rate is shown as 60 and 30
+alternating. Every present is also placed on the panel's measured boundary
+(`pacing.h`, `NextBoundary`) and at 60 the guest's blank follows the panel
+through `VK_KHR_present_wait`. Winlator Mali's own commit history did the
+opposite of both: it **reverted** "Frame pacing: with an FPS limit, game frames
+are presented on an even vsync-aligned beat (eglPresentationTimeANDROID)" and
+kept "releases spaced 1/limit apart, late frames released at once". That is the
+closest thing to evidence available without the phone, and it is a hypothesis,
+not a result.
+
+The rest of the pipeline came out clean, in the order a frame goes: the
+renderer waits on `vk::WaitUntilTaken` for the presenter's copy, bounded at
+250 ms, so it never draws into an image being read and never waits on a hidden
+window; there is one full-frame GPU blit per present and no CPU-side frame copy
+anywhere on the hot path (the overlay's `memcpy` is press-time only); the
+`vkAcquireNextImageKHR(UINT64_MAX)` and the slot fence wait are on the
+presenter's own thread, which the guest does not wait on; every
+`vkDeviceWaitIdle` is lifecycle (surface change, teardown, texture-cache
+eviction, upscaler/framegen init), never per frame. Streaming, audio and input
+were measured before (`PES17_STREAM_TRACE`): the loader is paced by the title,
+not the disk or core starvation, and `stutters.h` already attributes every
+>25 ms world-frame gap to shader translation, pipeline builds, texture reads,
+GPU waits, occlusion reads or ring batches.
+
+**What was added.** `runtime/frame_stats.h` (a window of intervals answering
+mean, p50/p90/p99, worst, the 1% low and the counts over 1.5x and 2x the run's
+own target) and its check `tests/frame_stats_test.cpp`, 29 checks; one
+`fstats:` line per 600 presents in `game.log` carrying those plus the
+resolution, the limit, the present mode, duplicated blanks, dropped frames and
+the phone's thermal status, with a gap over 500 ms restarting the window rather
+than becoming its worst frame; `PES17_PRESENT_MODE=fifo|mailbox|immediate`,
+checked against the surface's own list and logged with that list at swapchain
+creation, **unset still FIFO**; and `vk::renderer::ThermalStatus()` for the
+line. No frame generation, affinity or "performance mode" was touched.
+
+**Checks actually run.** `ctest` over the native checks: 20 of 20 pass,
+including the new `frame-stats`; `bc-test` cannot be configured on this machine
+(no Vulkan headers outside the Android toolchain) and is the only one not run.
+The engine rebuilt from the checkpoint's source (`presenter.cpp`,
+`renderer.cpp`, plus the 16 units that include `renderer.h`) with no errors, and
+the packaged engine contains `fstats:`, `PES17_PRESENT_MODE` and
+`surface present modes`. Release APK versionCode 50 / 0.3.0, arm64-v8a, signed,
+50,288,271 bytes, SHA-256
+`cf7608858d7fc6a382b3995b95e6f275c7e5fd221524a00df8a2c6058aa929f5`; its
+`lib/arm64-v8a/libpes17.so` hashes to
+`0f23d706edc36ecbd0173fd410a9489079482edd31cb56957817b5a185635e68`.
+
+**Still not verified.** No phone ran this: the `fstats:` line has not been seen
+in a real `game.log`, and whether FIFO is the instability's cause is exactly
+what the on-device A/B (fifo against mailbox, 60 first, then every supported
+limit) is for. No claim is made that frame times improved.

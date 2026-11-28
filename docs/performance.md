@@ -168,6 +168,123 @@ once on a phone of a different shape (4+4, 2+6, or a Dimensity with different
 cluster sizes): on a symmetric part Wide should behave like Automatic, and a
 run that shows otherwise means the mask is not what the notes describe.
 
+## Frame times against Winlator Mali (audit, 2026-11-28 -- nothing measured here)
+
+A player reports this port's frame rate is less stable than the same title in
+Winlator Mali Bionic 1.2.1 on a MediaTek phone. No phone ran any of this: what
+follows is what the code says, the instrumentation added so the report can be
+answered with numbers, and the comparison to run. Nothing here is a claim that
+frame times improved.
+
+### What the two actually do
+
+Winlator Mali's own notes describe its presentation: a native EGL renderer
+(`renderer/egl.cpp`) replacing the old stack, with "cached blit targets and
+native synchronization fences", and OpenGL/EGL frames shared with a Vulkan
+compute device through `AHardwareBuffer` rather than copied. Its commit history
+is the more useful part: an "FPS limiter: releases spaced 1/limit apart, late
+frames released at once" and a "one beat per new game frame" pacing change, and
+then a **revert** of "Frame pacing: with an FPS limit, game frames are presented
+on an even vsync-aligned beat (eglPresentationTimeANDROID)". It tried putting
+every present on the panel's boundary and took it back out.
+
+This port does the opposite on purpose: `pacing.h` places each frame's deadline
+on the display's measured boundary (`NextBoundary`), the swapchain is FIFO, and
+at 60 the guest's blank follows the panel through `VK_KHR_present_wait`
+(`presenter.cpp`, `SawDisplayed`). That is a good design for a title that hits
+its rate, and a poor one for a title that sits *at* it: a frame that misses the
+boundary by a millisecond waits a whole refresh, so 58 fps of work becomes 60
+and 30 alternating. The shape of the complaint matches that mechanism -- and so
+does Winlator's revert.
+
+### The audit
+
+Rendering and presentation, in the order a frame goes:
+
+- **Presentation mode is FIFO, always** (`presenter.cpp`: `info.presentMode`),
+  with `minImageCount = max(caps.minImageCount, 2)` and `kFramesInFlight = 2`.
+  FIFO is the only mode with a guaranteed present; a frame that misses its
+  refresh is shown a refresh later. This is the single most likely source of
+  "unstable" that is not the GPU's fault, and it is now selectable for a test
+  (`PES17_PRESENT_MODE`, below). No default was changed.
+- **The renderer never writes an image the presenter is reading**: a frame is
+  handed over through a bounded queue (`ShowImage`) and the render thread waits
+  on `vk::WaitUntilTaken` (`renderer_resolve.cpp`) for the copy to be submitted,
+  bounded at 250 ms so a hidden window cannot hold the guest. This is a real
+  synchronisation point, but it is per frame and bounded, not a stall.
+- **Copies**: one full-frame GPU blit per present (`DrawPicture`, bilinear, or
+  FSR then a 1:1 copy). There are no CPU-side frame copies on the hot path --
+  the overlay's `memcpy` runs once per picture, not per frame. Nothing here to
+  remove.
+- **Blocking calls**: `vkAcquireNextImageKHR(..., UINT64_MAX)` and the slot
+  fence wait in `Acquire()` are where the presenter sleeps a refresh; both are
+  on the presenter's own thread, and the guest does not wait on them. The
+  `vkDeviceWaitIdle` calls are lifecycle only (surface replaced, teardown,
+  texture-cache eviction, upscaler/framegen init), never per frame.
+- **Frame pacing**: `frame_rate.h` and `pacing.h`; at 60 no software pacer runs
+  and the title retires frames at the blank; at 30-55 the pacer aligns to the
+  panel and `PES17_PACING=compatibility` restores the old independent clock,
+  which is close to what Winlator settled on. `PES17_TRACE_PACING` writes the
+  present timeline.
+- **Texture loading, streaming, audio, input**: `PES17_STREAM_TRACE=1` measured
+  the streaming as paced by the title itself (loader asleep on a futex, not on
+  the disk or on core starvation), texture work on the command thread at about
+  1.2 s a session, and the cold-start hitching attributed to pipeline builds.
+  `stutters.h` already attributes every >25 ms world-frame gap to shader
+  translation, pipeline builds, texture reads, GPU waits, occlusion reads or
+  ring batches, and counts frames lost by length.
+- **What was missing** is the number the report is actually about: no
+  percentile, no 1% low, no spike count. `stutters` counts; the pacing trace
+  prints mean/min/max; neither separates a smooth 55 from a 60 with a hitch
+  every second.
+
+### What was added
+
+- `runtime/frame_stats.h`: a window of frame intervals (1024, halved when full)
+  answering mean, p50/p90/p99, worst, the 1% low (mean of the slowest
+  hundredth) and the count over 1.5x and 2x the run's own target. Pure
+  arithmetic; `tests/frame_stats_test.cpp` checks it (29 checks) without a
+  phone.
+- One `fstats:` line per 600 presents in `game.log` (about ten seconds at 60,
+  twenty at 30), with the resolution, the limit, the present mode and the
+  phone's thermal status beside the numbers. A gap over 500 ms (a load, a menu,
+  a pause) restarts the window instead of becoming its worst frame.
+- `PES17_PRESENT_MODE=fifo|mailbox|immediate`: the present mode is now chosen
+  from the environment, checked against what the surface lists, and logged with
+  the full list at swapchain creation. **Unset is FIFO, so behaviour is
+  unchanged**; this exists to test the FIFO hypothesis on a phone. Mailbox is
+  the driver's "show the newest frame at the next refresh" mode: a late frame
+  is replaced rather than queued, which is the closest Vulkan equivalent to
+  what Winlator's revert chose.
+- `vk::renderer::ThermalStatus()`, so the line can say what the phone was doing.
+
+Deliberately not added: frame generation changes, CPU affinity changes, or a
+new "performance mode". None of them is evidence-backed for this question.
+
+### The comparison to run
+
+Same phone, same match, same macro, same resolution and limit, one variable at
+a time; three interleaved pairs per cell, as in the CPU Pinning plan above. The
+two cells that matter are `fifo` against `mailbox`, at 60 first (where the
+mechanism above bites) and then at 45.
+
+    adb shell am force-stop com.pes2017.recomp
+    adb shell "echo PES17_PRESENT_MODE=mailbox > /sdcard/Android/data/com.pes2017.recomp/files/env_override"
+    # ... run the macro, then from the log:
+    adb shell "grep -E 'fstats:|pinning:|vulkan: present mode' /sdcard/Android/data/com.pes2017.recomp/files/game.log"
+
+Record per run: the `fstats:` fields (fps, p50/p99, 1% low, spikes over 1.5x
+and 2x, duplicated blanks, frames dropped), `dumpsys thermalservice` CPU/skin
+temperature at start and end, and the resolution the app asked for. Run every
+supported limit -- 30, 35, 40, 45, 50, 55, 60 -- for whichever presentation mode
+the first comparison favours, because the pacer's behaviour changes with the
+limit (30 presents in order, 35/45/55 alternate blanks).
+
+**What would justify changing a default**: mailbox (or Compatibility pacing)
+showing a lower p99 and a better 1% low at the same limit, on the same scene, in
+at least two of three pairs -- not a higher mean. The reverse result deletes
+`PES17_PRESENT_MODE` rather than keeping it as a switch nobody should use.
+
 ## Leads not tried yet (workload and heat)
 
 - **Sun shadow map at a lower resolution.** The shadow map is one 1024x2048 depth surface holding two
